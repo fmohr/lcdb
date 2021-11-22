@@ -15,6 +15,8 @@ import matplotlib.pyplot as plt
 
 from tqdm import tqdm
 
+import traceback
+
 
 def get_dataset(openmlid):
     ds = openml.datasets.get_dataset(openmlid)
@@ -321,11 +323,12 @@ def compute_full_curve(learner_name, learner_params, dataset, outer_seeds=range(
             for anchor in anchors:
                 try:
                     out.append(get_entry(learner_name, learner_params, X, y, anchor, outer_seed, inner_seed, encoder=encoder, verbose=verbose))
-                except Exception:
+                except Exception as e:
                     if error == "raise":
                         raise
                     elif error == "message":
-                        print("AN ERROR OCCURED!")
+                        print(f"AN ERROR OCCURED! Here are the details.\n{type(e)}\n{e}")
+                        traceback.print_exc()
                 if show_progress:
                     pbar.update(1)
     if show_progress:

@@ -114,7 +114,7 @@
   
   
   <logger name="frontend.runner">
-    <level value="info" />
+    <level value="warn" />
   </logger>
   
   <logger name="frontend.runner.adapter">
@@ -129,9 +129,5 @@
     <appender-ref ref="warnFileAppender" />
     <appender-ref ref="errFileAppender" />
     <appender-ref ref="traceFileAppender" />
-  </logger>
-  
-  <logger name="experimenter.runner.handle">
-    <level value="warn" />
   </logger>
 </log4j:configuration>

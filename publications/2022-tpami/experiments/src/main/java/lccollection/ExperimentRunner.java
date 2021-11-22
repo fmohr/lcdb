@@ -1,4 +1,5 @@
 package lccollection;
+
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
@@ -34,7 +35,7 @@ public class ExperimentRunner implements IExperimentSetEvaluator {
 			/* get configuration */
 			Map<String, String> keys = experimentEntry.getExperiment().getValuesOfKeyFields();
 			int openmlid = Integer.valueOf(keys.get("openmlid"));
-			int outer_seed= Integer.valueOf(keys.get("outer_seed"));
+			int outer_seed = Integer.valueOf(keys.get("outer_seed"));
 			int inner_seed_index = Integer.valueOf(keys.get("inner_seed_index"));
 			String algo = keys.get("learner");
 			logger.info("\topenmlid: {}", openmlid);
@@ -49,8 +50,7 @@ public class ExperimentRunner implements IExperimentSetEvaluator {
 			Map<String, Object> map = new HashMap<>();
 			map.put("result", getPythonExperimentResults(options));
 			processor.processResults(map);
-		}
-		catch (Exception e) {
+		} catch (Exception e) {
 			throw new ExperimentEvaluationFailedException(e);
 		}
 	}
@@ -86,8 +86,7 @@ public class ExperimentRunner implements IExperimentSetEvaluator {
 			System.out.println("ready");
 
 			return FileUtil.readFileAsString(outFile);
-		}
-		finally {
+		} finally {
 			System.out.println("KILLING PROCESS!");
 			ProcessUtil.killProcess(p);
 		}
@@ -103,16 +102,15 @@ public class ExperimentRunner implements IExperimentSetEvaluator {
 		fe.setLoggerName("frontend");
 		fe.withExecutorInfo(jobInfo);
 
-
 		long deadline = System.currentTimeMillis() + 86000 * 1000;
 		long remainingTime;
 		do {
-			logger.info("Conducting experiment. Currently used memory is {}MB. Free memory is {}MB.", (Runtime.getRuntime().maxMemory() - Runtime.getRuntime().freeMemory()) / (1024 * 1024.0), Runtime.getRuntime().freeMemory() / (1024 * 1024.0));
+			logger.info("Conducting experiment. Currently used memory is {}MB. Free memory is {}MB.", (Runtime.getRuntime().maxMemory() - Runtime.getRuntime().freeMemory()) / (1024 * 1024.0),
+					Runtime.getRuntime().freeMemory() / (1024 * 1024.0));
 			fe.randomlyConductExperiments(1);
 			remainingTime = deadline - System.currentTimeMillis();
 			logger.info("Experiment finished. Remaining time: {}!", remainingTime);
-		}
-		while (remainingTime > 12 * 3600 * 1000);
+		} while (remainingTime > 12 * 3600 * 1000);
 		System.out.println("Remaining time only " + (remainingTime / 1000) + "s. Stopping.");
 	}
 }
