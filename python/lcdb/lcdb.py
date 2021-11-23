@@ -1,7 +1,6 @@
 import sklearn.model_selection
 import time
-from directencoder import DirectEncoder
-from compressingencoder import CompressingEncoder
+from lcdb.directencoder import DirectEncoder
 
 import numpy as np
 import pandas as pd
@@ -17,11 +16,24 @@ from tqdm import tqdm
 
 import traceback
 
+import shutil, tarfile
+
+import json
+
+from os import path
+import importlib.resources as pkg_resources
+from io import StringIO
+
+import logging
+
+logger = logging.getLogger('lcdb')
 
 def get_dataset(openmlid):
     ds = openml.datasets.get_dataset(openmlid)
+    logger.info(f"Reading in full dataset from openml API.")
     df = ds.get_data()[0]
     num_rows = len(df)
+    logger.info(f"Finished to read original data frame. Size is {len(df)} x {len(df.columns)}.")
     
     # impute missing values
     cateogry_columns=df.select_dtypes(include=['object', 'category']).columns.tolist()
@@ -36,12 +48,12 @@ def get_dataset(openmlid):
             else:
                 df[column].fillna(df[column].median(), inplace=True)
     df = df.drop(columns=obsolete_cols)
+    logger.info(f"Data frame is ready for extraction of attributes. Size is {len(df)} x {len(df.columns)}.")
     
     # prepare label column as numpy array
     y = np.array(list(df[ds.default_target_attribute].values))
     
-    print(f"Read in data frame. Size is {len(df)} x {len(df.columns)}.")
-    
+    # identify categorical attributes
     categorical_attributes = df.select_dtypes(exclude=['number']).columns
     expansion_size = 1
     for att in categorical_attributes:
@@ -49,23 +61,70 @@ def get_dataset(openmlid):
         if expansion_size > 10**5:
             break
     
+    # create dummies
+    logger.info(f"Creating dummies for {len(categorical_attributes)} categorical attributes.")
     if expansion_size < 10**5:
         X = pd.get_dummies(df[[c for c in df.columns if c != ds.default_target_attribute]]).values.astype(float)
     else:
-        print("creating SPARSE data")
+        logger.info("creating SPARSE data")
         dfSparse = pd.get_dummies(df[[c for c in df.columns if c != ds.default_target_attribute]], sparse=True)
         
-        print("dummies created, now creating sparse matrix")
+        logger.info("dummies created, now creating sparse matrix")
         X = lil_matrix(dfSparse.shape, dtype=np.float32)
         for i, col in enumerate(dfSparse.columns):
             ix = dfSparse[col] != 0
             X[np.where(ix), i] = 1
-        print("Done. shape is" + str(X.shape))
         
     if X.shape[0] != num_rows:
         raise Exception("Number of rows not ok!")
+    logger.info(f"X, y are now completely processed. Shape of X is {X.shape}")
     return X, y
 
+def get_names_of_meta_features():
+    return ['AutoCorrelation', 'ClassEntropy', 'Dimensionality', 'EquivalentNumberOfAtts', 'MajorityClassSize', 'MaxAttributeEntropy', 'MaxKurtosisOfNumericAtts', 'MaxMeansOfNumericAtts', 'MaxMutualInformation', 'MaxNominalAttDistinctValues', 'MaxSkewnessOfNumericAtts', 'MaxStdDevOfNumericAtts', 'MeanAttributeEntropy', 'MeanKurtosisOfNumericAtts', 'MeanMeansOfNumericAtts', 'MeanMutualInformation', 'MeanNoiseToSignalRatio', 'MeanNominalAttDistinctValues', 'MeanSkewnessOfNumericAtts', 'MeanStdDevOfNumericAtts', 'MinAttributeEntropy', 'MinKurtosisOfNumericAtts', 'MinMeansOfNumericAtts', 'MinMutualInformation', 'MinNominalAttDistinctValues', 'MinSkewnessOfNumericAtts', 'MinStdDevOfNumericAtts', 'MinorityClassPercentage', 'MinorityClassSize', 'NaiveBayesAUC', 'NaiveBayesErrRate', 'NaiveBayesKappa', 'NumberOfBinaryFeatures', 'NumberOfClasses', 'NumberOfFeatures', 'NumberOfInstances', 'NumberOfInstancesWithMissingValues', 'NumberOfMissingValues', 'NumberOfNumericFeatures', 'NumberOfSymbolicFeatures', 'PercentageOfBinaryFeatures', 'PercentageOfInstancesWithMissingValues', 'PercentageOfMissingValues', 'PercentageOfNumericFeatures', 'PercentageOfSymbolicFeatures', 'Quartile1AttributeEntropy', 'Quartile1KurtosisOfNumericAtts', 'Quartile1MeansOfNumericAtts', 'Quartile1MutualInformation', 'Quartile1SkewnessOfNumericAtts', 'Quartile1StdDevOfNumericAtts', 'Quartile2AttributeEntropy', 'Quartile2KurtosisOfNumericAtts', 'Quartile2MeansOfNumericAtts', 'Quartile2MutualInformation', 'Quartile2SkewnessOfNumericAtts', 'Quartile2StdDevOfNumericAtts', 'Quartile3AttributeEntropy', 'Quartile3KurtosisOfNumericAtts', 'Quartile3MeansOfNumericAtts', 'Quartile3MutualInformation', 'Quartile3SkewnessOfNumericAtts', 'Quartile3StdDevOfNumericAtts']
+
+def compute_meta_data_of_dataset(openmlid):
+    ds = openml.datasets.get_dataset(openmlid)
+    qualities = ds.qualities
+    X, y = get_dataset(openmlid)
+    return [openmlid, ds.name] + [qualities[c] if c in qualities else np.nan for c in get_names_of_meta_features()] +  [X.shape[1]]
+
+def compute_meta_data_of_dataset_collection(openmlids):
+    
+    # get current database
+    try:
+        df_cached = pd.read_csv(StringIO(pkg_resources.read_text('lcdb', 'datasets.csv')))
+        logger.info(f"Found cache file with {len(df_cached)} entries for {list(df_cached['openmlid'])}")
+        known_ids = pd.unique(df_cached["openmlid"])
+    except:
+        df_cached = None
+        known_ids = []
+    
+    # compute new rows
+    rows = []
+    for i in tqdm(openmlids):
+        if not i in known_ids:
+            logger.info(f"Computing meta-features for dataset {i}")
+            rows.append(compute_meta_data_of_dataset(i))
+        else:
+            logger.info(f"Re-using cached result for dataset {i}")
+    df_new = pd.DataFrame(rows, columns=["openmlid", "Name"] + get_names_of_meta_features() + ["NumberOfFeaturesAfterBinarization"])
+    for c in df_new.columns:
+        if "NumberOf" == c[:8]:
+            try:
+                df_new = df_new.astype({c: int})
+            except:
+                logger.info(f"Could not cast column {c} to int!")
+    return pd.concat([df_cached, df_new]).sort_values("openmlid")
+
+def get_meta_features(dataset = None):
+    df_cached = pd.read_csv(StringIO(pkg_resources.read_text('lcdb', 'datasets.csv')))
+    if dataset is None:
+        return df_cached
+    
+    openmlid = get_openmlid_from_descriptor(dataset)
+    df_match = df_cached[df_cached["openmlid"] == openmlid]
+    return df_match.iloc[0].to_dict()
 
 def get_class( kls ):
     parts = kls.split('.')
@@ -89,7 +148,7 @@ def get_inner_split(X, y, outer_seed, inner_seed):
     if validation_samples_at_90_percent_training <= 5000:
         X_train, X_valid, y_train, y_valid = sklearn.model_selection.train_test_split(X_learn, y_learn, train_size = 0.9, random_state=inner_seed, stratify=y_learn)
     else:
-        print("Creating sample with instances:", X_learn.shape[0] - 5000)
+        logger.info(f"Creating sample with instances: {X_learn.shape[0] - 5000}")
         X_train, X_valid, y_train, y_valid = sklearn.model_selection.train_test_split(X_learn, y_learn, train_size = X_learn.shape[0] - 5000, test_size = 5000, random_state=inner_seed, stratify=y_learn)
                                                                                       
     return X_train, X_valid, X_test, y_train, y_valid, y_test
@@ -110,15 +169,14 @@ def get_truth_and_predictions(learner_inst, X, y, anchor, outer_seed = 0, inner_
     # fit the model
     start_time = time.time()
     if verbose:
-        print(f"Training {learner_inst} on data of shape {X_train.shape} using outer seed {outer_seed} and inner seed {inner_seed}")
+        logger.info(f"Training {learner_inst} on data of shape {X_train.shape} using outer seed {outer_seed} and inner seed {inner_seed}")
     if deadline is None:
         learner_inst.fit(X_train, y_train)
     else:
         func_timeout(deadline - time.time(), learner_inst.fit, (X_train, y_train))
     train_time = time.time() - start_time
 
-    if verbose:
-        print("Training ready. Obtaining predictions for " + str(X_test.shape[0]) + " instances.")
+    logger.info(f"Training ready. Obtaining predictions for {X_test.shape[0]} instances.")
 
     # compute predictions on train data
     start_time = time.time()
@@ -198,8 +256,8 @@ def get_entry(learner_name, learner_params, X, y, anchor, outer_seed, inner_seed
         log_loss_after_compression = np.round(sklearn.metrics.log_loss(y_test, y_test_after_compression, labels=known_labels), 3)
         diff = np.round(log_loss_orig - log_loss_after_compression, 3)
         gap = np.linalg.norm(y_test_after_compression - y_prob_test)
-        print(f"Proba-Matrix Gap: {gap}")
-        print(f"Change in log-loss due to compression: {diff} = {log_loss_orig} - {log_loss_after_compression}")
+        logger.info(f"Proba-Matrix Gap: {gap}")
+        logger.info(f"Change in log-loss due to compression: {diff} = {log_loss_orig} - {log_loss_after_compression}")
         
         if False:
             fig, ax = plt.subplots(1, y_prob_test.shape[1], figsize=(15, 5))
@@ -214,40 +272,51 @@ def get_entry(learner_name, learner_params, X, y, anchor, outer_seed, inner_seed
     
     return info
 
-def get_curve_by_metric(json_curve_descriptor, metric, encoder = DirectEncoder(), error="raise"):
+def get_curve_for_metric_as_dataframe(json_curve_descriptor, metric, encoder = DirectEncoder(), error="raise", precision=4):
     
-    # gather data
-    anchors_tmp = []
-    values_train_tmp = []
-    values_valid_tmp = []
-    values_test_tmp = []
+    cols = ['size_train', 'size_test', 'outer_seed', 'inner_seed', 'traintime']
+    rows = []
     for entry in json_curve_descriptor:
         try:
             m_train, m_valid, m_test = get_metric_of_entry(entry, metric, encoder)
-            anchors_tmp.append(entry["size_train"])
-            values_train_tmp.append(m_train)
-            values_valid_tmp.append(m_valid)
-            values_test_tmp.append(m_test)
+            row = [entry["size_train"], entry["size_test"], entry["outer_seed"], entry["inner_seed"], entry["traintime"], np.round(m_train, precision), np.round(m_valid, precision), np.round(m_test, precision)]
+            rows.append(row)
         except:
             if error == "message":
-                print("Ignoring entry with exception!")
+                logger.info("Ignoring entry with exception!")
             else:
                 raise
+    return pd.DataFrame(rows, columns=cols + ["score_" + i for i in ["train", "valid", "test"]])
 
+
+def get_curve_from_dataframe(curve_df):
     
-    # convert all three lists in numpy arrays
-    anchors_tmp = np.array(anchors_tmp)
-    values_train_tmp = np.array(values_train_tmp)
-    values_valid_tmp = np.array(values_valid_tmp)
-    values_test_tmp = np.array(values_test_tmp)
+    # sanity check to see that, if we know the learner, that there is only one of them
+    if "learner" in curve_df.columns and len(pd.unique(curve_df["learner"])) > 1:
+        raise Exception("pass only dataframes with entries for a single learner.")
+    if "openmlid" in curve_df.columns and len(pd.unique(curve_df["openmlid"])) > 1:
+        raise Exception("pass only dataframes with entries for a single openmlid.")
     
-    # prepare data
-    anchors = sorted(list(np.unique(anchors_tmp)))
-    values_train = [list(values_train_tmp[anchors_tmp == v]) for v in anchors]
-    values_valid = [list(values_valid_tmp[anchors_tmp == v]) for v in anchors]
-    values_test = [list(values_test_tmp[anchors_tmp == v]) for v in anchors]
+    # gather data
+    anchors = sorted(list(pd.unique(curve_df["size_train"])))
+    values_train = []
+    values_valid = []
+    values_test = []
+    
+    # extract curve
+    for anchor in anchors:
+        curve_df_anchor = curve_df[curve_df["size_train"] == anchor]
+        values_train.append(list(curve_df_anchor["score_train"]))
+        values_valid.append(list(curve_df_anchor["score_valid"]))
+        values_test.append(list(curve_df_anchor["score_test"]))
+        
     return anchors, values_train, values_valid, values_test
+
+def get_curve_by_metric_from_json(json_curve_descriptor, metric, encoder = DirectEncoder(), error="raise"):
     
+    return get_curve_from_dataframe(get_curve_for_metric_as_dataframe(json_curve_descriptor, metric, encoder, error))
+
+        
         
 def get_metric_of_entry(entry, metric, encoder = DirectEncoder()):
     y_train = encoder.decode_label_vector(entry["y_train"])
@@ -274,7 +343,10 @@ def get_metric_of_entry(entry, metric, encoder = DirectEncoder()):
                 y_prob_train = np.zeros((len(y_hat_train), len(labels)))
                 for i, label in enumerate(y_hat_train):
                     y_prob_train[i,labels.index(label)] = 1
-                    y_prob_test = np.zeros((len(y_hat_test), len(labels)))
+                y_prob_valid = np.zeros((len(y_hat_valid), len(labels)))
+                for i, label in enumerate(y_hat_valid):
+                    y_prob_valid[i,labels.index(label)] = 1
+                y_prob_test = np.zeros((len(y_hat_test), len(labels)))
                 for i, label in enumerate(y_hat_test):
                     y_prob_test[i,labels.index(label)] = 1
             m = sklearn.metrics.log_loss
@@ -288,14 +360,14 @@ def compute_full_curve(learner_name, learner_params, dataset, outer_seeds=range(
     if type(dataset) == int: # openmlid
         
         # load data
-        print("Reading dataset")
+        logger.info("Reading dataset")
         X, y = get_dataset(dataset)
         labels = list(np.unique(y))
         is_binary = len(labels) == 2
         minority_class = labels[np.argmin([np.count_nonzero(y == label) for label in labels])]
-        print(f"Labels are: {labels}")
-        print(f"minority_class is {minority_class}")
-        print("ready. Now building the learning curve")
+        logger.info(f"Labels are: {labels}")
+        logger.info(f"minority_class is {minority_class}")
+        logger.info("ready. Now building the learning curve")
     elif type(dataset) == tuple:
         if len(dataset) == 2:
             X, y = dataset[0], dataset[1]
@@ -312,7 +384,7 @@ def compute_full_curve(learner_name, learner_params, dataset, outer_seeds=range(
     anchors = [int(np.round(2**(min_exp + 0.5 * exp))) for exp in range(0, max_exp_int + 1)]
     if anchors[-1] != max_train_size:
         anchors.append(max_train_size)
-    print(anchors)
+    logger.info(anchors)
     
     # compute curve
     out = []
@@ -327,7 +399,7 @@ def compute_full_curve(learner_name, learner_params, dataset, outer_seeds=range(
                     if error == "raise":
                         raise
                     elif error == "message":
-                        print(f"AN ERROR OCCURED! Here are the details.\n{type(e)}\n{e}")
+                        logger.info(f"AN ERROR OCCURED! Here are the details.\n{type(e)}\n{e}")
                         traceback.print_exc()
                 if show_progress:
                     pbar.update(1)
@@ -345,6 +417,8 @@ def plot_curve(anchors, points, ax, color):
 def plot_train_and_test_curve(curve, ax = None):
     if ax is None:
         fig, ax = plt.subplots()
+    else:
+        fig = None
     anchors = curve[0]
     plot_curve(anchors, curve[1], ax, "C0") # train curve
     plot_curve(anchors, curve[2], ax, "C1") # validation curve
@@ -357,3 +431,137 @@ def plot_train_and_test_curve(curve, ax = None):
     
     if fig is not None:
         plt.show()
+        
+def get_train_times(dataset, learner):
+    df_curve = get_curve_as_dataframe(dataset, learner)
+    
+    # gather data
+    anchors = sorted(list(pd.unique(df_curve["size_train"])))
+    train_times = []
+    
+    # extract curve
+    for anchor in anchors:
+        df_curve_anchor = df_curve[df_curve["size_train"] == anchor]
+        train_times.append(list(df_curve_anchor["traintime"]))
+        
+    return anchors, train_times
+        
+def plot_train_times(dataset, learner, ax = None, color = None):
+    if ax is None:
+        fig, ax = plt.subplots()
+    else:
+        fig = None
+    anchors, times = get_train_times(dataset, learner)
+    
+    if color is None:
+        num_lines = len(ax.lines)
+        color = "C" + str(num_lines)
+    plot_curve(anchors, times, ax, color)
+    
+    if fig is not None:
+        plt.show()
+
+        
+'''
+    this recovers the database table from a tar ball from the disk.
+    
+    The tar ball is unpacked, read, and the unpacked content is removed again
+'''
+def get_raw_df(openmlid):
+    
+    # extract db file
+    fname = f"database-original/lcdb-{openmlid}.tar.gz"
+    path = "./tmp/conversions"
+    tar = tarfile.open(fname, "r:gz")
+    tar.extractall(path=path)
+    tar.close()
+    
+    # read in data frame
+    df = pd.read_csv(f"{path}/lcdb-{openmlid}.csv", delimiter=";")
+    
+    # delete folder
+    shutil.rmtree(path)
+    
+    # return dataframe
+    return df
+
+'''
+    this takes a dataframe modeling the MySQL table and turns it into the final format (result column is resolved)
+'''
+def convert_raw_df_into_final_df(df_raw, metric):
+    cols = ["openmlid", "learner", "size_train", "size_test", "outer_seed", "inner_seed", "traintime", "score_train", "score_valid", "score_test"]
+    df_results = pd.DataFrame([], columns=cols)
+    for i, row in df_raw.iterrows():
+        curve_raw = json.loads(row["result"])
+        curve_df = get_curve_for_metric_as_dataframe(curve_raw, metric)
+        curve_df["learner"] = row["learner"]
+        curve_df["openmlid"] = row["openmlid"]
+        df_results = pd.concat([df_results, curve_df[cols]])
+    return df_results
+
+'''
+    this takes a series of dataset descriptors and computes a full dataframe with all learning curves from the tar balls
+    
+    for every openmlid, there must be the file "database-original/lcdb-<id>.tar.gz" available
+'''
+def compile_dataframe_for_all_datasets_on_metric(openmlids, metric):
+    df_results = None
+    for openmlid in tqdm(openmlids):
+        logger.info(openmlid)
+        try:
+            df_results_tmp = convert_raw_df_into_final_df(get_raw_df(openmlid), metric)
+            df_results = df_results_tmp if df_results is None else pd.concat([df_results, df_results_tmp])
+        except KeyboardInterrupt:
+            raise
+        except:
+            logger.error("An error occurred.")
+    return df_results
+
+
+'''
+    gets the full local database of learning curves as a dataframe
+'''
+def get_all_curves(metric = "accuracy"):
+    supported_metrics = ["accuracy", "logloss"]
+    if not metric in supported_metrics:
+        raise ValueError(f"Unsupported metric {metric}. Supported metrics are {supported_metrics}")
+    return pd.read_csv(StringIO(pkg_resources.read_text('lcdb', f'database-{metric}.csv')))
+
+def get_openmlid_from_name(name):
+    df_meta = get_meta_features()
+    df_match = df_meta[df_meta["Name"] == name]
+    if len(df_match) == 0:
+        raise Exception(f"No dataset found with name {name}")
+    elif len(df_match) > 1:
+        raise Exception(f"Ambigous dataset name found {name}. There are {len(df_match)} datasets with this name.")
+    else:
+        return int(df_meta[df_meta["Name"] == name].iloc[0]["openmlid"])
+
+def get_openmlid_from_descriptor(dataset):
+    if type(dataset) == str:
+        return get_openmlid_from_name(dataset)
+    elif type(dataset) == int:
+        return dataset
+    else:
+        raise ValuerError(f"Unsupported datatype {type(dataset)} for first positional argument.")
+
+def get_curve_as_dataframe(dataset, learner, metric = "accuracy"):
+    openmlid = get_openmlid_from_descriptor(dataset)
+    
+    df = get_all_curves(metric)
+    df = df[(df["openmlid"] == openmlid)]
+    if len(df) == 0:
+        raise Exception(f"No curves found for openmlid {openmlid}")
+    df = df[(df["learner"] == learner)]
+    if len(df) == 0:
+        raise Exception(f"No curves found for learner {learner} on openmlid {openmlid}")
+    return df
+        
+'''
+    gets the anchors and train, validation, and test performances of the learner on the given dataset.
+    It is just a shortcut for retrieval from the dataframe.
+'''
+def get_curve(dataset, learner, metric = "accuracy"):
+    
+
+    return get_curve_from_dataframe(get_curve_as_dataframe(dataset, learner, metric))

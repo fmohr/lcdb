@@ -29,17 +29,6 @@ task sourcesJar(type: Jar, dependsOn: classes) {
     from sourceSets.main.allSource
 }
 
-task evalcli(type: Jar) {
-    manifest {
-		attributes 'Main-Class': 'lccv.ExperimentRunner'
-    }
-    zip64 = true
-    baseName = 'lccv-evalcli'
-    from { configurations.compile.collect { it.isDirectory() ? it : zipTree(it) } }
-    exclude 'META-INF/*.RSA', 'META-INF/*.SF', 'META-INF/*.DSA'
-    with jar
-}
-
 task lccollector(type: Jar) {
     manifest {
 		attributes 'Main-Class': 'lccollection.ExperimentRunner'

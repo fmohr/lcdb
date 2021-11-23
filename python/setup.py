@@ -1,20 +1,20 @@
-from distutils.core import setup
+from setuptools import setup
 setup(
   name = 'lcdb',
   packages = ['lcdb'],
-  version = '0.0.1',
+  version = '0.0.8',
   license='MIT',
   description = 'The official Learning Curve Database package',
   author = 'Felix Mohr',                   # Type in your name
   author_email = 'mail@felixmohr.de',      # Type in your E-Mail
   url = 'https://github.com/fmohr/lcdb',   # Provide either the link to your github or to your website
-  download_url = 'https://github.com/fmohr/lcdb/archive/refs/tags/v0.0.4.tar.gz',
   keywords = ['learning curves', 'database', 'prediction vectors', 'runtimes', 'sklearn'],
   install_requires=[
           'numpy',
           'scikit-learn',
           'scipy',
-          'tqdm'
+          'tqdm',
+          'matplotlib'
       ],
   classifiers=[
     'Development Status :: 3 - Alpha',
@@ -25,6 +25,6 @@ setup(
     'Programming Language :: Python :: 3.8',
     'Programming Language :: Python :: 3.9'
   ],
-  package_data={'': ['searchspace.json']},
+  package_data={'': ['database-accuracy.csv', 'database-logloss.csv']},
   include_package_data=True
 )
