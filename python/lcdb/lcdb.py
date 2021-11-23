@@ -430,7 +430,7 @@ def plot_train_and_test_curve(curve, ax = None):
     ax.fill_between(anchors, np.mean(curve[2][-1]) - 0.0025, np.mean(curve[2][-1]) + 0.0025, color="black", alpha=0.1, hatch=r"//")
     
     if fig is not None:
-        plt.show()
+        return fig
         
 def get_train_times(dataset, learner):
     df_curve = get_curve_as_dataframe(dataset, learner)
@@ -459,7 +459,7 @@ def plot_train_times(dataset, learner, ax = None, color = None):
     plot_curve(anchors, times, ax, color)
     
     if fig is not None:
-        plt.show()
+        return fig
 
         
 '''
