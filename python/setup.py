@@ -2,7 +2,7 @@ from setuptools import setup
 setup(
   name = 'lcdb',
   packages = ['lcdb'],
-  version = '0.0.8',
+  version = '0.0.9',
   license='MIT',
   description = 'The official Learning Curve Database package',
   author = 'Felix Mohr',                   # Type in your name
@@ -25,6 +25,6 @@ setup(
     'Programming Language :: Python :: 3.8',
     'Programming Language :: Python :: 3.9'
   ],
-  package_data={'': ['database-accuracy.csv', 'database-logloss.csv']},
+  package_data={'': ['database-accuracy.csv', 'database-logloss.csv', 'datasets.csv']},
   include_package_data=True
 )
