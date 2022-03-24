@@ -42,9 +42,10 @@ public class ExperimentRunner implements IExperimentSetEvaluator {
 			logger.info("\tlearner: {}", algo);
 			logger.info("\touter seed: {}", outer_seed);
 			logger.info("\tinner seed index: {}", inner_seed_index);
+			final int TIMEOUT = 3600;
 
 			/* run python experiment */
-			String options = openmlid + " " + algo + " " + outer_seed + " " + inner_seed_index;
+			String options = openmlid + " " + algo + " " + outer_seed + " " + inner_seed_index + " " + TIMEOUT;
 
 			/* write results */
 			Map<String, Object> map = new HashMap<>();

@@ -1,6 +1,6 @@
 import sklearn.model_selection
 import time
-from lcdb.directencoder import DirectEncoder
+from directencoder import DirectEncoder
 
 import numpy as np
 import pandas as pd
@@ -355,8 +355,10 @@ def get_metric_of_entry(entry, metric, encoder = DirectEncoder()):
         raise Exception("Currently only pre-defined metrics are supported.")
 
         
-def compute_full_curve(learner_name, learner_params, dataset, outer_seeds=range(10), inner_seeds=range(10), show_progress=False, error="raise", verbose=False, encoder=DirectEncoder()):
-       
+def compute_full_curve(learner_name, learner_params, dataset, outer_seeds=range(10), inner_seeds=range(10), show_progress=False, error="raise", verbose=False, encoder=DirectEncoder(), timeout = None):
+    
+    deadline = time.time() + timeout
+    
     if type(dataset) == int: # openmlid
         
         # load data
@@ -390,9 +392,20 @@ def compute_full_curve(learner_name, learner_params, dataset, outer_seeds=range(
     out = []
     if show_progress:
         pbar = tqdm(total = len(outer_seeds) * len(inner_seeds) * len(anchors))
+    stop = False
     for outer_seed in outer_seeds:
+        if stop:
+            break
         for inner_seed in inner_seeds:
+            if stop:
+                break
+            last_runtime = 0
             for anchor in anchors:
+                remaining_time = deadline - time.time()
+                if remaining_time < last_runtime:
+                    print("Timeout approaching, stopping computation.")
+                    stop = True
+                    break
                 try:
                     out.append(get_entry(learner_name, learner_params, X, y, anchor, outer_seed, inner_seed, encoder=encoder, verbose=verbose))
                 except Exception as e:

@@ -11,7 +11,8 @@ if __name__ == '__main__':
     algorithm = sys.argv[2]
     outer_seed = int(sys.argv[3])
     inner_seed_index = int(sys.argv[4])
-    file = sys.argv[5]
+    timeout = int(sys.argv[5])
+    file = sys.argv[6]
     
     # get algorithm
     learner_params = {}
@@ -34,8 +35,9 @@ if __name__ == '__main__':
     outer_seeds = [outer_seed]
     inner_seeds = list(range(num_seeds * inner_seed_index, num_seeds * (inner_seed_index + 1)))
     encoder = DirectEncoder(2)
+    print(f"Learner: {learner_name}({learner_params})")
     print("Outer Seeds:", outer_seeds)
     print("Inner Seeds:", inner_seeds)
-    out = compute_full_curve(learner_name, learner_params, openmlid, outer_seeds=outer_seeds, inner_seeds=inner_seeds, error="message", encoder=encoder, verbose=False, show_progress=True)
+    out = compute_full_curve(learner_name, learner_params, openmlid, outer_seeds=outer_seeds, inner_seeds=inner_seeds, error="message", encoder=encoder, verbose=False, show_progress=True, timeout=timeout)
     with open(file, 'w') as outfile:
         json.dump(out, outfile)
