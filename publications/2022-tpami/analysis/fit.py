@@ -1,4 +1,5 @@
 import scipy as sp
+import scipy.optimize
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
@@ -151,6 +152,10 @@ def fit_model(sizes, scores, sizes_extrapolation, model_id, use_jac=False):
         first = True
         # keep trying initial points until a suitable one is found
         while (error):
+
+            if fails_init > 1000 or fails_fit > 100: # give up
+                best_beta = np.zeros(num_par)
+                return best_beta, get_fun(best_beta), fails_init, fails_fit
 
             if not first:
                 fails_init += 1
@@ -356,12 +361,17 @@ def do_job(part):
     print('computing extrapolations...')
     df_extrapolations = get_multiple_extrapolations_mean_curve_robust(df_selected)
     df_extrapolations.to_csv('extrapolations%d.csv' % part)
+    df_extrapolations.to_pickle('extrapolations%d.p' % part)
+
     print('computing anchors and scores...')
     df_anchors_and_scores = get_anchors_and_scores_mean_curve(df_selected)
     df_anchors_and_scores.to_csv('anchors_scores%d.csv' % part)
+    df_anchors_and_scores.to_csv('anchors_scores%d.p' % part)
+
     print('computing metrics....')
     df_metrics = df_compute_metrics_mean_curve(df_extrapolations, df_anchors_and_scores)
-    df_metrics.to_csv('metrics_tmp%d.csv' % part)
+    df_metrics.to_csv('metrics%d.csv' % part)
+    df_metrics.to_pickle('metrics%d.p' % part)
 
 
 def main():

@@ -23,6 +23,14 @@ def fit_model(sizes, scores, sizes_extrapolation, model_id, use_jac=False):
     # print(sizes_extrapolation)
     # print(model_id)
 
+    sizes = np.array(sizes)
+    scores = np.array(scores)
+
+    bad_score = np.isnan(scores)
+
+    sizes = sizes[bad_score==False]
+    scores = scores[bad_score==False]
+
     def get_J(beta):
         num_par = get_num_par(model_id)
         if num_par == 2:
@@ -215,6 +223,21 @@ def fit_model(sizes, scores, sizes_extrapolation, model_id, use_jac=False):
     # print(best_beta)
     return best_beta, get_fun(best_beta), fails_init, fails_fit
 
+def get_mean_curves(df):
+    rows = []
+    for openmlid, df_dataset in tqdm(df.groupby("openmlid")):
+        for learner, df_learner in df_dataset.groupby("learner"):
+            sizes = sorted(pd.unique(df_learner["size_train"]))
+            scores = []
+            for (inner, outer), df_seeded in df_learner.groupby(["inner_seed", "outer_seed"]):
+                sizes_seed, scores_seed = df_seeded["size_train"].values, df_seeded["score_valid"].values
+                scores.append([scores_seed[list(sizes_seed).index(s)] if s in sizes_seed else np.nan for s in sizes])
+            scores = np.array(scores)
+            mean_scores = np.nanmean(scores, axis=0)
+            rows.append([openmlid, learner, sizes, np.round(mean_scores, 4), np.round(1 - mean_scores, 4)])
+    return pd.DataFrame(rows, columns=["openmlid", "learner", "sizes", "mean_accuracies", "mean_errorrates"])
+
+
 
 def get_multiple_extrapolations_mean_curve_robust(df):
     model_names = ['pow4', 'pow3', 'pow2', 'log2', 'exp2', 'exp3', 'lin2', 'last1', 'vap3', 'mmf4', 'wbl4', 'exp4',
@@ -225,18 +248,13 @@ def get_multiple_extrapolations_mean_curve_robust(df):
                 miniters=1)
     for openmlid, df_dataset in tqdm(df.groupby("openmlid")):
         for learner, df_learner in df_dataset.groupby("learner"):
-            sizes = None
+            sizes = sorted(pd.unique(df_learner["size_train"]))
             scores = []
             for (inner, outer), df_seeded in df_learner.groupby(["inner_seed", "outer_seed"]):
                 sizes_seed, scores_seed = df_seeded["size_train"].values, df_seeded["score_valid"].values
-                if sizes is None:
-                    sizes = sizes_seed
-                scores.append(scores_seed)
+                scores.append([scores_seed[list(sizes_seed).index(s)] if s in sizes_seed else np.nan for s in sizes])
             scores = np.array(scores)
-            if len(scores.shape) != 2:
-                print(f"Skipping {learner}")
-                continue
-            mean_scores = np.mean(scores, axis=0)
+            mean_scores = np.nanmean(scores, axis=0)
             # sizes, scores = df_seeded["size_train"].values, df_seeded["score_valid"].values
             for i in range(0, len(model_names)):
                 model_name = model_names[i]
@@ -245,7 +263,8 @@ def get_multiple_extrapolations_mean_curve_robust(df):
                     beta, model, fails_init, fails_fit = fit_model(np.array(sizes[:offset]),
                                                                    np.array(mean_scores[:offset]),
                                                                    np.array(sizes[offset:]), model_name)
-                    predictions = np.round(model(sizes), 4)
+                    sizes = np.array(sizes)
+                    predictions = model(sizes)
                     assert (len(predictions) == len(sizes))
                     rows.append([openmlid, learner, sizes[offset - 1], predictions, model_names[i], beta, fails_init,
                                  fails_fit])
@@ -259,18 +278,13 @@ def get_anchors_and_scores_mean_curve(df):
     rows = []
     for openmlid, df_dataset in tqdm(df.groupby("openmlid")):
         for learner, df_learner in df_dataset.groupby("learner"):
-            sizes = None
+            sizes = sorted(pd.unique(df_learner["size_train"]))
             scores = []
             for (inner, outer), df_seeded in df_learner.groupby(["inner_seed", "outer_seed"]):
                 sizes_seed, scores_seed = df_seeded["size_train"].values, df_seeded["score_valid"].values
-                if sizes is None:
-                    sizes = sizes_seed
-                scores.append(scores_seed)
+                scores.append([scores_seed[list(sizes_seed).index(s)] if s in sizes_seed else np.nan for s in sizes])
             scores = np.array(scores)
-            if len(scores.shape) != 2:
-                print(f"Skipping {learner}")
-                continue
-            mean_scores = np.mean(scores, axis=0)
+            mean_scores = np.nanmean(scores, axis=0)
             rows.append([openmlid, learner, sizes, mean_scores])
     return pd.DataFrame(rows, columns=["openmlid", "learner", "anchor_prediction", "score"])
 
@@ -290,6 +304,15 @@ def metrics_per_row(row, score, anchor_prediction):
     y_trn = score[trn_indices]
     y_tst_hat = prediction[tst_indices]
     y_tst = score[tst_indices]
+
+    bad_score_trn = np.isnan(y_trn)
+    bad_score_tst = np.isnan(y_tst)
+
+    y_trn = y_trn[bad_score_trn==False]
+    y_trn_hat = y_trn_hat[bad_score_trn==False]
+
+    y_tst = y_tst[bad_score_tst==False]
+    y_tst_hat = y_tst_hat[bad_score_tst==False]
 
     MSE_trn = np.mean((y_trn - y_trn_hat) ** 2)
     MSE_tst = np.mean((y_tst - y_tst_hat) ** 2)
