@@ -293,7 +293,7 @@ def metrics_per_row(row, score, anchor_prediction):
     max_anchor_seen = row.max_anchor_seen
     prediction = row.prediction
     max_anchor = np.max(anchor_prediction)
-    percentage_train = np.round(max_anchor_seen / max_anchor * 100) / 100
+    percentage_train = max_anchor_seen / max_anchor
 
     trn_ind = np.argwhere(max_anchor_seen == anchor_prediction)[0][0]  # recover offset
     trn_indices = range(0, (trn_ind + 1))
