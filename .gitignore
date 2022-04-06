@@ -10,3 +10,21 @@ publications/2022-tpami/analysis/temp/
 publications/2022-tpami/analysis/temp3/
 
 publications/2022-tpami/analysis/temp4/
+
+*.p
+
+*.csv
+
+*.png
+
+publications/2022-tpami/analysis/cd-diagram-master/FordA/
+
+publications/2022-tpami/analysis/cd-diagram-master/InsectWingbeatSound/
+
+publications/2022-tpami/analysis/cd-diagram-master/
+
+*.eps
+
+*.pdf
+
+*.sh
