@@ -1,1 +1,1 @@
-from lcdb.lcdb import *
+from .lcdb import *

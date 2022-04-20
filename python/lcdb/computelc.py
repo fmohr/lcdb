@@ -31,7 +31,7 @@ if __name__ == '__main__':
         learner_name = algorithm
     
     # compute curve
-    num_seeds = 1
+    num_seeds = 5
     outer_seeds = [outer_seed]
     inner_seeds = list(range(num_seeds * inner_seed_index, num_seeds * (inner_seed_index + 1)))
     encoder = DirectEncoder(2)

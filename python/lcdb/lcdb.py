@@ -215,7 +215,7 @@ def get_truth_and_predictions(learner_inst, X, y, anchor, outer_seed = 0, inner_
     return y_train, y_valid, y_test, y_hat_train, y_prob_train, y_hat_valid, y_prob_valid, y_hat_test, y_prob_test, learner_inst.classes_, train_time, predict_time_train, predict_proba_time_train, predict_time_valid, predict_proba_time_valid, predict_time_test, predict_proba_time_test
 
 
-def get_entry(learner_name, learner_params, X, y, anchor, outer_seed, inner_seed, encoder = DirectEncoder(), verbose=False):
+def get_entry(learner_name, learner_params, X, y, anchor, outer_seed, inner_seed, encoder = DirectEncoder(), verbose=False, max_train_predictions = 1000):
     
     # get learner
     learner_class = get_class(learner_name)
@@ -223,6 +223,15 @@ def get_entry(learner_name, learner_params, X, y, anchor, outer_seed, inner_seed
     
     # run learner
     y_train, y_valid, y_test, y_hat_train, y_prob_train, y_hat_valid, y_prob_valid, y_hat_test, y_prob_test, known_labels, train_time, predict_time_train, predict_proba_time_train, predict_time_valid, predict_proba_time_valid, predict_time_test, predict_proba_time_test = get_truth_and_predictions(learner_inst, X, y, anchor, outer_seed, inner_seed, verbose=verbose)
+    
+    # if the number of training instances was larget than max_train_predictions, only store a random subset (based on the inner seed)
+    if len(y_train) > max_train_predictions:
+        indices = np.random.RandomState(inner_seed).choice(range(len(y_train)), max_train_predictions, replace=False)
+        y_train = y_train[indices]
+        y_hat_train = y_hat_train[indices]
+        y_prob_train = y_prob_train[indices]
+        
+        #y_train = 
     
     # compute info entry
     info = {
@@ -278,8 +287,12 @@ def get_curve_for_metric_as_dataframe(json_curve_descriptor, metric, encoder = D
     rows = []
     for entry in json_curve_descriptor:
         try:
-            m_train, m_valid, m_test = get_metric_of_entry(entry, metric, encoder)
-            row = [entry["size_train"], entry["size_test"], entry["outer_seed"], entry["inner_seed"], entry["traintime"], np.round(m_train, precision), np.round(m_valid, precision), np.round(m_test, precision)]
+            scores = get_metric_of_entry(entry, metric, encoder)
+            if scores is None:
+                row = [entry["size_train"], entry["size_test"], entry["outer_seed"], entry["inner_seed"], entry["traintime"], None, None, None]
+            else:
+                m_train, m_valid, m_test = scores
+                row = [entry["size_train"], entry["size_test"], entry["outer_seed"], entry["inner_seed"], entry["traintime"], np.round(m_train, precision), np.round(m_valid, precision), np.round(m_test, precision)]
             rows.append(row)
         except:
             if error == "message":
@@ -322,15 +335,27 @@ def get_metric_of_entry(entry, metric, encoder = DirectEncoder()):
     y_train = encoder.decode_label_vector(entry["y_train"])
     y_valid = encoder.decode_label_vector(entry["y_valid"])
     y_test = encoder.decode_label_vector(entry["y_test"])
+    labels = sorted(np.unique(y_train))
     
     if type(metric) == str:
-        if metric == "accuracy":
+        if metric in ["accuracy", "f1"]:
             y_hat_train = encoder.decode_label_vector(entry["y_hat_train"])
             y_hat_valid = encoder.decode_label_vector(entry["y_hat_valid"])
             y_hat_test = encoder.decode_label_vector(entry["y_hat_test"])
-            return sklearn.metrics.accuracy_score(y_train, y_hat_train), sklearn.metrics.accuracy_score(y_valid, y_hat_valid), sklearn.metrics.accuracy_score(y_test, y_hat_test)
+            
+            keywords = {}
+            if metric == "accuracy":
+                m = sklearn.metrics.accuracy_score
+            elif metric == "f1":
+                minority_class = labels[np.argmin(np.count_nonzero([y_train == l for l in labels]))]
+                m = sklearn.metrics.f1_score
+                keywords["pos_label"] = minority_class
+                if len(labels) > 2:
+                    return None
+                
+            return m(y_train, y_hat_train, **keywords), m(y_valid, y_hat_valid, **keywords), m(y_test, y_hat_test, **keywords)
         
-        elif metric == "logloss":
+        elif metric in ["logloss", "auc"]:
             if entry["predictproba_train"] is not None:
                 y_prob_train = encoder.decode_distribution(entry["predictproba_train"])
                 y_prob_valid = encoder.decode_distribution(entry["predictproba_valid"])
@@ -349,15 +374,28 @@ def get_metric_of_entry(entry, metric, encoder = DirectEncoder()):
                 y_prob_test = np.zeros((len(y_hat_test), len(labels)))
                 for i, label in enumerate(y_hat_test):
                     y_prob_test[i,labels.index(label)] = 1
-            m = sklearn.metrics.log_loss
-            return m(y_train, y_prob_train, labels=entry["labels"]), m(y_valid, y_prob_valid, labels=entry["labels"]), m(y_test, y_prob_test, labels=entry["labels"])
+            
+            if metric == "logloss":
+                m = sklearn.metrics.log_loss
+                return m(y_train, y_prob_train, labels=entry["labels"]), m(y_valid, y_prob_valid, labels=entry["labels"]), m(y_test, y_prob_test, labels=entry["labels"])
+            elif metric == "auc":
+                
+                if len(labels) > 2:
+                    return None
+                
+                m = sklearn.metrics.roc_auc_score
+                return m(y_train, y_prob_train[:, 1], labels=entry["labels"]), m(y_valid, y_prob_valid[:, 1], labels=entry["labels"]), m(y_test, y_prob_test[:, 1], labels=entry["labels"])
+            
+            raise Exception(f"Unkown metric {metric}")
+            
+        raise Exception(f"Unknown metric {metric}")
     else:
         raise Exception("Currently only pre-defined metrics are supported.")
 
         
 def compute_full_curve(learner_name, learner_params, dataset, outer_seeds=range(10), inner_seeds=range(10), show_progress=False, error="raise", verbose=False, encoder=DirectEncoder(), timeout = None):
     
-    deadline = time.time() + timeout
+    deadline = None if timeout is None else time.time() + timeout
     
     if type(dataset) == int: # openmlid
         
@@ -401,7 +439,7 @@ def compute_full_curve(learner_name, learner_params, dataset, outer_seeds=range(
                 break
             last_runtime = 0
             for anchor in anchors:
-                remaining_time = deadline - time.time()
+                remaining_time = 10**10 if deadline is None else deadline - time.time()
                 if remaining_time < last_runtime:
                     print("Timeout approaching, stopping computation.")
                     stop = True
@@ -418,6 +456,7 @@ def compute_full_curve(learner_name, learner_params, dataset, outer_seeds=range(
                     pbar.update(1)
     if show_progress:
         pbar.close()
+    logger.info(f"Learning curve of length {len(out)} computed.")
     return out
 
 
