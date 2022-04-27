@@ -41,7 +41,7 @@ lcdb.plot_train_and_test_curve(curve)
 ```
 will give you
 
-![Directly plotted learning curve](/python/doc/plots/learningcurve-1.png)
+![Directly plotted learning curve](/doc/plots/learningcurve-1.png)
 
 ### With your own axis objects
 ```python
@@ -55,7 +55,7 @@ plt.show()
 ```
 will give you
 
-![Learning Curves plotted into your axies objects](/python/doc/plots/learningcurve-2.png)
+![Learning Curves plotted into your axies objects](/doc/plots/learningcurve-2.png)
 
 ## Training Times
 You can also get the training times of the learners.
@@ -71,7 +71,7 @@ lcdb.plot_train_times("kr-vs-kp", "sklearn.linear_model.LogisticRegression")
 ```
 will give you
 
-![Directly plotted runtime](/python/doc/plots/times-1.png)
+![Directly plotted runtime](/doc/plots/times-1.png)
 
 
 #### With your axis objects
