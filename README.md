@@ -82,7 +82,7 @@ lcdb.plot_train_times("kr-vs-kp", "SVC_linear", ax)
 ```
 will give you
 
-![Customized runtime plots](/python/doc/plots/times-2.png)
+![Customized runtime plots](/doc/plots/times-2.png)
 
 ## Meta-Features
 All datasets come with pre-computed meta-features. You can retrieve these as follows:
