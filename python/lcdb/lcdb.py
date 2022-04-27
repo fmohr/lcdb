@@ -1,6 +1,6 @@
 import sklearn.model_selection
 import time
-from directencoder import DirectEncoder
+from .directencoder import DirectEncoder
 
 import numpy as np
 import pandas as pd
@@ -574,7 +574,7 @@ def compile_dataframe_for_all_datasets_on_metric(openmlids, metric):
     gets the full local database of learning curves as a dataframe
 '''
 def get_all_curves(metric = "accuracy"):
-    supported_metrics = ["accuracy", "logloss"]
+        supported_metrics = ["accuracy", "logloss", "f1", "auc"]
     if not metric in supported_metrics:
         raise ValueError(f"Unsupported metric {metric}. Supported metrics are {supported_metrics}")
     return pd.read_csv(StringIO(pkg_resources.read_text('lcdb', f'database-{metric}.csv')))
