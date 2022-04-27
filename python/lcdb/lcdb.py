@@ -460,8 +460,8 @@ def compute_full_curve(learner_name, learner_params, dataset, outer_seeds=range(
     return out
 
 
-def plot_curve(anchors, points, ax, color):
-    ax.plot(anchors, [np.median(v) for v in points], color=color)
+def plot_curve(anchors, points, ax, color, label = None):
+    ax.plot(anchors, [np.median(v) for v in points], color=color, label=label)
     ax.plot(anchors, [np.mean(v) for v in points], linestyle="--", color=color)
     ax.fill_between(anchors, [np.percentile(v, 0) for v in points], [np.percentile(v, 100) for v in points], alpha=0.1, color=color)
     ax.fill_between(anchors, [np.percentile(v, 25) for v in points], [np.percentile(v, 75) for v in points], alpha=0.2, color=color)
@@ -472,14 +472,18 @@ def plot_train_and_test_curve(curve, ax = None):
     else:
         fig = None
     anchors = curve[0]
-    plot_curve(anchors, curve[1], ax, "C0") # train curve
-    plot_curve(anchors, curve[2], ax, "C1") # validation curve
-    plot_curve(anchors, curve[3], ax, "C2") # test curve
+    plot_curve(anchors, curve[1], ax, "C0", label="Performance on Training Data") # train curve
+    plot_curve(anchors, curve[2], ax, "C1", label="Performance on Validation Data") # validation curve
+    plot_curve(anchors, curve[3], ax, "C2", label="Performance on Test Data") # test curve
     
     ax.plot(anchors, [(np.mean(v_train) + np.mean(curve[2][a])) / 2 for a, v_train in enumerate(curve[1])], linestyle="--", color="black",linewidth=1)
     
     ax.axhline(np.mean(curve[2][-1]), linestyle="dotted", color="black",linewidth=1)
     ax.fill_between(anchors, np.mean(curve[2][-1]) - 0.0025, np.mean(curve[2][-1]) + 0.0025, color="black", alpha=0.1, hatch=r"//")
+    
+    ax.legend()
+    ax.set_xlabel("Number of training instances")
+    ax.set_ylabel("Prediction Performance")
     
     if fig is not None:
         return fig
@@ -574,7 +578,7 @@ def compile_dataframe_for_all_datasets_on_metric(openmlids, metric):
     gets the full local database of learning curves as a dataframe
 '''
 def get_all_curves(metric = "accuracy"):
-        supported_metrics = ["accuracy", "logloss", "f1", "auc"]
+    supported_metrics = ["accuracy", "logloss", "f1", "auc"]
     if not metric in supported_metrics:
         raise ValueError(f"Unsupported metric {metric}. Supported metrics are {supported_metrics}")
     return pd.read_csv(StringIO(pkg_resources.read_text('lcdb', f'database-{metric}.csv')))
