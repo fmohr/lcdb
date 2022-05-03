@@ -322,11 +322,12 @@ def main():
     do_job(part)
 
 # usage:
-# python fit.py <part>
+# python fit_database.py <part>
 # where <part> is in [0,12]
-# we split the database in parts for fitting, because otherwise fitting takes very long
+# we split the database in parts for fitting (each part fits 20 datasets), because otherwise fitting takes very long
 # each part can be processed in parallel seperately
 # each part takes approximately 30 min - 1 hour
 # and requires 512 MB of memory for processing
+# jupyter notebook 3b combines, preprocesses and analyses the results
 if __name__ == "__main__":
     main()
