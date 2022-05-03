@@ -800,14 +800,14 @@ def build_rank_table(rank_list):
     return a
 
 
-def make_all_cd_plots(tables, tables_nan, title, ext):
+def make_all_cd_plots(tables, tables_nan, title, ext, dir):
     titles = ['all', '5%', '10%', '20%', '40%', '80%']
     plots = []
     for i in range(0, len(tables)):
         fn = title + ' ' + titles[i] + ext
         fn = fn.replace(' ', '_')
         cd_plot(tables[i], tables_nan[i], title=(title + ' ' + titles[i]))
-        plt.savefig(fn, bbox_inches='tight')
+        plt.savefig(dir + '/' + fn, bbox_inches='tight')
 
 
 def get_ranks_from_tables(tables_list):
@@ -983,7 +983,7 @@ def plot_prediction_smooth2(row):
     plt.legend()
 
 
-def load_from_parts():
+def load_from_parts(dir_fitting_results):
     from os.path import exists
     df = pd.read_csv('database-accuracy.csv')
     fn_anchors_scores = 'anchor-accuracy.gz'
@@ -996,8 +996,8 @@ def load_from_parts():
     df_metrics_list = []
     df_extrapolations_list = []
     for i in range(0, 13):
-        df_metrics_list.append(pd.read_pickle('metrics%d.gz' % i))
-        df_extrapolations_list.append(pd.read_pickle('extrapolations%d.gz' % i))
+        df_metrics_list.append(pd.read_pickle(dir_fitting_results + '/metrics%d.gz' % i))
+        df_extrapolations_list.append(pd.read_pickle(dir_fitting_results + '/extrapolations%d.gz' % i))
 
     df_metrics = pd.concat(df_metrics_list, axis=0)
     df_extrapolations = pd.concat(df_extrapolations_list, axis=0)
