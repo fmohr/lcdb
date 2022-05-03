@@ -3,16 +3,14 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from tqdm.notebook import tqdm
-
-matplotlib.rcParams['font.family'] = 'sans-serif'
-matplotlib.rcParams['font.sans-serif'] = 'Arial'
-
 import operator
 import math
 from scipy.stats import wilcoxon
 from scipy.stats import friedmanchisquare
 import networkx
 
+matplotlib.rcParams['font.family'] = 'sans-serif'
+matplotlib.rcParams['font.sans-serif'] = 'Arial'
 curve_models = ['last1', 'pow2', 'log2', 'exp2', 'lin2', 'ilog2', 'pow3', 'exp3', 'vap3', 'expp3', 'expd3', 'logpower3',
                 'mmf4', 'wbl4', 'exp4', 'pow4']
 
