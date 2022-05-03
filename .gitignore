@@ -30,3 +30,7 @@ publications/2022-tpami/analysis/cd-diagram-master/
 *.sh
 
 publications/2022-tpami/analysis/__pycache__/
+
+publications/2022-tpami/analysis/fitting_results/
+
+publications/2022-tpami/analysis/temp5/
