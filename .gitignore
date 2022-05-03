@@ -28,3 +28,5 @@ publications/2022-tpami/analysis/cd-diagram-master/
 *.pdf
 
 *.sh
+
+publications/2022-tpami/analysis/__pycache__/
