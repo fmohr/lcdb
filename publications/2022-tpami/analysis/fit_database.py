@@ -6,6 +6,7 @@ from tqdm import tqdm
 import argparse
 from hashlib import sha256
 
+
 def get_num_par(model_id):
     if model_id == 'last1':
         return 1
@@ -181,8 +182,7 @@ def get_multiple_extrapolations_mean_curve_robust(df):
                 model_name = model_names[i]
                 # print(model_name)
                 for offset in range(4, len(sizes)):
-
-                    experiment_id = '%d-%s-%s-%d' % (openmlid,learner,model_name,offset)
+                    experiment_id = '%d-%s-%s-%d' % (openmlid, learner, model_name, offset)
 
                     hash = sha256(experiment_id.encode())
                     seed = np.frombuffer(hash.digest(), dtype='uint32')
@@ -289,7 +289,6 @@ def select_part(part, df_all, datasets):
 
 
 def do_job(part):
-
     np.seterr(all='ignore')
 
     print('starting part %d' % part)
@@ -320,6 +319,7 @@ def main():
     args = parser.parse_args()
     part = args.part
     do_job(part)
+
 
 # usage:
 # python fit_database.py <part>

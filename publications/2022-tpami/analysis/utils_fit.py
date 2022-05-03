@@ -1,12 +1,8 @@
-import scipy as sp
+import matplotlib
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from tqdm.notebook import tqdm
-import matplotlib.pyplot as plt
-import sklearn.metrics
-import matplotlib
-
-import matplotlib.pyplot as plt
 
 matplotlib.rcParams['font.family'] = 'sans-serif'
 matplotlib.rcParams['font.sans-serif'] = 'Arial'
@@ -699,7 +695,7 @@ def print_pretty_rank_table_transpose(a):
     print('\\end{table}')
 
 
-def print_pretty_rank_table_transpose_trn_tst_all(a_trn,a_tst_all):
+def print_pretty_rank_table_transpose_trn_tst_all(a_trn, a_tst_all):
     print('\\begin{table}[]')
     print('\\ttfamily')
     print('\\begin{tabular}{lllllllllllllllll}')
@@ -1136,19 +1132,22 @@ def prepare_total_dataframe(df_anchors_and_scores, df_metrics, df_extrapolations
 
     return df_total4
 
-def plot_metric(series,my_metric,ls='-',lw=1):
+
+def plot_metric(series, my_metric, ls='-', lw=1):
     curbin = 0.0000000005
     binlist = [0]
     while curbin < 1000000:
         binlist.append(curbin)
         curbin *= 2
-    [hist,edges] = np.histogram(series,bins=binlist)
-    plt.plot(edges[:-1],hist/np.sum(hist),ls,label=my_metric,linewidth=lw)
+    [hist, edges] = np.histogram(series, bins=binlist)
+    plt.plot(edges[:-1], hist / np.sum(hist), ls, label=my_metric, linewidth=lw)
     plt.xscale('log')
 
-def empirical_cdf(ax,series,my_metric,ls='-',label='',linewidth=1):
+
+def empirical_cdf(ax, series, my_metric, ls='-', label='', linewidth=1):
     a = series.values
-    ax.plot(np.sort(a), np.linspace(0, 1, len(a), endpoint=False), ls,label=label,linewidth=linewidth)
+    ax.plot(np.sort(a), np.linspace(0, 1, len(a), endpoint=False), ls, label=label, linewidth=linewidth)
+
 
 def get_relevant_max_anchor(max_available_anchor):
     if max_available_anchor < 128:
@@ -1156,5 +1155,3 @@ def get_relevant_max_anchor(max_available_anchor):
     sizes = np.array([2 ** int(np.ceil(k / 2)) for k in range(7, 100)])
     highest_anchor = sizes[max(np.where(sizes <= 0.2 * max_available_anchor)[0])]
     return highest_anchor
-
-
