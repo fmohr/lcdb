@@ -8,6 +8,7 @@ import math
 from scipy.stats import wilcoxon
 from scipy.stats import friedmanchisquare
 import networkx
+import sys
 
 matplotlib.rcParams['font.family'] = 'sans-serif'
 matplotlib.rcParams['font.sans-serif'] = 'Arial'
@@ -664,9 +665,14 @@ def rescale_rank_table(a):
     return a
 
 
-def print_pretty_rank_table_transpose(a):
-    print('\\begin{table}[]')
+def print_pretty_rank_table_transpose(a, toFile = None, caption = None):
+    original_stdout = sys.stdout
+    if toFile is not None:
+        f = open(toFile, 'a')
+        sys.stdout = f
+    print('\\begin{table}[h]')
     print('\\ttfamily')
+    print('\\resizebox{\\textwidth}{!}{')
     print('\\begin{tabular}{lllllllllllllllll}')
     my_list = ['curve', 'all', '5\%', '10\%', '20\%', '40\%', '80\%']
     a_res = rescale_rank_table(a)
@@ -680,6 +686,8 @@ def print_pretty_rank_table_transpose(a):
             if i == 0:
                 if num == 'baseline_last_constant':
                     num = 'last1'
+                if num == 'logpower3':
+                    num = 'logpow3'
                 print('%12s' % num, ' ', end='')
             else:
                 rank = num
@@ -690,7 +698,12 @@ def print_pretty_rank_table_transpose(a):
                 print('&', end='')
         print('\\\\')
     print('\\end{tabular}')
+    print('}')
+    if caption is not None:
+        print('\\caption{%s}' % caption)
     print('\\end{table}')
+    sys.stdout = original_stdout
+    f.close()
 
 
 def print_pretty_rank_table_transpose_trn_tst_all(a_trn, a_tst_all):
@@ -801,7 +814,7 @@ def build_rank_table(rank_list):
 
 
 def make_all_cd_plots(tables, tables_nan, title, ext, dir):
-    titles = ['all', '5%', '10%', '20%', '40%', '80%']
+    titles = ['all', '5', '10', '20', '40', '80']
     plots = []
     for i in range(0, len(tables)):
         fn = title + ' ' + titles[i] + ext

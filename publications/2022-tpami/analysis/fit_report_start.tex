@@ -1,0 +1,102 @@
+\documentclass{article}
+
+\usepackage[english]{babel}
+\usepackage[letterpaper,top=2cm,bottom=2cm,left=3cm,right=3cm,marginparwidth=1.75cm]{geometry}
+
+\usepackage{graphicx}
+\graphicspath{{plots/}}
+\usepackage{booktabs}
+\usepackage{placeins}
+
+\usepackage{lcg}
+\usepackage{color, colortbl}
+\definecolor{g3}{gray}{0.6}
+\definecolor{g2}{gray}{0.8}
+\definecolor{g1}{gray}{0.9}
+
+\definecolor{r0}{rgb}{0.996, 0.909, 0.218}
+\definecolor{r1}{rgb}{0.932, 0.840, 0.286}
+\definecolor{r2}{rgb}{0.858, 0.779, 0.353}
+\definecolor{r3}{rgb}{0.786, 0.720, 0.400}
+\definecolor{r4}{rgb}{0.716, 0.664, 0.432}
+\definecolor{r5}{rgb}{0.648, 0.611, 0.455}
+\definecolor{r6}{rgb}{0.582, 0.559, 0.468}
+\definecolor{r7}{rgb}{0.518, 0.508, 0.473}
+\definecolor{r8}{rgb}{0.458, 0.460, 0.460}
+\definecolor{r9}{rgb}{0.401, 0.412, 0.441}
+\definecolor{r10}{rgb}{0.342, 0.365, 0.429}
+\definecolor{r11}{rgb}{0.279, 0.319, 0.423}
+\definecolor{r12}{rgb}{0.209, 0.273, 0.425}
+\definecolor{r13}{rgb}{0.118, 0.226, 0.434}
+\definecolor{r14}{rgb}{0.000, 0.182, 0.422}
+\definecolor{r15}{rgb}{0.000, 0.135, 0.305}
+
+\title{Fitting Results}
+\author{-}
+
+\begin{document}
+\maketitle
+
+\section{Fitting Results}
+
+\subsection{Fitting Histogram}
+
+\begin{figure}[tbh]
+    \centering
+    \includegraphics[width=\textwidth]{fitting_histogram.eps}
+    \caption{Histogram summary of the log of the fit performances for all datasets, learners and number of points used in curve fitting.
+    No separation for curve models.
+    }
+    \label{fig:mse_distribution:pdf}
+\end{figure}
+
+\FloatBarrier
+
+\subsection{Fitting CDF}
+
+\begin{figure}[tbh]
+    \centering
+    \includegraphics[width=\textwidth]{fitting_cdf.eps}
+    \caption{The Cumulative Density Functions (CDF) for the Mean Squared Error (MSE) for all curve models for interpolation on the train anchors and extrapolation to all test anchors, summarized over all curve fitting experiments.}
+    \label{fig:cdfs_curve_fitting}
+\end{figure}
+
+\FloatBarrier
+
+\subsection{Critical Diagrams for all Three Prediction Scenarios}
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=.49\textwidth]{MSE_last_anchors_all.eps}
+    \includegraphics[width=.49\textwidth]{MSE_last_anchors_5.eps}
+    \includegraphics[width=.49\textwidth]{MSE_last_anchors_10.eps}
+    \includegraphics[width=.49\textwidth]{MSE_last_anchors_20.eps}
+    \includegraphics[width=.49\textwidth]{MSE_last_anchors_40.eps}
+    \includegraphics[width=.49\textwidth]{MSE_last_anchors_80.eps}
+    \caption{All critical diagrams for the ranks for the extrapolation to the last anchor. }
+\end{figure}
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=.49\textwidth]{MSE_test_anchors_all.eps}
+    \includegraphics[width=.49\textwidth]{MSE_test_anchors_5.eps}
+    \includegraphics[width=.49\textwidth]{MSE_test_anchors_10.eps}
+    \includegraphics[width=.49\textwidth]{MSE_test_anchors_20.eps}
+    \includegraphics[width=.49\textwidth]{MSE_test_anchors_40.eps}
+    \includegraphics[width=.49\textwidth]{MSE_test_anchors_80.eps}
+    \caption{All critical diagrams for the ranks for the extrapolation to all test anchors. }
+\end{figure}
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=.49\textwidth]{plots/MSE_train_anchors_all.eps}
+    \includegraphics[width=.49\textwidth]{MSE_train_anchors_5.eps}
+    \includegraphics[width=.49\textwidth]{MSE_train_anchors_10.eps}
+    \includegraphics[width=.49\textwidth]{MSE_train_anchors_20.eps}    \includegraphics[width=.49\textwidth]{MSE_train_anchors_40.eps}
+    \includegraphics[width=.49\textwidth]{MSE_train_anchors_80.eps}
+    \caption{All critical diagrams for the ranks for the interpolation on the train anchors.  }
+\end{figure}
+
+\FloatBarrier
+
+\subsection{Friedman Test Results for all Three Prediction Scenarios}
