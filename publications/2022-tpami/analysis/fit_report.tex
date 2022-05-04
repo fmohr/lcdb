@@ -1,0 +1,168 @@
+\documentclass{article}
+
+\usepackage[english]{babel}
+\usepackage[letterpaper,top=2cm,bottom=2cm,left=3cm,right=3cm,marginparwidth=1.75cm]{geometry}
+
+\usepackage{graphicx}
+\graphicspath{{plots/}}
+\usepackage{booktabs}
+\usepackage{placeins}
+
+\usepackage{lcg}
+\usepackage{color, colortbl}
+\definecolor{g3}{gray}{0.6}
+\definecolor{g2}{gray}{0.8}
+\definecolor{g1}{gray}{0.9}
+
+\definecolor{r0}{rgb}{0.996, 0.909, 0.218}
+\definecolor{r1}{rgb}{0.932, 0.840, 0.286}
+\definecolor{r2}{rgb}{0.858, 0.779, 0.353}
+\definecolor{r3}{rgb}{0.786, 0.720, 0.400}
+\definecolor{r4}{rgb}{0.716, 0.664, 0.432}
+\definecolor{r5}{rgb}{0.648, 0.611, 0.455}
+\definecolor{r6}{rgb}{0.582, 0.559, 0.468}
+\definecolor{r7}{rgb}{0.518, 0.508, 0.473}
+\definecolor{r8}{rgb}{0.458, 0.460, 0.460}
+\definecolor{r9}{rgb}{0.401, 0.412, 0.441}
+\definecolor{r10}{rgb}{0.342, 0.365, 0.429}
+\definecolor{r11}{rgb}{0.279, 0.319, 0.423}
+\definecolor{r12}{rgb}{0.209, 0.273, 0.425}
+\definecolor{r13}{rgb}{0.118, 0.226, 0.434}
+\definecolor{r14}{rgb}{0.000, 0.182, 0.422}
+\definecolor{r15}{rgb}{0.000, 0.135, 0.305}
+
+\title{Fitting Results}
+\author{-}
+
+\begin{document}
+\maketitle
+
+\section{Fitting Results}
+
+\subsection{Fitting Histogram}
+
+\begin{figure}[tbh]
+    \centering
+    \includegraphics[width=\textwidth]{fitting_histogram.eps}
+    \caption{Histogram summary of the log of the fit performances for all datasets, learners and number of points used in curve fitting.
+    No separation for curve models.
+    }
+    \label{fig:mse_distribution:pdf}
+\end{figure}
+
+\FloatBarrier
+
+\subsection{Fitting CDF}
+
+\begin{figure}[tbh]
+    \centering
+    \includegraphics[width=\textwidth]{fitting_cdf.eps}
+    \caption{The Cumulative Density Functions (CDF) for the Mean Squared Error (MSE) for all curve models for interpolation on the train anchors and extrapolation to all test anchors, summarized over all curve fitting experiments.}
+    \label{fig:cdfs_curve_fitting}
+\end{figure}
+
+\FloatBarrier
+
+\subsection{Critical Diagrams for all Three Prediction Scenarios}
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=.49\textwidth]{MSE_last_anchors_all.eps}
+    \includegraphics[width=.49\textwidth]{MSE_last_anchors_5.eps}
+    \includegraphics[width=.49\textwidth]{MSE_last_anchors_10.eps}
+    \includegraphics[width=.49\textwidth]{MSE_last_anchors_20.eps}
+    \includegraphics[width=.49\textwidth]{MSE_last_anchors_40.eps}
+    \includegraphics[width=.49\textwidth]{MSE_last_anchors_80.eps}
+    \caption{All critical diagrams for the ranks for the extrapolation to the last anchor. }
+\end{figure}
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=.49\textwidth]{MSE_test_anchors_all.eps}
+    \includegraphics[width=.49\textwidth]{MSE_test_anchors_5.eps}
+    \includegraphics[width=.49\textwidth]{MSE_test_anchors_10.eps}
+    \includegraphics[width=.49\textwidth]{MSE_test_anchors_20.eps}
+    \includegraphics[width=.49\textwidth]{MSE_test_anchors_40.eps}
+    \includegraphics[width=.49\textwidth]{MSE_test_anchors_80.eps}
+    \caption{All critical diagrams for the ranks for the extrapolation to all test anchors. }
+\end{figure}
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=.49\textwidth]{plots/MSE_train_anchors_all.eps}
+    \includegraphics[width=.49\textwidth]{MSE_train_anchors_5.eps}
+    \includegraphics[width=.49\textwidth]{MSE_train_anchors_10.eps}
+    \includegraphics[width=.49\textwidth]{MSE_train_anchors_20.eps}    \includegraphics[width=.49\textwidth]{MSE_train_anchors_40.eps}
+    \includegraphics[width=.49\textwidth]{MSE_train_anchors_80.eps}
+    \caption{All critical diagrams for the ranks for the interpolation on the train anchors.  }
+\end{figure}
+
+\FloatBarrier
+
+\subsection{Friedman Test Results for all Three Prediction Scenarios}\begin{table}[h]
+\ttfamily
+\resizebox{\textwidth}{!}{
+\begin{tabular}{lllllllllllllllll}
+curve&
+       last1  &        pow2  &        log2  &        exp2  &        lin2  &       ilog2  &        pow3  &        exp3  &        vap3  &       expp3  &       expd3  &     logpow3  &        mmf4  &        wbl4  &        exp4  &        pow4  \\
+all&
+\cellcolor{r1}{6.12} &\cellcolor{r8}{10.72} &\cellcolor{r6}{9.37} &\cellcolor{r14}{14.78} &\cellcolor{r13}{13.99} &\cellcolor{r4}{7.70} &\cellcolor{r2}{6.56} &\cellcolor{r7}{9.94} &\cellcolor{r5}{8.42} &\cellcolor{r5}{8.49} &\cellcolor{r4}{7.99} &\cellcolor{r2}{6.71} &\cellcolor{r1}{5.82} &\cellcolor{r2}{6.31} &\cellcolor{r2}{6.54} &\cellcolor{r2}{6.53} \\
+5\%&
+\cellcolor{r3}{7.01} &\cellcolor{r6}{9.54} &\cellcolor{r5}{8.55} &\cellcolor{r14}{14.65} &\cellcolor{r13}{13.90} &\cellcolor{r2}{6.67} &\cellcolor{r2}{6.51} &\cellcolor{r6}{9.05} &\cellcolor{r6}{9.39} &\cellcolor{r4}{7.92} &\cellcolor{r4}{7.84} &\cellcolor{r3}{7.12} &\cellcolor{r2}{6.34} &\cellcolor{r3}{7.13} &\cellcolor{r3}{7.27} &\cellcolor{r3}{7.12} \\
+10\%&
+\cellcolor{r2}{6.89} &\cellcolor{r7}{10.23} &\cellcolor{r5}{8.91} &\cellcolor{r15}{14.98} &\cellcolor{r13}{14.07} &\cellcolor{r3}{6.97} &\cellcolor{r1}{6.27} &\cellcolor{r7}{9.67} &\cellcolor{r5}{8.79} &\cellcolor{r4}{8.13} &\cellcolor{r4}{7.98} &\cellcolor{r2}{6.58} &\cellcolor{r1}{6.09} &\cellcolor{r2}{6.78} &\cellcolor{r3}{6.97} &\cellcolor{r2}{6.69} \\
+20\%&
+\cellcolor{r2}{6.58} &\cellcolor{r8}{10.84} &\cellcolor{r6}{9.29} &\cellcolor{r14}{14.96} &\cellcolor{r13}{14.04} &\cellcolor{r3}{7.50} &\cellcolor{r2}{6.31} &\cellcolor{r7}{10.28} &\cellcolor{r5}{8.31} &\cellcolor{r4}{8.17} &\cellcolor{r4}{8.24} &\cellcolor{r2}{6.39} &\cellcolor{r1}{5.75} &\cellcolor{r2}{6.32} &\cellcolor{r2}{6.54} &\cellcolor{r2}{6.46} \\
+40\%&
+\cellcolor{r1}{5.92} &\cellcolor{r9}{11.20} &\cellcolor{r6}{9.57} &\cellcolor{r14}{14.72} &\cellcolor{r13}{13.77} &\cellcolor{r4}{8.17} &\cellcolor{r2}{6.57} &\cellcolor{r8}{10.70} &\cellcolor{r4}{8.14} &\cellcolor{r5}{8.54} &\cellcolor{r4}{8.29} &\cellcolor{r2}{6.45} &\cellcolor{r0}{5.52} &\cellcolor{r1}{6.03} &\cellcolor{r1}{6.24} &\cellcolor{r1}{6.16} \\
+80\%&
+\cellcolor{r0}{4.95} &\cellcolor{r9}{11.54} &\cellcolor{r7}{9.93} &\cellcolor{r13}{14.17} &\cellcolor{r12}{13.35} &\cellcolor{r5}{8.93} &\cellcolor{r2}{6.84} &\cellcolor{r9}{11.22} &\cellcolor{r4}{7.87} &\cellcolor{r5}{8.89} &\cellcolor{r5}{8.35} &\cellcolor{r2}{6.64} &\cellcolor{r0}{5.51} &\cellcolor{r1}{5.83} &\cellcolor{r1}{6.00} &\cellcolor{r1}{5.97} \\
+\end{tabular}
+}
+\caption{Ranks for extrapolating to the last test anchor.}
+\end{table}
+\begin{table}[h]
+\ttfamily
+\resizebox{\textwidth}{!}{
+\begin{tabular}{lllllllllllllllll}
+curve&
+       last1  &        pow2  &        log2  &        exp2  &        lin2  &       ilog2  &        pow3  &        exp3  &        vap3  &       expp3  &       expd3  &     logpow3  &        mmf4  &        wbl4  &        exp4  &        pow4  \\
+all&
+\cellcolor{r1}{6.06} &\cellcolor{r8}{10.73} &\cellcolor{r6}{9.37} &\cellcolor{r14}{14.70} &\cellcolor{r13}{13.89} &\cellcolor{r4}{7.93} &\cellcolor{r2}{6.60} &\cellcolor{r7}{10.16} &\cellcolor{r5}{8.28} &\cellcolor{r5}{8.47} &\cellcolor{r4}{8.08} &\cellcolor{r2}{6.72} &\cellcolor{r1}{5.80} &\cellcolor{r1}{6.26} &\cellcolor{r2}{6.52} &\cellcolor{r2}{6.43} \\
+5\%&
+\cellcolor{r3}{7.04} &\cellcolor{r6}{9.55} &\cellcolor{r5}{8.50} &\cellcolor{r14}{14.50} &\cellcolor{r13}{13.70} &\cellcolor{r2}{6.87} &\cellcolor{r2}{6.54} &\cellcolor{r6}{9.32} &\cellcolor{r6}{9.24} &\cellcolor{r4}{7.85} &\cellcolor{r4}{7.94} &\cellcolor{r3}{7.18} &\cellcolor{r2}{6.35} &\cellcolor{r3}{7.11} &\cellcolor{r3}{7.29} &\cellcolor{r3}{7.03} \\
+10\%&
+\cellcolor{r2}{6.87} &\cellcolor{r7}{10.24} &\cellcolor{r5}{8.92} &\cellcolor{r15}{14.90} &\cellcolor{r13}{13.91} &\cellcolor{r3}{7.23} &\cellcolor{r2}{6.30} &\cellcolor{r7}{9.97} &\cellcolor{r5}{8.56} &\cellcolor{r4}{8.06} &\cellcolor{r4}{8.09} &\cellcolor{r2}{6.57} &\cellcolor{r1}{6.10} &\cellcolor{r2}{6.72} &\cellcolor{r3}{7.00} &\cellcolor{r2}{6.57} \\
+20\%&
+\cellcolor{r2}{6.46} &\cellcolor{r8}{10.84} &\cellcolor{r6}{9.30} &\cellcolor{r14}{14.87} &\cellcolor{r13}{13.94} &\cellcolor{r4}{7.79} &\cellcolor{r2}{6.36} &\cellcolor{r8}{10.58} &\cellcolor{r4}{8.13} &\cellcolor{r4}{8.17} &\cellcolor{r5}{8.35} &\cellcolor{r2}{6.41} &\cellcolor{r1}{5.72} &\cellcolor{r1}{6.25} &\cellcolor{r2}{6.50} &\cellcolor{r2}{6.32} \\
+40\%&
+\cellcolor{r1}{5.77} &\cellcolor{r9}{11.21} &\cellcolor{r7}{9.61} &\cellcolor{r14}{14.67} &\cellcolor{r13}{13.73} &\cellcolor{r5}{8.41} &\cellcolor{r2}{6.65} &\cellcolor{r8}{10.87} &\cellcolor{r4}{8.02} &\cellcolor{r5}{8.59} &\cellcolor{r5}{8.33} &\cellcolor{r2}{6.48} &\cellcolor{r0}{5.46} &\cellcolor{r1}{5.99} &\cellcolor{r1}{6.19} &\cellcolor{r1}{6.02} \\
+80\%&
+\cellcolor{r0}{4.95} &\cellcolor{r9}{11.54} &\cellcolor{r7}{9.92} &\cellcolor{r13}{14.18} &\cellcolor{r12}{13.35} &\cellcolor{r6}{8.94} &\cellcolor{r2}{6.84} &\cellcolor{r9}{11.23} &\cellcolor{r4}{7.86} &\cellcolor{r5}{8.88} &\cellcolor{r5}{8.35} &\cellcolor{r2}{6.64} &\cellcolor{r0}{5.51} &\cellcolor{r1}{5.83} &\cellcolor{r1}{6.01} &\cellcolor{r1}{5.97} \\
+\end{tabular}
+}
+\caption{Ranks for extrapolating to all test anchors.}
+\end{table}
+\begin{table}[h]
+\ttfamily
+\resizebox{\textwidth}{!}{
+\begin{tabular}{lllllllllllllllll}
+curve&
+       last1  &        pow2  &        log2  &        exp2  &        lin2  &       ilog2  &        pow3  &        exp3  &        vap3  &       expp3  &       expd3  &     logpow3  &        mmf4  &        wbl4  &        exp4  &        pow4  \\
+all&
+\cellcolor{r14}{15.40} &\cellcolor{r10}{11.95} &\cellcolor{r9}{10.93} &\cellcolor{r11}{12.90} &\cellcolor{r10}{12.08} &\cellcolor{r9}{10.74} &\cellcolor{r5}{7.56} &\cellcolor{r9}{10.88} &\cellcolor{r4}{6.50} &\cellcolor{r6}{8.35} &\cellcolor{r4}{7.03} &\cellcolor{r5}{7.29} &\cellcolor{r0}{3.71} &\cellcolor{r0}{3.08} &\cellcolor{r0}{3.73} &\cellcolor{r1}{3.87} \\
+5\%&
+\cellcolor{r14}{15.31} &\cellcolor{r10}{12.04} &\cellcolor{r9}{11.34} &\cellcolor{r11}{12.67} &\cellcolor{r10}{12.02} &\cellcolor{r9}{11.05} &\cellcolor{r5}{7.80} &\cellcolor{r8}{9.99} &\cellcolor{r3}{6.20} &\cellcolor{r5}{7.65} &\cellcolor{r4}{6.55} &\cellcolor{r5}{7.67} &\cellcolor{r1}{4.15} &\cellcolor{r0}{3.17} &\cellcolor{r1}{3.86} &\cellcolor{r1}{4.53} \\
+10\%&
+\cellcolor{r14}{15.52} &\cellcolor{r10}{11.89} &\cellcolor{r9}{11.06} &\cellcolor{r11}{12.88} &\cellcolor{r10}{12.09} &\cellcolor{r9}{10.82} &\cellcolor{r5}{7.59} &\cellcolor{r9}{10.86} &\cellcolor{r3}{6.36} &\cellcolor{r5}{7.90} &\cellcolor{r4}{6.92} &\cellcolor{r5}{7.50} &\cellcolor{r0}{3.85} &\cellcolor{r0}{3.08} &\cellcolor{r0}{3.69} &\cellcolor{r1}{3.99} \\
+20\%&
+\cellcolor{r14}{15.60} &\cellcolor{r10}{11.86} &\cellcolor{r9}{10.80} &\cellcolor{r11}{12.93} &\cellcolor{r10}{12.05} &\cellcolor{r9}{10.65} &\cellcolor{r5}{7.46} &\cellcolor{r10}{11.44} &\cellcolor{r4}{6.40} &\cellcolor{r6}{8.42} &\cellcolor{r5}{7.25} &\cellcolor{r5}{7.24} &\cellcolor{r0}{3.60} &\cellcolor{r0}{3.05} &\cellcolor{r0}{3.62} &\cellcolor{r0}{3.63} \\
+40\%&
+\cellcolor{r15}{15.62} &\cellcolor{r10}{11.86} &\cellcolor{r9}{10.67} &\cellcolor{r11}{12.97} &\cellcolor{r10}{12.06} &\cellcolor{r9}{10.65} &\cellcolor{r5}{7.44} &\cellcolor{r10}{11.65} &\cellcolor{r4}{6.48} &\cellcolor{r6}{8.60} &\cellcolor{r5}{7.41} &\cellcolor{r4}{7.00} &\cellcolor{r0}{3.49} &\cellcolor{r0}{3.02} &\cellcolor{r0}{3.57} &\cellcolor{r0}{3.52} \\
+80\%&
+\cellcolor{r14}{15.61} &\cellcolor{r10}{11.95} &\cellcolor{r9}{10.61} &\cellcolor{r11}{13.04} &\cellcolor{r10}{12.08} &\cellcolor{r8}{10.51} &\cellcolor{r5}{7.36} &\cellcolor{r10}{11.87} &\cellcolor{r4}{6.52} &\cellcolor{r6}{8.65} &\cellcolor{r5}{7.49} &\cellcolor{r4}{6.90} &\cellcolor{r0}{3.43} &\cellcolor{r0}{3.03} &\cellcolor{r0}{3.53} &\cellcolor{r0}{3.40} \\
+\end{tabular}
+}
+\caption{Ranks for the training MSE.}
+\end{table}
+\end{document}
