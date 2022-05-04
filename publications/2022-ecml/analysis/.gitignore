@@ -1,0 +1,6 @@
+__pycache__
+.ipynb_checkpoints
+
+*.p
+*.gz
+*.7z
