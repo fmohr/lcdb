@@ -1,11 +1,9 @@
 # LCDB (Learning Curve DataBase)
 LCDB is a set of pre-computed learning curves of common learners on a variety of datasets. You can easily access it via an API we describe here.
 
-## Installation
-Current version is 0.0.9
-```sh
-pip install lcdb
-```
+*THE README IS CURRENTLY TRUNCATED TO PRESERVE ANONYMITY*! Normally, this can be installed as a package to ease the usage!
+
+To use the database, you can clone this repository and start from off the folder in which 
 
 ## Getting a Learning Curve
 By default, you receive the learning curve for accuracy (see below for other metrics).
