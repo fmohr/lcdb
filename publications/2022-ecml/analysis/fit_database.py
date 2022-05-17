@@ -317,8 +317,8 @@ def do_job(part, rep):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("part", type=int)
-    parser.add_argument("rep", type=int, const=5)
+    parser.add_argument("part", type=int, help="a value in [0,12], which indicates which datasets should be fitted.")
+    parser.add_argument("--rep", type=int, default=5, help="how many fits should be performed, the one with the best performance on the training anchors is taken, which extrapolates well.")
     args = parser.parse_args()
     part = args.part
     rep = args.rep
