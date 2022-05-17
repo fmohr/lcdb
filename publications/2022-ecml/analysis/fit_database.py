@@ -107,7 +107,7 @@ def fit_model(sizes, scores, sizes_extrapolation, model_id, rep=5):
         # keep trying initial points until a suitable one is found
         while (error):
 
-            if fails_init > 1000 or fails_fit > 100:  # give up
+            if fails_init > 1000 or fails_fit > 200:  # give up
                 best_beta = np.zeros(num_par)
                 return best_beta, get_fun(best_beta), fails_init, fails_fit
 
