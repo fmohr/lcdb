@@ -245,9 +245,9 @@ def metrics_per_row(row, score, anchor_prediction):
     MSE_trn = np.mean((y_trn - y_trn_hat) ** 2)
     MSE_tst = np.mean((y_tst - y_tst_hat) ** 2)
     MSE_tst_last = (y_tst[-1] - y_tst_hat[-1]) ** 2
-    L1_trn = np.mean((y_trn - y_trn_hat) ** 2)
-    L1_tst = np.mean((y_tst - y_tst_hat) ** 2)
-    L1_tst_last = (y_tst[-1] - y_tst_hat[-1]) ** 2
+    L1_trn = np.mean(np.abs(y_trn - y_trn_hat))
+    L1_tst = np.mean(np.abs(y_tst - y_tst_hat))
+    L1_tst_last = np.abs(y_tst[-1] - y_tst_hat[-1])
 
     return [MSE_trn, MSE_tst, MSE_tst_last, L1_trn, L1_tst, L1_tst_last, max_anchor_seen, percentage_train, n_trn,
             row.curve_model]
