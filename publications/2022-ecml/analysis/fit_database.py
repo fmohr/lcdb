@@ -283,9 +283,11 @@ def df_compute_metrics_mean_curve(df, df_info):
 def select_part(part, df_all, datasets):
     num = 20
     max_num = part * num + num
+    print('number of datasets: %d' % len(datasets))
     if max_num > len(datasets):
         max_num = len(datasets)
     indices = range(part * num, max_num)
+    print('this job will do the fitting for datasets:')
     print(indices)
     datasets_todo = []
     for i in indices:
