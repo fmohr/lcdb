@@ -18,7 +18,7 @@ def get_num_par(model_id):
         return 4
 
 
-def fit_model(sizes, scores, sizes_extrapolation, model_id):
+def fit_model(sizes, scores, sizes_extrapolation, model_id, rep=5):
     sizes = np.array(sizes)
     scores = np.array(scores)
 
@@ -92,7 +92,7 @@ def fit_model(sizes, scores, sizes_extrapolation, model_id):
         return np.array([a]), get_fun(np.array([a])), 0, 0
 
     # failure statistics
-    rep = 5
+    #rep = 5
     fails_fit = 0
     fails_init = 0
     i = 0
@@ -161,7 +161,7 @@ def fit_model(sizes, scores, sizes_extrapolation, model_id):
     return best_beta, get_fun(best_beta), fails_init, fails_fit
 
 
-def get_multiple_extrapolations_mean_curve_robust(df):
+def get_multiple_extrapolations_mean_curve_robust(df, rep):
     model_names = ['pow4', 'pow3', 'pow2', 'log2', 'exp2', 'exp3', 'lin2', 'last1', 'vap3', 'mmf4', 'wbl4', 'exp4',
                    'expp3', 'ilog2', 'expd3', 'logpower3']
     rows = []
@@ -190,7 +190,7 @@ def get_multiple_extrapolations_mean_curve_robust(df):
 
                     beta, model, fails_init, fails_fit = fit_model(np.array(sizes[:offset]),
                                                                    np.array(mean_scores[:offset]),
-                                                                   np.array(sizes[offset:]), model_name)
+                                                                   np.array(sizes[offset:]), model_name, rep)
                     sizes = np.array(sizes)
                     predictions = model(sizes)
                     assert (len(predictions) == len(sizes))
@@ -288,7 +288,7 @@ def select_part(part, df_all, datasets):
     return df_selected
 
 
-def do_job(part):
+def do_job(part, rep):
     np.seterr(all='ignore')
 
     print('starting part %d' % part)
@@ -301,7 +301,7 @@ def do_job(part):
     df_selected = select_part(part, df_all, datasets)
 
     print('computing extrapolations...')
-    df_extrapolations = get_multiple_extrapolations_mean_curve_robust(df_selected)
+    df_extrapolations = get_multiple_extrapolations_mean_curve_robust(df_selected, rep)
     df_extrapolations.to_pickle('extrapolations%d.gz' % part, protocol=3)
 
     print('computing anchors and scores...')
@@ -316,6 +316,7 @@ def do_job(part):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("part", type=int)
+    parser.add_argument("rep", type=int, const=5)
     args = parser.parse_args()
     part = args.part
     do_job(part)
