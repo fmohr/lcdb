@@ -184,6 +184,8 @@ def get_multiple_extrapolations_mean_curve_robust(df, rep):
                 for offset in range(4, len(sizes)):
                     experiment_id = '%d-%s-%s-%d' % (openmlid, learner, model_name, offset)
 
+                    # this hash makes sure that we will get exactly the same results if we
+                    # run this experiment again
                     hash = sha256(experiment_id.encode())
                     seed = np.frombuffer(hash.digest(), dtype='uint32')
                     np.random.seed(seed)
@@ -291,7 +293,7 @@ def select_part(part, df_all, datasets):
 def do_job(part, rep):
     np.seterr(all='ignore')
 
-    print('starting part %d' % part)
+    print('starting part %d with %d repitions of the fitting' % (part, rep))
 
     df_all = pd.read_csv("database-accuracy.csv")
     np.random.seed(42)
@@ -319,7 +321,8 @@ def main():
     parser.add_argument("rep", type=int, const=5)
     args = parser.parse_args()
     part = args.part
-    do_job(part)
+    rep = args.rep
+    do_job(part, rep)
 
 
 # usage:
