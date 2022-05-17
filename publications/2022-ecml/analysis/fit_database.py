@@ -18,7 +18,7 @@ def get_num_par(model_id):
         return 4
 
 
-def fit_model(sizes, scores, sizes_extrapolation, model_id, rep=5):
+def fit_model(sizes, scores, sizes_extrapolation, model_id, rep=5, verbose=True):
     sizes = np.array(sizes)
     scores = np.array(scores)
 
@@ -109,11 +109,14 @@ def fit_model(sizes, scores, sizes_extrapolation, model_id, rep=5):
 
             if fails_init > 1000 or fails_fit > 200:  # give up
                 best_beta = np.zeros(num_par)
+                if verbose:
+                    print('giving up...')
                 return best_beta, get_fun(best_beta), fails_init, fails_fit
 
             if not first:
                 fails_init += 1
-                print('initial value failed, retrying for ', model_id)
+                if verbose:
+                    print('initial value failed, retrying for ', model_id)
             init = np.random.rand(num_par)
 
             if model_id == 'pow4':  # this init works well for pow4
@@ -146,7 +149,8 @@ def fit_model(sizes, scores, sizes_extrapolation, model_id, rep=5):
         if nan_error or inf_error:
             pass  # redo's the optimization since extrapolations failed
             fails_fit += 1
-            print('fit failed, nan error?', nan_error, 'inf error?', inf_error, 'model?', model_id)
+            if verbose:
+                print('fit failed, nan error?', nan_error, 'inf error?', inf_error, 'model?', model_id)
         else:
             i += 1
             pass  # save the parameter values and objective function
@@ -161,7 +165,7 @@ def fit_model(sizes, scores, sizes_extrapolation, model_id, rep=5):
     return best_beta, get_fun(best_beta), fails_init, fails_fit
 
 
-def get_multiple_extrapolations_mean_curve_robust(df, rep):
+def get_multiple_extrapolations_mean_curve_robust(df, rep, verbose):
     model_names = ['pow4', 'pow3', 'pow2', 'log2', 'exp2', 'exp3', 'lin2', 'last1', 'vap3', 'mmf4', 'wbl4', 'exp4',
                    'expp3', 'ilog2', 'expd3', 'logpower3']
     rows = []
@@ -192,7 +196,7 @@ def get_multiple_extrapolations_mean_curve_robust(df, rep):
 
                     beta, model, fails_init, fails_fit = fit_model(np.array(sizes[:offset]),
                                                                    np.array(mean_scores[:offset]),
-                                                                   np.array(sizes[offset:]), model_name, rep)
+                                                                   np.array(sizes[offset:]), model_name, rep=rep, verbose=verbose)
                     sizes = np.array(sizes)
                     predictions = model(sizes)
                     assert (len(predictions) == len(sizes))
@@ -290,7 +294,7 @@ def select_part(part, df_all, datasets):
     return df_selected
 
 
-def do_job(part, rep):
+def do_job(part, rep, verbose):
     np.seterr(all='ignore')
 
     print('starting part %d with %d repitions of the fitting' % (part, rep))
@@ -303,7 +307,7 @@ def do_job(part, rep):
     df_selected = select_part(part, df_all, datasets)
 
     print('computing extrapolations...')
-    df_extrapolations = get_multiple_extrapolations_mean_curve_robust(df_selected, rep)
+    df_extrapolations = get_multiple_extrapolations_mean_curve_robust(df_selected, rep, verbose)
     df_extrapolations.to_pickle('extrapolations%d.gz' % part, protocol=3)
 
     print('computing anchors and scores...')
@@ -319,10 +323,12 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("part", type=int, help="a value in [0,12], which indicates which datasets should be fitted.")
     parser.add_argument("--rep", type=int, default=5, help="how many fits should be performed, the one with the best performance on the training anchors is taken, which extrapolates well.")
+    parser.add_argument("-v","--verbose", action="store_true", help="if true, shows errors or giving up during fitting")
     args = parser.parse_args()
     part = args.part
     rep = args.rep
-    do_job(part, rep)
+    verbose = args.verbose
+    do_job(part, rep, verbose)
 
 
 # usage:
