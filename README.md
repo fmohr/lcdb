@@ -7,7 +7,6 @@ LCDB is a set of pre-computed learning curves of common learners on a variety of
 pip install lcdb
 ```
 
-To use the database, you can clone this repository and start from off the folder in which 
 
 ## Getting a Learning Curve
 By default, you receive the learning curve for accuracy (see below for other metrics).
