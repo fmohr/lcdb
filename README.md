@@ -7,6 +7,8 @@ LCDB is a set of pre-computed learning curves of common learners on a variety of
 pip install lcdb
 ```
 
+## Example Notebook
+We *strongly* encourage to check out the example notebook in [python/example-usage.ipynb](https://github.com/fmohr/lcdb/blob/main/python/example-usage.ipynb). It contains all the code of this tutorial, and also shows how to get an overview of all the contained datasets.
 
 ## Getting a Learning Curve
 By default, you receive the learning curve for accuracy (see below for other metrics).
