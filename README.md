@@ -101,6 +101,17 @@ lcdb.get_meta_features("kr-vs-kp") # by name
 lcdb.get_meta_features("3) # by openml.org id
 ```
 
+# Citing LCDB
+If you use our database and find it helfpul, please cite the ECML paper:
+```
+@inproceedings{lcdb,
+  title={LCDB 1.0: An Extensive Learning Curves Database for Classification Tasks},
+  author={Mohr, Felix and Viering, Tom J and Loog, Marco and van Rijn, Jan N},
+  booktitle = {Machine Learning and Knowledge Discovery in Databases. Research Track - European Conference, {ECML} {PKDD} 2022, Grenoble, France, September 19-24, 2022},
+  year={2022}
+}
+```
+
 # Supported Learners
 These are the 20 supported learners (all of them executed with standard parametrization):
 * SVC_linear
