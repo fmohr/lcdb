@@ -11,7 +11,8 @@ pip install lcdb
 We *strongly* encourage to check out the example notebook in [python/example-usage.ipynb](https://github.com/fmohr/lcdb/blob/main/python/example-usage.ipynb). It contains all the code of this tutorial, and also shows how to get an overview of all the contained datasets.
 
 ## Getting a Learning Curve
-By default, you receive the learning curve for accuracy (see below for other metrics).
+By default, you receive the learning curve for accuracy (see below for other metrics). Learning curves contain observations at powers of $\sqrt{2}$, i.e. 16, 24, 32, 45, 64, 91, 128, ... until 90% of the dataset size (also if this is not a power of $\sqrt{2}$.
+Since datasets have different sizes, the schedules have different lengths for different datasets, which is why there is no tensor view on the data.
 
 ### By Dataset Name
 ```python
@@ -150,7 +151,8 @@ These are the 20 supported learners (all of them executed with standard parametr
 * 28 (optdigits)
 * 30 (page-blocks)
 * 31 (credit-g)
-* 32 (pendigits)
+* 
+(pendigits)
 * 36 (segment)
 * 38 (sick)
 * 44 (spambase)
