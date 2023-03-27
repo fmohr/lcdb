@@ -1,12 +1,18 @@
 # LCDB (Learning Curve DataBase)
 LCDB is a set of pre-computed learning curves of common learners on a variety of datasets. You can easily access it via an API we describe here.
 
-*THE README IS CURRENTLY TRUNCATED TO PRESERVE ANONYMITY*! Normally, this can be installed as a package to ease the usage!
+## Installation
 
-To use the database, you can clone this repository and start from off the folder in which 
+```shell
+pip install lcdb
+```
+
+## Example Notebook
+We *strongly* encourage to check out the example notebook in [python/example-usage.ipynb](https://github.com/fmohr/lcdb/blob/main/python/example-usage.ipynb). It contains all the code of this tutorial, and also shows how to get an overview of all the contained datasets.
 
 ## Getting a Learning Curve
-By default, you receive the learning curve for accuracy (see below for other metrics).
+By default, you receive the learning curve for accuracy (see below for other metrics). Learning curves contain observations at powers of $\sqrt{2}$, i.e. 16, 24, 32, 45, 64, 91, 128, ... until 90% of the dataset size (also if this is not a power of $\sqrt{2}$.
+Since datasets have different sizes, the schedules have different lengths for different datasets, which is why there is no tensor view on the data.
 
 ### By Dataset Name
 ```python
@@ -96,6 +102,17 @@ lcdb.get_meta_features("kr-vs-kp") # by name
 lcdb.get_meta_features("3) # by openml.org id
 ```
 
+# Citing LCDB
+If you use our database and find it helfpul, please cite the ECML paper:
+```
+@inproceedings{lcdb,
+  title={LCDB 1.0: An Extensive Learning Curves Database for Classification Tasks},
+  author={Mohr, Felix and Viering, Tom J and Loog, Marco and van Rijn, Jan N},
+  booktitle = {Machine Learning and Knowledge Discovery in Databases. Research Track - European Conference, {ECML} {PKDD} 2022, Grenoble, France, September 19-24, 2022},
+  year={2022}
+}
+```
+
 # Supported Learners
 These are the 20 supported learners (all of them executed with standard parametrization):
 * SVC_linear
@@ -134,7 +151,8 @@ These are the 20 supported learners (all of them executed with standard parametr
 * 28 (optdigits)
 * 30 (page-blocks)
 * 31 (credit-g)
-* 32 (pendigits)
+* 
+(pendigits)
 * 36 (segment)
 * 38 (sick)
 * 44 (spambase)

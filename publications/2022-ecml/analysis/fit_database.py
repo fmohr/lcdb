@@ -18,7 +18,7 @@ def get_num_par(model_id):
         return 4
 
 
-def fit_model(sizes, scores, sizes_extrapolation, model_id):
+def fit_model(sizes, scores, sizes_extrapolation, model_id, rep=5, verbose=True):
     sizes = np.array(sizes)
     scores = np.array(scores)
 
@@ -92,7 +92,7 @@ def fit_model(sizes, scores, sizes_extrapolation, model_id):
         return np.array([a]), get_fun(np.array([a])), 0, 0
 
     # failure statistics
-    rep = 5
+    #rep = 5
     fails_fit = 0
     fails_init = 0
     i = 0
@@ -107,13 +107,16 @@ def fit_model(sizes, scores, sizes_extrapolation, model_id):
         # keep trying initial points until a suitable one is found
         while (error):
 
-            if fails_init > 1000 or fails_fit > 100:  # give up
+            if fails_init > 1000 or fails_fit > 200:  # give up
                 best_beta = np.zeros(num_par)
+                if verbose:
+                    print('giving up...')
                 return best_beta, get_fun(best_beta), fails_init, fails_fit
 
             if not first:
                 fails_init += 1
-                print('initial value failed, retrying for ', model_id)
+                if verbose:
+                    print('initial value failed, retrying for ', model_id)
             init = np.random.rand(num_par)
 
             if model_id == 'pow4':  # this init works well for pow4
@@ -146,7 +149,8 @@ def fit_model(sizes, scores, sizes_extrapolation, model_id):
         if nan_error or inf_error:
             pass  # redo's the optimization since extrapolations failed
             fails_fit += 1
-            print('fit failed, nan error?', nan_error, 'inf error?', inf_error, 'model?', model_id)
+            if verbose:
+                print('fit failed, nan error?', nan_error, 'inf error?', inf_error, 'model?', model_id)
         else:
             i += 1
             pass  # save the parameter values and objective function
@@ -161,7 +165,7 @@ def fit_model(sizes, scores, sizes_extrapolation, model_id):
     return best_beta, get_fun(best_beta), fails_init, fails_fit
 
 
-def get_multiple_extrapolations_mean_curve_robust(df):
+def get_multiple_extrapolations_mean_curve_robust(df, rep, verbose):
     model_names = ['pow4', 'pow3', 'pow2', 'log2', 'exp2', 'exp3', 'lin2', 'last1', 'vap3', 'mmf4', 'wbl4', 'exp4',
                    'expp3', 'ilog2', 'expd3', 'logpower3']
     rows = []
@@ -184,13 +188,15 @@ def get_multiple_extrapolations_mean_curve_robust(df):
                 for offset in range(4, len(sizes)):
                     experiment_id = '%d-%s-%s-%d' % (openmlid, learner, model_name, offset)
 
+                    # this hash makes sure that we will get exactly the same results if we
+                    # run this experiment again
                     hash = sha256(experiment_id.encode())
                     seed = np.frombuffer(hash.digest(), dtype='uint32')
                     np.random.seed(seed)
 
                     beta, model, fails_init, fails_fit = fit_model(np.array(sizes[:offset]),
                                                                    np.array(mean_scores[:offset]),
-                                                                   np.array(sizes[offset:]), model_name)
+                                                                   np.array(sizes[offset:]), model_name, rep=rep, verbose=verbose)
                     sizes = np.array(sizes)
                     predictions = model(sizes)
                     assert (len(predictions) == len(sizes))
@@ -245,9 +251,9 @@ def metrics_per_row(row, score, anchor_prediction):
     MSE_trn = np.mean((y_trn - y_trn_hat) ** 2)
     MSE_tst = np.mean((y_tst - y_tst_hat) ** 2)
     MSE_tst_last = (y_tst[-1] - y_tst_hat[-1]) ** 2
-    L1_trn = np.mean((y_trn - y_trn_hat) ** 2)
-    L1_tst = np.mean((y_tst - y_tst_hat) ** 2)
-    L1_tst_last = (y_tst[-1] - y_tst_hat[-1]) ** 2
+    L1_trn = np.mean(np.abs(y_trn - y_trn_hat))
+    L1_tst = np.mean(np.abs(y_tst - y_tst_hat))
+    L1_tst_last = np.abs(y_tst[-1] - y_tst_hat[-1])
 
     return [MSE_trn, MSE_tst, MSE_tst_last, L1_trn, L1_tst, L1_tst_last, max_anchor_seen, percentage_train, n_trn,
             row.curve_model]
@@ -277,9 +283,11 @@ def df_compute_metrics_mean_curve(df, df_info):
 def select_part(part, df_all, datasets):
     num = 20
     max_num = part * num + num
+    print('number of datasets: %d' % len(datasets))
     if max_num > len(datasets):
         max_num = len(datasets)
     indices = range(part * num, max_num)
+    print('this job will do the fitting for datasets:')
     print(indices)
     datasets_todo = []
     for i in indices:
@@ -288,10 +296,10 @@ def select_part(part, df_all, datasets):
     return df_selected
 
 
-def do_job(part):
+def do_job(part, rep, verbose):
     np.seterr(all='ignore')
 
-    print('starting part %d' % part)
+    print('starting part %d with %d repitions of the fitting' % (part, rep))
 
     df_all = pd.read_csv("database-accuracy.csv")
     np.random.seed(42)
@@ -301,7 +309,7 @@ def do_job(part):
     df_selected = select_part(part, df_all, datasets)
 
     print('computing extrapolations...')
-    df_extrapolations = get_multiple_extrapolations_mean_curve_robust(df_selected)
+    df_extrapolations = get_multiple_extrapolations_mean_curve_robust(df_selected, rep, verbose)
     df_extrapolations.to_pickle('extrapolations%d.gz' % part, protocol=3)
 
     print('computing anchors and scores...')
@@ -315,10 +323,14 @@ def do_job(part):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("part", type=int)
+    parser.add_argument("part", type=int, help="a value in [0,12], which indicates which datasets should be fitted.")
+    parser.add_argument("--rep", type=int, default=5, help="how many fits should be performed, the one with the best performance on the training anchors is taken, which extrapolates well.")
+    parser.add_argument("-v","--verbose", action="store_true", help="if true, shows errors or giving up during fitting")
     args = parser.parse_args()
     part = args.part
-    do_job(part)
+    rep = args.rep
+    verbose = args.verbose
+    do_job(part, rep, verbose)
 
 
 # usage:
