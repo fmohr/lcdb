@@ -12,7 +12,7 @@ experimenter = PyExperimenter(
 )
 
 # define domains for experiments
-granularity = 2
+granularity = 40
 domain_datasets = [3, 6]
 
 # create list of all datasets with all possible training set sizes on that dataset
@@ -22,23 +22,24 @@ test_fold_size = 0.1
 val_fold_size = 0.1
 for openmlid in domain_datasets:
     num_instances = openml.datasets.get_dataset(openmlid).qualities["NumberOfInstances"]
+    max_training_set_size = int((1 - test_fold_size) * (1 - val_fold_size) * num_instances)
     anchors_for_dataset = []
-    for exp in list(range(4, int(np.log2(num_instances)))):
+    for exp in list(range(4, int(np.log2(max_training_set_size)))):
         anchors_for_dataset.append(int(np.round(2**exp)))
-    anchors_for_dataset.append(int((1 - test_fold_size) * (1 - val_fold_size) * num_instances))
+    anchors_for_dataset.append(max_training_set_size)
     
     print(f"\t{openmlid}: {anchors_for_dataset}")
     for a in anchors_for_dataset:
         domain_datasets_with_sizes.append((openmlid, a))
 
 # set "simple" experiment parameters
-domain_seed_outer = [0]
-domain_seed_inner = [0]
+domain_seed_outer = list(range(5))
+domain_seed_inner = list(range(5))
 domain_monotonic = [True, False]
 
 # configure hyperparameters
-domain_hyperparameter_c = [np.round(10**i, 5) for i in np.linspace(-5, 5, granularity)]
-domain_hyperparameter_gamma = [np.round(10**i, 5) for i in np.linspace(-5, 5, granularity)]
+domain_hyperparameter_c = [np.round(10**i, 5) for i in np.linspace(-10, 10, granularity)]
+domain_hyperparameter_gamma = [np.round(10**i, 5) for i in np.linspace(-10, 10, granularity)]
 domain_hyperparameters = [json.dumps({"c": c, "gamma": gamma}) for c, gamma in it.product(domain_hyperparameter_c, domain_hyperparameter_gamma)]
 
 # create all rows for the experiments
