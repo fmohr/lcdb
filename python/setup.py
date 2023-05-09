@@ -14,7 +14,8 @@ setup(
           'scikit-learn',
           'scipy',
           'tqdm',
-          'matplotlib'
+          'matplotlib',
+          'func-timeout'
       ],
   classifiers=[
     'Development Status :: 3 - Alpha',
