@@ -1,0 +1,73 @@
+{
+  "name": "xgboost",
+  "hyperparameters": [
+    {
+      "name": "colsample_bytree",
+      "type": "uniform_float",
+      "log": false,
+      "lower": 0.3,
+      "upper": 1.0,
+      "default": 1.0
+    },
+    {
+      "name": "gamma",
+      "type": "uniform_float",
+      "log": true,
+      "lower": 1e-06,
+      "upper": 64.0,
+      "default": 1e-06
+    },
+    {
+      "name": "learning_rate",
+      "type": "uniform_float",
+      "log": true,
+      "lower": 1e-06,
+      "upper": 1.0,
+      "default": 0.3
+    },
+    {
+      "name": "max_depth",
+      "type": "uniform_int",
+      "log": true,
+      "lower": 2,
+      "upper": 32,
+      "default": 6
+    },
+    {
+      "name": "min_child_weight",
+      "type": "uniform_float",
+      "log": true,
+      "lower": 1e-06,
+      "upper": 32.0,
+      "default": 1.0
+    },
+    {
+      "name": "reg_alpha",
+      "type": "uniform_float",
+      "log": true,
+      "lower": 1e-06,
+      "upper": 2.0,
+      "default": 1e-06
+    },
+    {
+      "name": "reg_lambda",
+      "type": "uniform_float",
+      "log": true,
+      "lower": 1e-06,
+      "upper": 2.0,
+      "default": 1.0
+    },
+    {
+      "name": "subsample",
+      "type": "uniform_float",
+      "log": false,
+      "lower": 0.5,
+      "upper": 1.0,
+      "default": 1.0
+    }
+  ],
+  "conditions": [],
+  "forbiddens": [],
+  "python_module_version": "0.6.1",
+  "json_format_version": 0.4
+}
