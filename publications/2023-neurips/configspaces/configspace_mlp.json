@@ -1,0 +1,65 @@
+{
+  "name": "mlp",
+  "hyperparameters": [
+    {
+      "name": "batch_size",
+      "type": "uniform_int",
+      "log": true,
+      "lower": 16,
+      "upper": 512,
+      "default": 91
+    },
+    {
+      "name": "learning_rate",
+      "type": "uniform_float",
+      "log": true,
+      "lower": 0.0001,
+      "upper": 0.1,
+      "default": 0.0031622777
+    },
+    {
+      "name": "max_dropout",
+      "type": "uniform_float",
+      "log": false,
+      "lower": 0.0,
+      "upper": 1.0,
+      "default": 0.5
+    },
+    {
+      "name": "max_units",
+      "type": "uniform_int",
+      "log": true,
+      "lower": 64,
+      "upper": 1024,
+      "default": 256
+    },
+    {
+      "name": "momentum",
+      "type": "uniform_float",
+      "log": false,
+      "lower": 0.1,
+      "upper": 0.99,
+      "default": 0.545
+    },
+    {
+      "name": "num_layers",
+      "type": "uniform_int",
+      "log": false,
+      "lower": 1,
+      "upper": 5,
+      "default": 3
+    },
+    {
+      "name": "weight_decay",
+      "type": "uniform_float",
+      "log": false,
+      "lower": 1e-05,
+      "upper": 0.1,
+      "default": 0.050005
+    }
+  ],
+  "conditions": [],
+  "forbiddens": [],
+  "python_module_version": "0.6.1",
+  "json_format_version": 0.4
+}
