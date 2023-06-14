@@ -107,7 +107,7 @@ def compute_curve_for_svc(openmlid: int, outer_seed: int, inner_seed: int, train
     
 
 def compute_result(openmlid: int, outer_seed: int, inner_seed: int, train_size: int, monotonic: bool, learner, logger = None):
-    """Compute the learning curve for a given dataset and learner.
+    """Compute the learning curve for a given dataset and workflow.
 
     Args:
         openmlid (int): An OpenML dataset ID.
@@ -141,7 +141,7 @@ def compute_result(openmlid: int, outer_seed: int, inner_seed: int, train_size: 
     if X.shape[0] != len(y):
         raise Exception("X and y do not have the same size.")
     
-    # get learner
+    # get workflow
     compiled_learner_base = compile_learner(learner, X, y, drop_first = False)
     
     labels = sorted(np.unique(y))
@@ -161,7 +161,7 @@ def compute_result(openmlid: int, outer_seed: int, inner_seed: int, train_size: 
 #            labels = labels_tmp
 #        else:
 #            if np.any(labels != labels_tmp):
-#                raise ValueError(f"Labels don't match. Originals are {labels}. Learned by learner are {labels_tmp}")
+#                raise ValueError(f"Labels don't match. Originals are {labels}. Learned by workflow are {labels_tmp}")
 
     logger.info(f"SVM fitted after {np.round(traintime, 2)}s. Now obtaining predictions.")
 
