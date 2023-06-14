@@ -4,23 +4,23 @@ import torch
 import torch.nn
 from torch.utils.data import DataLoader, TensorDataset
 
-from .._base_model import BaseModel
+from .._base_workflow import BaseWorkflow
 
 
-class PytorchModel(BaseModel):
+class PytorchWorkflow(BaseWorkflow):
     def __init__(self, torch_module: torch.nn.Module) -> None:
         super().__init__()
         self.torch_module = torch_module
         
-        # Collect number of parameters in the model
-        self.metadata["num_parameters"] = sum(
+        # Collect number of parameters in the workflow
+        self.summary["num_parameters"] = sum(
             p.numel() for p in torch_module.parameters()
         )
-        self.metadata["num_parameters_train"] = sum(
+        self.summary["num_parameters_train"] = sum(
             p.numel() for p in torch_module.parameters() if p.requires_grad
         )
 
-    def fit(self, dataset_train, dataset_test) -> "PytorchModel":
+    def fit(self, dataset_train, dataset_test) -> "PytorchWorkflow":
 
         # TODO: should collect the following metadata
         # - total training time
@@ -30,6 +30,10 @@ class PytorchModel(BaseModel):
 
         X_train, y_train = dataset_train
         X_test, y_test = dataset_test
+
+        # TODO: the ordering of these labels does currently not (necessarily) conincide with the Bernoulli encoding in TF
+        self.labels = sorted(np.unique(y_train))
+        self.itos = {i: l for i, l in enumerate(self.labels)}
 
         # Convert to PyTorch tensors
         X_train = torch.from_numpy(X_train).float()
@@ -91,12 +95,18 @@ class PytorchModel(BaseModel):
             accuracy_list[epoch] /= n
             loss_list[epoch] /= n
 
-        self.metadata["scores"]["loss"] = loss_list.tolist()
-        self.metadata["scores"]["accuracy"] = accuracy_list.tolist()
-        self.metadata["scores"]["epoch"] = epoch_list
+        self.summary["iter_curve"] = {
+            "loss": loss_list.round(4).tolist(),
+            "accuracy": accuracy_list.round(4).tolist(),
+            "epoch": epoch_list
+        }
 
         return self
 
-    def predict(self, *args, **kwargs):
+    def predict(self, X):
+        preds = self.predict_proba(X).argmax(dim=1).int().numpy()
+        return [self.itos[i] for i in preds]
+
+    def predict_proba(self, X):
         with torch.no_grad():
-            return self.torch_module.forward(*args, **kwargs)
+            return self.torch_module.forward(torch.from_numpy(X).float())

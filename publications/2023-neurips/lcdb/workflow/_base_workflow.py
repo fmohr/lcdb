@@ -3,17 +3,21 @@ import abc
 from typing import Any
 
 
-class BaseModel(abc.ABC):
+class BaseWorkflow(abc.ABC):
     def __init__(self) -> None:
         super().__init__()
-        self.metadata = {"scores": {}}
+        self.summary = {}
 
     @abc.abstractmethod
-    def fit(self, *args, **kwargs) -> "BaseModel":
-        """Fit the model to the data."""
+    def fit(self, *args, **kwargs) -> "BaseWorkflow":
+        """Fit the workflow to the data."""
 
     @abc.abstractmethod
     def predict(
         self, *args, **kwargs
     ) -> Any:  # TODO: not sure what the return type should be
         """Predict from the data."""
+
+    @abc.abstractmethod
+    def update_summary(self) -> dict:
+        """updates the summary in case that it is not updated online."""
