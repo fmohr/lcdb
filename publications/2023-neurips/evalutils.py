@@ -1,22 +1,16 @@
 import numpy as np
 import pandas as pd
 import openml
-import os, psutil
+import os
 import logging
 
 import time
-import random
 
-import scipy.stats
-from scipy.sparse import lil_matrix
 from sklearn.pipeline import Pipeline
 from sklearn.compose import ColumnTransformer
 
 import sklearn
-from sklearn import metrics
 from sklearn import *
-
-from tqdm import tqdm
 
 eval_logger = logging.getLogger("evalutils")
 
@@ -113,6 +107,21 @@ def compute_curve_for_svc(openmlid: int, outer_seed: int, inner_seed: int, train
     
 
 def compute_result(openmlid: int, outer_seed: int, inner_seed: int, train_size: int, monotonic: bool, learner, logger = None):
+    """Compute the learning curve for a given dataset and learner.
+
+    Args:
+        openmlid (int): An OpenML dataset ID.
+        outer_seed (int): The seed for the outer split.
+        inner_seed (int): The seed for the inner split.
+        train_size (int): The size of the training set.
+        monotonic (bool): A constraint to enforce the learning curve to be monotonic. # TODO: what does this mean?
+        learner (_type_): A instance of a scikit-learn estimtaor.
+        logger (_type_, optional): _description_. Defaults to None.
+
+    Raises:
+        Exception: _description_
+        Exception: _description_
+    """
     
     if logger is None:
         logger = logging.getLogger("lcdb.exp")
@@ -120,7 +129,7 @@ def compute_result(openmlid: int, outer_seed: int, inner_seed: int, train_size: 
     # CPU
     logger.info("CPU Settings:")
     for v in ["OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS", "BLIS_NUM_THREADS"]:
-        logger.info(f"\t{v}: {os.environ[v] if v in os.environ else 'n/a'}")
+        logger.info(f"\t{v}: {os.environ.get(v, 'n/a')}")
     
     # load data
     binarize_sparse = openmlid in [1111, 41147, 41150, 42732, 42733]

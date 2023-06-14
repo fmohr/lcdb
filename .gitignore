@@ -6,3 +6,7 @@ publications/2022-tpami/analysis/fit_report.pdf
 publications/2022-tpami/analysis/fit_report.log
 
 publications/2022-tpami/analysis/fit_report.aux
+
+.vscode/settings.json
+publications/2023-neurips/build/
+.gitignore
