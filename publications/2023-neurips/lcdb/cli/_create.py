@@ -4,6 +4,7 @@ import sys
 
 from ..workflow._util import get_all_experiments, get_experimenter
 
+
 def add_subparser(subparsers):
     """
     :meta private:
@@ -19,8 +20,11 @@ def add_subparser(subparsers):
         "--workflow", type=str, required=True, help="Name of workflow class."
     )
     subparser.add_argument(
-        "--num_configs", type=int, required=False, default=10,
-        help="The number of hyperparameter configurations that are being sampled."
+        "--num_configs",
+        type=int,
+        required=False,
+        default=10,
+        help="The number of hyperparameter configurations that are being sampled.",
     )
     subparser.set_defaults(func=function_to_call)
 

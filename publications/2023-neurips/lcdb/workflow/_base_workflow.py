@@ -26,7 +26,7 @@ class BaseWorkflow(abc.ABC):
     def update_summary(self) -> dict:
         """updates the summary in case that it is not updated online."""
 
-    @staticmethod
+    @abc.abstractstaticmethod
     def get_config_space() -> ConfigSpace.ConfigurationSpace:
         raise NotImplementedError
 
