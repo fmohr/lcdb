@@ -11,3 +11,5 @@ publications/2022-tpami/analysis/fit_report.aux
 publications/2023-neurips/build/
 .DS_Store
 *.egg-info/
+*.log
+*.db
