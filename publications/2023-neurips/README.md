@@ -4,6 +4,12 @@
 
 The `install/` directory contains the files required for installation.
 
+From this directory
+
+```console
+pip install -e "."
+```
+
 ### SVM
 
 ...
