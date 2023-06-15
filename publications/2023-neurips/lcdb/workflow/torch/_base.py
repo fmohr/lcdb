@@ -38,8 +38,10 @@ class PytorchWorkflow(BaseWorkflow):
         # Convert to PyTorch tensors
         X_train = torch.from_numpy(X_train).float()
         X_test = torch.from_numpy(X_test).float()
-        y_train = torch.from_numpy(y_train).long()
-        y_test = torch.from_numpy(y_test).long()
+        labels = sorted(set(np.unique(y_train)) | set(np.unique(y_test)))
+        itos = {l: i for i, l in enumerate(labels)}
+        y_train = torch.tensor([itos[l] for l in y_train], dtype=torch.long)
+        y_test = torch.tensor([itos[l] for l in y_test], dtype=torch.long)
 
         dataset_train = TensorDataset(X_train, y_train)
         dataset_test = TensorDataset(X_test, y_test)

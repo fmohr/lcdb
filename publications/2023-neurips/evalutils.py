@@ -72,7 +72,7 @@ def get_mandatory_preprocessing(X, y, binarize_sparse = False, drop_first = True
         handle_unknown = "error" if drop_first else "ignore"
         categorical_transformer = Pipeline([
             ("imputer", sklearn.impute.SimpleImputer(strategy="most_frequent")),
-            ("binarizer", sklearn.preprocessing.OneHotEncoder(drop='first' if drop_first else None, handle_unknown = handle_unknown, sparse = binarize_sparse)),
+            ("binarizer", sklearn.preprocessing.OneHotEncoder(drop='first' if drop_first else None, handle_unknown=handle_unknown, sparse=binarize_sparse)),
         ])
         return [("impute_and_binarize", ColumnTransformer(
             transformers=[

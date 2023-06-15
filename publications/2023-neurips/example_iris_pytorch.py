@@ -1,7 +1,7 @@
 from lcdb.workflow.torch import SimpleTorchMLPWorkflow
-from lcdb.workflow._runner import WorkflowRunner
+from lcdb.workflow._util import run
 
-results = WorkflowRunner.run(
+results = run(
     openmlid=61, #iris
     workflow_class=SimpleTorchMLPWorkflow,
     anchor=100,
