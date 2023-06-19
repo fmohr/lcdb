@@ -48,9 +48,8 @@ def get_technical_experiment_grid(config_file="config/experiments.cfg", val_fold
         schedule = get_schedule_for_number_of_instances(num_instances, val_fold_size, test_fold_size)
         for combo in keyfield_combinations:
             combo = list(combo)
-            for anchor in schedule:
-                rows.append([openmlid] + combo[:2] + [anchor] + combo[-1:])
-    return pd.DataFrame(rows, columns=["openmlid"] + relevant_keyfield_names[:2] + ["train_size"] + relevant_keyfield_names[-1:])
+            rows.append([openmlid] + combo[:2] + [schedule] + combo[-1:])
+    return pd.DataFrame(rows, columns=["openmlid"] + relevant_keyfield_names[:2] + ["train_sizes"] + relevant_keyfield_names[-1:])
 
 def get_latin_hypercube_sampling(config_space: ConfigurationSpace, num_configs, segmentation=None):
     return config_space.sample_configuration(num_configs)
@@ -73,10 +72,10 @@ def get_all_experiments(workflow_class: BaseWorkflow):
             "openmlid": openmlid,
             "seed_outer": s_o,
             "seed_inner": s_i,
-            "train_size": train_size,
-            "hyperparameters": json.dumps(dict(hp)),
+            "train_sizes": train_sizes,
+            "hyperparameters": dict(hp) ,
             "monotonic": mon
-        } for (openmlid, s_o, s_i, train_size, mon), hp in it.product(df_experiments.values, hp_samples)
+        } for (openmlid, s_o, s_i, train_sizes, mon), hp in it.product(df_experiments.values, hp_samples)
     ]
 
 def run(
@@ -85,7 +84,7 @@ def run(
         hyperparameters: dict,
         outer_seed: int,
         inner_seed: int,
-        anchor: int,
+        anchors: list,
         monotonic: bool,
         logger=None
 ):
@@ -93,7 +92,9 @@ def run(
     if logger is None:
         logger = logging.getLogger("lcdb.exp")
 
-    logger.info(f"Starting experiment on {openmlid} for workflow '{workflow_class.__name__}'. Seeds: {outer_seed}/{inner_seed}. Anchor: {anchor}, HPs: {hyperparameters}. Monotonic: {monotonic}")
+    if type(anchors) != list:
+        anchor = [anchors]
+    logger.info(f"Starting experiment on {openmlid} for workflow '{workflow_class.__name__}'. Seeds: {outer_seed}/{inner_seed}. Anchors: {anchors}, HPs: {hyperparameters}. Monotonic: {monotonic}")
 
     # CPU
     logger.info("CPU Settings:")
@@ -112,24 +113,34 @@ def run(
     if X.shape[0] != len(y):
         raise Exception("X and y do not have the same size.")
 
+    results = {}
+    for anchor in anchors:
+        X_train, X_valid, X_test, y_train, y_valid, y_test = get_splits_for_anchor(X, y, anchor, outer_seed, inner_seed, monotonic)
+        # create the configured workflow
+        # TODO: alternatively, one could be lazy and not pass the training data here.
+        #       Then the workflow might have to do some setup routine at the beginning of `fit`
+        #       Or as a middle-ground solution: We pass the dimensionalities of the task but not the data itself
+        workflow = workflow_class(X_train, y_train, hyperparameters)
+        try:
+            results[anchor] = run_on_data(X_train, X_valid, X_test, y_train, y_valid, y_test, binarize_sparse, drop_first, workflow, logger)
+        except KeyboardInterrupt:
+            raise
+        except:
+            results[anchor] = None
+    return results
+
+def run_on_data(X_train, X_valid, X_test, y_train, y_valid, y_test, binarize_sparse, drop_first, workflow, logger):
     # get the data for this experiment
-    labels = sorted(np.unique(y))
-    X_train, X_valid, X_test, y_train, y_valid, y_test = get_splits_for_anchor(X, y, anchor, outer_seed, inner_seed, monotonic)
-    preprocessing_steps = get_mandatory_preprocessing(X, y, binarize_sparse=binarize_sparse, drop_first=drop_first)
+    labels = sorted(set(np.unique(y_train)) | set(np.unique(y_valid)) | set(np.unique(y_test)))
+
+    preprocessing_steps = get_mandatory_preprocessing(X_train, y_train, binarize_sparse=binarize_sparse, drop_first=drop_first)
     if preprocessing_steps:
         pl = Pipeline(preprocessing_steps).fit(X_train, y_train)
         X_train, X_valid, X_test = pl.transform(X_train), pl.transform(X_valid), pl.transform(X_test)
 
-
-    # create the configured workflow
-    # TODO: alternatively, one could be lazy and not pass the training data here.
-    #       Then the workflow might have to do some setup routine at the beginning of `fit`
-    #       Or as a middle-ground solution: We pass the dimensionalities of the task but not the data itself
-    workflow = workflow_class(X_train, y_train, hyperparameters)
-
     # train the workflow
     ts_fit_start = time()
-    workflow.fit((X_train, y_train), (X_valid, y_valid))
+    workflow.fit((X_train, y_train), (X_valid, y_valid), (X_test, y_test))
     ts_fit_end = time()
     fit_time = ts_fit_end - ts_fit_start
 

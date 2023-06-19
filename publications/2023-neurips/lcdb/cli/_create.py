@@ -1,6 +1,7 @@
 """Command line to create/generate new experiments."""
 
 import sys
+import json
 
 from ..workflow._util import get_all_experiments, get_experimenter
 
@@ -39,6 +40,15 @@ def main(workflow: str, *args, **kwargs):
 
     # create experiment rows
     experiments = get_all_experiments(workflow_class=workflow_class)
+
+    # filter experiments
+    if hasattr(workflow_class, "is_experiment_valid"):
+        experiments = [e for e in experiments if workflow_class.is_experiment_valid(e)]
+
+    # replace hyperparameters by strings
+    for e in experiments:
+        e["hyperparameters"] = json.dumps(e["hyperparameters"])
+        e["train_sizes"] = json.dumps(e["train_sizes"])
 
     # create all rows for the experiments
     get_experimenter(workflow_class).fill_table_with_rows(rows=experiments)

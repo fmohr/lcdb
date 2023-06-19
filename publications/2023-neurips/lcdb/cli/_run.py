@@ -55,7 +55,7 @@ def run_experiment(
     results = run(
         openmlid=int(keyfields["openmlid"]),
         workflow_class=get_workflow_class_from_name(custom_config["workflow_class"]),
-        anchor=int(keyfields["train_size"]),
+        anchors=json.loads(keyfields["train_sizes"]),
         monotonic=bool(keyfields["monotonic"]),
         inner_seed=int(keyfields["seed_inner"]),
         outer_seed=int(keyfields["seed_outer"]),
@@ -64,34 +64,39 @@ def run_experiment(
     )
 
     # unpack results
-    (
-        labels,
-        cm_train,
-        cm_valid,
-        cm_test,
-        fit_time,
-        predict_time_train,
-        predict_time_valid,
-        predict_time_test,
-        additional_log_data,
-    ) = results
-
-    # Write intermediate results to database
     resultfields = {
-        "result": json.dumps(
-            [
+        "result": {}
+    }
+    for anchor, results_for_anchor in results.items():
+        if results_for_anchor is None:
+            resultfields["result"][anchor] = "Exception"
+        else:
+            (
                 labels,
-                cm_train.tolist(),
-                cm_valid.tolist(),
-                cm_test.tolist(),
+                cm_train,
+                cm_valid,
+                cm_test,
                 fit_time,
                 predict_time_train,
                 predict_time_valid,
                 predict_time_test,
                 additional_log_data,
-            ]
-        )
-    }
+            ) = results_for_anchor
+            resultfields["result"][anchor] = json.dumps(
+                [
+                    labels,
+                    cm_train.tolist(),
+                    cm_valid.tolist(),
+                    cm_test.tolist(),
+                    fit_time,
+                    predict_time_train,
+                    predict_time_valid,
+                    predict_time_test,
+                    additional_log_data,
+                ]
+            )
+
+    # Write intermediate results to database
     result_processor.process_results(resultfields)
 
 

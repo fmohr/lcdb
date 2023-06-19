@@ -20,7 +20,7 @@ class PytorchWorkflow(BaseWorkflow):
             p.numel() for p in torch_module.parameters() if p.requires_grad
         )
 
-    def fit(self, dataset_train, dataset_test) -> "PytorchWorkflow":
+    def fit(self, dataset_train, dataset_valid, dataset_test) -> "PytorchWorkflow":
 
         # TODO: should collect the following metadata
         # - total training time
