@@ -9,7 +9,7 @@ import platform
 import sys
 from shutil import rmtree
 
-from setuptools import Command, setup
+from setuptools import Command, setup, find_packages
 
 # path of the directory where this file is located
 here = os.path.abspath(os.path.dirname(__file__))
@@ -20,7 +20,7 @@ platform_infos = platform.platform()
 
 # What packages are required for this module to be executed?
 REQUIRED = [
-    "ConfigSpace>=0.4.20",
+    "ConfigSpace>=0.4.20,<=0.6.1",
     "numpy",
     "openml",
     "py_experimenter",
@@ -29,7 +29,8 @@ REQUIRED = [
     "scipy>=1.7",
     "torch>=1.13.1",
     "tqdm>=4.64.0",
-    "pyyaml"
+    "pyyaml",
+    "xgboost>=1.7.6",
 ]
 
 
@@ -138,6 +139,8 @@ class TestInstallCommand(Command):
 
 # Where the magic happens:
 setup(
+    name="lcdb",
+    packages=find_packages(),
     install_requires=REQUIRED,
     extras_require=EXTRAS,
     cmdclass={
