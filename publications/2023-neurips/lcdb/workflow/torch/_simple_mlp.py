@@ -40,5 +40,5 @@ class SimpleTorchMLPWorkflow(PytorchWorkflow):
     @staticmethod
     def get_config_space() -> ConfigSpace.ConfigurationSpace:
         path = os.path.abspath(__file__)
-        path = path[:path.rfind("/") + 1]
+        path = path[:path.rfind(os.sep) + 1]
         return unserialize_config_space(path + "_simple_mlp_cs.json")
