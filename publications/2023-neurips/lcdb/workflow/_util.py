@@ -59,12 +59,12 @@ def unserialize_config_space(json_filename) -> ConfigSpace.ConfigurationSpace:
         json_string = f.read()
         return ConfigSpace.read_and_write.json.read(json_string)
 
-def get_all_experiments(workflow_class: BaseWorkflow):
+def get_all_experiments(workflow_class: BaseWorkflow, num_configs: int):
 
     # get the experiment grid except the hyperparameters
     df_experiments = get_technical_experiment_grid()
     config_space = workflow_class.get_config_space()
-    hp_samples = get_latin_hypercube_sampling(config_space=config_space, num_configs=10)
+    hp_samples = get_latin_hypercube_sampling(config_space=config_space, num_configs=num_configs)
 
     # create all rows for the experiments
     return [

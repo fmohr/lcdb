@@ -30,7 +30,7 @@ def add_subparser(subparsers):
     subparser.set_defaults(func=function_to_call)
 
 
-def main(workflow: str, *args, **kwargs):
+def main(workflow: str, num_configs: int, *args, **kwargs):
     """
     :meta private:
     """
@@ -39,7 +39,7 @@ def main(workflow: str, *args, **kwargs):
     workflow_class = getattr(sys.modules["lcdb.workflow"], workflow)
 
     # create experiment rows
-    experiments = get_all_experiments(workflow_class=workflow_class)
+    experiments = get_all_experiments(workflow_class=workflow_class, num_configs=num_configs)
 
     # filter experiments
     if hasattr(workflow_class, "is_experiment_valid"):
