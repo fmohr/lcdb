@@ -162,9 +162,23 @@ def run_on_data(X_train, X_valid, X_test, y_train, y_valid, y_test, binarize_spa
     cm_valid = sklearn.metrics.confusion_matrix(y_valid, y_hat_valid, labels=labels)
     cm_test = sklearn.metrics.confusion_matrix(y_test, y_hat_test, labels=labels)
 
+    n_train = X_train.shape[0]
+    n_valid = X_valid.shape[0]
+    n_test = X_test.shape[0]
+
+    n_valid_sub = int(np.ceil(n_train/0.8*0.1))
+    n_test_sub = int(np.ceil(n_train/0.8*0.1))
+    if n_valid_sub > n_valid:
+        n_valid_sub = n_valid
+    if n_test_sub > n_test:
+        n_test_sub = n_test
+
+    cm_valid_sub = sklearn.metrics.confusion_matrix(y_valid[:n_valid_sub], y_hat_valid[:n_valid_sub], labels=labels)
+    cm_test_sub = sklearn.metrics.confusion_matrix(y_test[:n_test_sub], y_hat_test[:n_test_sub], labels=labels)
+
     # ask workflow to update its summary information (post-processing hook)
     logger.debug("Confusion matrices computed. Computing post-hoc data.")
     workflow.update_summary()
 
     logger.info("Computation ready, returning results.")
-    return labels, cm_train, cm_valid, cm_test, fit_time, predict_time_train, predict_time_valid, predict_time_test, workflow.summary
+    return labels, cm_train, cm_valid, cm_test, cm_valid_sub, cm_test_sub, fit_time, predict_time_train, predict_time_valid, predict_time_test, workflow.summary
