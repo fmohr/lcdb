@@ -46,12 +46,14 @@ def get_technical_experiment_grid(config_file="config/experiments.cfg", val_fold
     for openmlid in keyfield_domains["openmlid"]:
         num_instances = openml.datasets.get_dataset(openmlid).qualities["NumberOfInstances"]
         schedule = get_schedule_for_number_of_instances(num_instances, val_fold_size, test_fold_size)
+        # TODO: Split schedule further and randomize over different jobs (to avoid very long jobs)
         for combo in keyfield_combinations:
             combo = list(combo)
             rows.append([openmlid] + combo[:2] + [schedule] + combo[-1:])
     return pd.DataFrame(rows, columns=["openmlid"] + relevant_keyfield_names[:2] + ["train_sizes"] + relevant_keyfield_names[-1:])
 
 def get_latin_hypercube_sampling(config_space: ConfigurationSpace, num_configs, segmentation=None):
+    # TODO: Implement latin hypercube sampling
     return config_space.sample_configuration(num_configs)
 
 def unserialize_config_space(json_filename) -> ConfigSpace.ConfigurationSpace:
