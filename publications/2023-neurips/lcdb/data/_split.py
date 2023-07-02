@@ -66,7 +66,7 @@ def get_mandatory_preprocessing(X, y, binarize_sparse=False, drop_first=True):
     ]
     numeric_transformer = Pipeline(
         [("imputer", sklearn.impute.SimpleImputer(strategy="median")),
-         ("standardscaler", sklearn.preprocessing.StandardScaler())]
+         ("standardscaler", sklearn.preprocessing.MinMaxScaler())]
     )
     categorical_features = [i for i in range(X.shape[1]) if i not in numeric_features]
     missing_values_per_feature = np.sum(pd.isnull(X), axis=0)
