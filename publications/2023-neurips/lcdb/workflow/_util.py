@@ -130,13 +130,14 @@ def run(
         # TODO: alternatively, one could be lazy and not pass the training data here.
         #       Then the workflow might have to do some setup routine at the beginning of `fit`
         #       Or as a middle-ground solution: We pass the dimensionalities of the task but not the data itself
+        logger.info(f"Working on anchor {anchor}, trainset size is {y_train.shape}.")
         workflow = workflow_class(X_train, y_train, hyperparameters)
         try:
             results[anchor] = run_on_data(X_train, X_valid, X_test, y_train, y_valid, y_test, binarize_sparse, drop_first, workflow, logger)
         except KeyboardInterrupt:
             raise
-        except:
-            results[anchor] = None
+        except Exception as err:
+            results[anchor] = err
     return results
 
 def run_on_data(X_train, X_valid, X_test, y_train, y_valid, y_test, binarize_sparse, drop_first, workflow, logger):

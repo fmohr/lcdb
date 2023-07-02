@@ -68,8 +68,8 @@ def run_experiment(
         "result": {}
     }
     for anchor, results_for_anchor in results.items():
-        if results_for_anchor is None:
-            resultfields["result"][anchor] = "Exception"
+        if type(results_for_anchor) is not tuple:
+            resultfields["result"][anchor] = f"Exception: {results_for_anchor}"
         else:
             (
                 labels,
