@@ -62,6 +62,7 @@ def get_technical_experiment_grid(config_file="config/experiments.cfg", val_fold
 
 def get_latin_hypercube_sampling(config_space: ConfigurationSpace, num_configs, segmentation=None):
     # TODO: Implement latin hypercube sampling
+    # TODO: Make this reproducible
     return config_space.sample_configuration(num_configs)
 
 def unserialize_config_space(json_filename) -> ConfigSpace.ConfigurationSpace:
