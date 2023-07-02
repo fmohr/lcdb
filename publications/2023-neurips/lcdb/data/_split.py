@@ -34,6 +34,9 @@ def get_inner_split(X, y, outer_seed, inner_seed, outer_ratio=0.1, inner_ratio=0
 
 def get_splits_for_anchor(X, y, anchor, outer_seed, inner_seed, monotonic):
     """Returns (X_train, X_valid, X_test, y_train, y_valid, y_test) arrays with len(X_test) / len(X) = outer_ratio and len(X_valid) / (len(X) - len(X_test)) = inner_ratio and X_train is truncated at index anchor."""
+
+    # TODO: Because of rounding, the training set may be of a different size than requested anchor
+
     X_train, X_valid, X_test, y_train, y_valid, y_test = get_inner_split(
         X, y, outer_seed, inner_seed
     )
