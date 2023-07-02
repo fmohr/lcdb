@@ -75,7 +75,8 @@ def get_mandatory_preprocessing(X, y, binarize_sparse=False, drop_first=True):
     logging.info(
         f"Missing values for the different attributes are {missing_values_per_feature}."
     )
-    if len(categorical_features) > 0 or sum(missing_values_per_feature) > 0:
+    # if len(categorical_features) > 0 or sum(missing_values_per_feature) > 0:
+    if True:
         handle_unknown = "error" if drop_first else "ignore"
         categorical_transformer = Pipeline(
             [
