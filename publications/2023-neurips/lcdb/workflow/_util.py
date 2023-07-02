@@ -113,7 +113,7 @@ def run(
 
     # load data
     binarize_sparse = openmlid in [1111, 41147, 41150, 42732, 42733]
-    drop_first = openmlid not in [3] # drop first cannot be used in datasets with some very rare categorical values
+    drop_first = False # openmlid not in [3] # drop first cannot be used in datasets with some very rare categorical values
     logger.info(f"Reading dataset. Will be binarized sparsely: {binarize_sparse}")
     X, y = get_openml_dataset(openmlid)
     y = np.array([str(e) for e in y]) # make sure that labels are strings
