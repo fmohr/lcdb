@@ -19,13 +19,17 @@ def get_outer_split(X, y, seed, ratio=0.1):
 
 def get_inner_split(X, y, outer_seed, inner_seed, outer_ratio=0.1, inner_ratio=0.1):
     """Returns (X_train, X_valid, X_test, y_train, y_valid, y_test) arrays with len(X_test) / len(X) = outer_ratio and len(X_valid) / (len(X) - len(X_test)) = inner_ratio."""
+
+    num_instances = X.shape[0]
+    max_training_set_size = int((1 - outer_ratio) * (1 - inner_ratio) * num_instances)
+
     X_learn, X_test, y_learn, y_test = get_outer_split(
         X, y, outer_seed, ratio=outer_ratio
     )
     X_train, X_valid, y_train, y_valid = sklearn.model_selection.train_test_split(
         X_learn,
         y_learn,
-        train_size=1 - inner_ratio,
+        train_size=max_training_set_size,
         random_state=inner_seed,
         stratify=y_learn,
     )
