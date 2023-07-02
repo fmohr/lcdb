@@ -65,7 +65,8 @@ def get_mandatory_preprocessing(X, y, binarize_sparse=False, drop_first=True):
         c for c, t in enumerate(types) if len(t) == 1 and list(t)[0] != str
     ]
     numeric_transformer = Pipeline(
-        [("imputer", sklearn.impute.SimpleImputer(strategy="median"))]
+        [("imputer", sklearn.impute.SimpleImputer(strategy="median")),
+         ("standardscaler", sklearn.preprocessing.StandardScaler())]
     )
     categorical_features = [i for i in range(X.shape[1]) if i not in numeric_features]
     missing_values_per_feature = np.sum(pd.isnull(X), axis=0)
@@ -76,7 +77,7 @@ def get_mandatory_preprocessing(X, y, binarize_sparse=False, drop_first=True):
         f"Missing values for the different attributes are {missing_values_per_feature}."
     )
     # if len(categorical_features) > 0 or sum(missing_values_per_feature) > 0:
-    if True:
+    if True: # always do preprocessing, because training set may not contain nans by coincidence
         handle_unknown = "error" if drop_first else "ignore"
         categorical_transformer = Pipeline(
             [
