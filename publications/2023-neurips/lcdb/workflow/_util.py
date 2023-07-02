@@ -24,9 +24,17 @@ from sklearn.pipeline import Pipeline
 def get_schedule_for_number_of_instances(num_instances, val_fold_size, test_fold_size):
     max_training_set_size = int((1 - test_fold_size) * (1 - val_fold_size) * num_instances)
     anchors_for_dataset = []
-    for exp in list(range(8, 2 * (1 + int(np.log2(max_training_set_size))))):
-        anchors_for_dataset.append(int(np.round(2 ** (exp / 2))))
-    anchors_for_dataset.append(max_training_set_size)
+    #for exp in list(range(8, 2 * (1 + int(np.log2(max_training_set_size))) - 1)):
+    #    anchors_for_dataset.append(int(np.round(2 ** (exp / 2))))
+
+    # sample size = 2^((7+k)/2) = 2^exponent
+    max_k = int(2*np.log2(max_training_set_size) - 7)
+    for k in list(range(1, max_k+1)):
+        exponent = (7+k)/2
+        sample_size = int(np.round(2 ** exponent))
+        anchors_for_dataset.append(sample_size)
+    if sample_size != max_training_set_size:
+        anchors_for_dataset.append(max_training_set_size)
     return anchors_for_dataset
 
 def get_experimenter(learner_class, executor_name="", config_folder="config") -> PyExperimenter:
