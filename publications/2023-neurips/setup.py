@@ -27,7 +27,7 @@ REQUIRED = [
     "pandas>=0.24.2",
     "scikit-learn>=0.23.1",
     "scipy>=1.7",
-#    "torch>=1.13.1",
+    "torch>=1.13.1",
     "tqdm>=4.64.0",
     "pyyaml",
     "xgboost>=1.7.6",
