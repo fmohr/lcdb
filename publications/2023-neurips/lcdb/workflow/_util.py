@@ -155,6 +155,13 @@ def run_on_data(X_train, X_valid, X_test, y_train, y_valid, y_test, binarize_spa
         pl = Pipeline(preprocessing_steps).fit(X_train, y_train)
         X_train, X_valid, X_test = pl.transform(X_train), pl.transform(X_valid), pl.transform(X_test)
 
+    X_train_std = np.std(X_train, axis=0)
+    X_train_std_max = np.max(X_train_std)
+    X_train_std_min = np.min(X_train_std)
+    X_train_min = np.min(X_train[:])
+    X_train_max = np.max(X_train[:])
+    logger.debug(f'f"Largest variance of feature and smallest: {X_train_std_max} {X_train_std_min}' )
+    logger.debug(f'f"Largest value of feature and smallest: {X_train_min} {X_train_max}')
     # train the workflow
     logger.debug(f"Start fitting the workflow...")
     ts_fit_start = time()
