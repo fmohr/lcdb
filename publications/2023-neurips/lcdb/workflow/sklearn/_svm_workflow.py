@@ -8,6 +8,7 @@ class SVMWorkflow(BaseWorkflow):
 
     def __init__(self, X_train, y_train, hyperparams):
         super().__init__()
+        hyperparams['verbose'] = True
         self.learner = SVC(**hyperparams)
 
     def update_summary(self):
