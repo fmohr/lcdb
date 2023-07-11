@@ -4,6 +4,8 @@ import json
 
 import os, logging
 
+from func_timeout import func_set_timeout, FunctionTimedOut, func_timeout
+
 from ..data._split import get_splits_for_anchor, get_mandatory_preprocessing
 from ..data._openml import get_openml_dataset
 from ._base_workflow import BaseWorkflow
@@ -43,7 +45,7 @@ def get_experimenter(learner_class, executor_name="", config_folder="config") ->
         experiment_configuration_file_path=config_file, name=executor_name
     )
 
-def get_technical_experiment_grid(config_file="config/experiments.cfg", val_fold_size=0.1, test_fold_size=0.1):
+def get_technical_experiment_grid(config_file="config/experiments.cfg", val_fold_size=0.1, test_fold_size=0.1, max_num_anchors_per_row=3):
     config = utils.load_config(path=config_file)
 
     # get all combinations for the keyfields that are independent of the dataset properties and the learner
@@ -54,10 +56,21 @@ def get_technical_experiment_grid(config_file="config/experiments.cfg", val_fold
     for openmlid in keyfield_domains["openmlid"]:
         num_instances = openml.datasets.get_dataset(openmlid).qualities["NumberOfInstances"]
         schedule = get_schedule_for_number_of_instances(num_instances, val_fold_size, test_fold_size)
-        # TODO: Split schedule further and randomize over different jobs (to avoid very long jobs)
-        for combo in keyfield_combinations:
-            combo = list(combo)
-            rows.append([openmlid] + combo[:2] + [schedule] + combo[-1:])
+
+        schedule_new = []
+        schedule_tmp = []
+        for cur_trainsize in schedule:
+            schedule_tmp.append(cur_trainsize)
+            if len(schedule_tmp) == max_num_anchors_per_row:
+                schedule_new.append(schedule_tmp.copy())
+                schedule_tmp = []
+        if len(schedule_tmp) > 0:
+            schedule_new.append(schedule_tmp.copy())
+
+        for my_schedule in schedule_new:
+            for combo in keyfield_combinations:
+                combo = list(combo)
+                rows.append([openmlid] + combo[:2] + [my_schedule] + combo[-1:])
     return pd.DataFrame(rows, columns=["openmlid"] + relevant_keyfield_names[:2] + ["train_sizes"] + relevant_keyfield_names[-1:])
 
 def get_latin_hypercube_sampling(config_space: ConfigurationSpace, num_configs, segmentation=None):
@@ -70,10 +83,10 @@ def unserialize_config_space(json_filename) -> ConfigSpace.ConfigurationSpace:
         json_string = f.read()
         return ConfigSpace.read_and_write.json.read(json_string)
 
-def get_all_experiments(workflow_class: BaseWorkflow, num_configs: int, seed: int):
+def get_all_experiments(workflow_class: BaseWorkflow, num_configs: int, seed: int, max_num_anchors_per_row: int):
 
     # get the experiment grid except the hyperparameters
-    df_experiments = get_technical_experiment_grid()
+    df_experiments = get_technical_experiment_grid(max_num_anchors_per_row=max_num_anchors_per_row)
     config_space = workflow_class.get_config_space()
     config_space.seed(seed)
     hp_samples = get_latin_hypercube_sampling(config_space=config_space, num_configs=num_configs)
@@ -135,9 +148,11 @@ def run(
         logger.info(f"Working on anchor {anchor}, trainset size is {y_train.shape}.")
         workflow = workflow_class(X_train, y_train, hyperparameters)
         try:
-            results[anchor] = run_on_data(X_train, X_valid, X_test, y_train, y_valid, y_test, binarize_sparse, drop_first, workflow, logger)
+            results[anchor] = func_timeout(60*60*2, run_on_data, args=(X_train, X_valid, X_test, y_train, y_valid, y_test, binarize_sparse, drop_first, workflow, logger))
         except KeyboardInterrupt:
             raise
+        except FunctionTimedOut:
+            results[anchor] = "Timed out"
         except Exception as err:
             results[anchor] = err
     return results
@@ -151,7 +166,15 @@ def run_on_data(X_train, X_valid, X_test, y_train, y_valid, y_test, binarize_spa
         pl = Pipeline(preprocessing_steps).fit(X_train, y_train)
         X_train, X_valid, X_test = pl.transform(X_train), pl.transform(X_valid), pl.transform(X_test)
 
+    X_train_std = np.std(X_train, axis=0)
+    X_train_std_max = np.max(X_train_std)
+    X_train_std_min = np.min(X_train_std)
+    X_train_min = np.min(X_train[:])
+    X_train_max = np.max(X_train[:])
+    logger.debug(f'f"Largest variance of feature and smallest: {X_train_std_max} {X_train_std_min}' )
+    logger.debug(f'f"Largest value of feature and smallest: {X_train_min} {X_train_max}')
     # train the workflow
+    logger.debug(f"Start fitting the workflow...")
     ts_fit_start = time()
     workflow.fit((X_train, y_train), (X_valid, y_valid), (X_test, y_test))
     ts_fit_end = time()

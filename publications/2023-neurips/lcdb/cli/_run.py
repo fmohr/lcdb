@@ -50,7 +50,7 @@ def run_experiment(
     ch.setFormatter(formatter)
     for h in logger.handlers:
         logger.removeHandler(h)
-    # logger.addHandler(ch)
+    logger.addHandler(ch)
 
     results = run(
         openmlid=int(keyfields["openmlid"]),
