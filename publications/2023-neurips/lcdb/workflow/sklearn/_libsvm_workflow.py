@@ -17,7 +17,7 @@ class LibSVMWorkflow(BaseWorkflow):
         if hyperparams["cap_max_iter"]:
             pass # do nothing, max_iter already set
         else:
-            hyperparams["max_iter"] = 1
+            hyperparams["max_iter"] = -1
         del hyperparams["cap_max_iter"]
 
         if hyperparams['class_weight'] == 'none':
