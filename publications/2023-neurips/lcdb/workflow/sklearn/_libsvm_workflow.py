@@ -10,7 +10,8 @@ class LibSVMWorkflow(BaseWorkflow):
 
     def __init__(self, X_train, y_train, hyperparams):
         super().__init__()
-<<<<<<< HEAD:publications/2023-neurips/lcdb/workflow/sklearn/_libsvm_workflow.py
+
+        hyperparams['verbose'] = True
 
         if hyperparams["cap_max_iter"]:
             pass # do nothing, max_iter already set
@@ -32,11 +33,6 @@ class LibSVMWorkflow(BaseWorkflow):
             return
 
         raise Exception("Multiclass strategy not implemented")
-
-=======
-        hyperparams['verbose'] = True
-        self.learner = SVC(**hyperparams)
->>>>>>> main:publications/2023-neurips/lcdb/workflow/sklearn/_svm_workflow.py
 
     def update_summary(self):
         pass
