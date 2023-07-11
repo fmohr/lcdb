@@ -31,6 +31,7 @@ REQUIRED = [
     "tqdm>=4.64.0",
     "pyyaml",
     "xgboost>=1.7.6",
+    "func_timeout",
 ]
 
 
