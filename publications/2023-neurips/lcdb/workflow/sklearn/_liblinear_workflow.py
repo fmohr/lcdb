@@ -11,6 +11,7 @@ class LibLinearWorkflow(BaseWorkflow):
     def __init__(self, X_train, y_train, hyperparams):
         super().__init__()
 
+        hyperparams = hyperparams.copy()
         hyperparams['verbose'] = True
 
         if hyperparams['class_weight'] == 'none':
