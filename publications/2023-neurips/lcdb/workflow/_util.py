@@ -152,6 +152,7 @@ def run_on_data(X_train, X_valid, X_test, y_train, y_valid, y_test, binarize_spa
         X_train, X_valid, X_test = pl.transform(X_train), pl.transform(X_valid), pl.transform(X_test)
 
     # train the workflow
+    logger.debug(f"Start fitting the workflow...")
     ts_fit_start = time()
     workflow.fit((X_train, y_train), (X_valid, y_valid), (X_test, y_test))
     ts_fit_end = time()
