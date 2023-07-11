@@ -6,7 +6,6 @@ import os, logging
 
 from func_timeout import func_set_timeout, FunctionTimedOut, func_timeout
 
-
 from ..data._split import get_splits_for_anchor, get_mandatory_preprocessing
 from ..data._openml import get_openml_dataset
 from ._base_workflow import BaseWorkflow
@@ -114,7 +113,7 @@ def run(
         monotonic: bool,
         logger=None
 ):
-    from ..cli._run import global_runtime_max_per_anchor
+
     if logger is None:
         logger = logging.getLogger("lcdb.exp")
 
@@ -149,7 +148,7 @@ def run(
         logger.info(f"Working on anchor {anchor}, trainset size is {y_train.shape}.")
         workflow = workflow_class(X_train, y_train, hyperparameters)
         try:
-            results[anchor] = func_timeout(global_runtime_max_per_anchor, run_on_data, args=(X_train, X_valid, X_test, y_train, y_valid, y_test, binarize_sparse, drop_first, workflow, logger))
+            results[anchor] = func_timeout(60*60*2, run_on_data, args=(X_train, X_valid, X_test, y_train, y_valid, y_test, binarize_sparse, drop_first, workflow, logger))
         except KeyboardInterrupt:
             raise
         except FunctionTimedOut:

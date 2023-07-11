@@ -11,7 +11,6 @@ from ..workflow._util import get_experimenter, run
 logger = logging.getLogger("lcdb.exp")
 logger.setLevel(logging.DEBUG)
 
-global_runtime_max_per_anchor = -1
 
 def add_subparser(subparsers):
     """
@@ -28,16 +27,8 @@ def add_subparser(subparsers):
     subparser.add_argument(
         "--executor_name",
         type=str,
-        required=False,
-        default="default",
+        required=True,
         help="Name of the executor. Used for debugging.",
-    )
-    subparser.add_argument(
-        "--runtime_max_per_anchor",
-        type=int,
-        required=False,
-        default=60*60*2,
-        help="Max runtime for a single anchor in seconds. Defaults to 2 hours. You can set this a bit lower for debugging purposes (to get some data)."
     )
 
     subparser.set_defaults(func=function_to_call)
@@ -113,13 +104,10 @@ def run_experiment(
     result_processor.process_results(resultfields)
 
 
-def main(workflow: str, executor_name: str, runtime_max_per_anchor: int, *args, **kwargs):
+def main(workflow: str, executor_name: str, *args, **kwargs):
     """
     :meta private:
     """
-
-    global global_runtime_max_per_anchor
-    global_runtime_max_per_anchor = runtime_max_per_anchor
 
     # get workflow class
     workflow_class = get_workflow_class_from_name(workflow)
