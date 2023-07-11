@@ -34,10 +34,17 @@ def add_subparser(subparsers):
         default=42,
         help="The random seed used in sampling configurations.",
     )
+    subparser.add_argument(
+        '--max_num_anchors_per_row',
+        type=int,
+        required=False,
+        default=3,
+        help="The number of anchors per row in the database.",
+    )
     subparser.set_defaults(func=function_to_call)
 
 
-def main(workflow: str, num_configs: int, seed: int, *args, **kwargs):
+def main(workflow: str, num_configs: int, seed: int, max_num_anchors_per_row=3, *args, **kwargs):
     """
     :meta private:
     """
@@ -46,7 +53,8 @@ def main(workflow: str, num_configs: int, seed: int, *args, **kwargs):
     workflow_class = getattr(sys.modules["lcdb.workflow"], workflow)
 
     # create experiment rows
-    experiments = get_all_experiments(workflow_class=workflow_class, num_configs=num_configs, seed=seed)
+    experiments = get_all_experiments(workflow_class=workflow_class, num_configs=num_configs, seed=seed,
+                                      max_num_anchors_per_row=max_num_anchors_per_row)
 
     # filter experiments
     if hasattr(workflow_class, "is_experiment_valid"):
