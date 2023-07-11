@@ -2,20 +2,20 @@ from ConfigSpace import ConfigurationSpace, Integer, Float, Uniform, Constant, C
 from ConfigSpace.read_and_write import json as cs_json
 
 cs = ConfigurationSpace(
-    name="svm",
+    name="libsvm",
     space={
-        "C": Float(
-            "C",
-            bounds=(10**(-12), 10**12),
-            distribution=Uniform(),
-            default=1,
-            log=True,
-        ),
-        # "shrinking": Constant("shrinking", True), # this is not allowed for some reason
+        "C": Float("C", bounds=(1e-12, 1e12), distribution=Uniform(), default=1, log=True),
+        "shrinking": Categorical("shrinking", [True, False], default=True),
+        "multiclass": Categorical("multiclass", ["ovr-scikit", "ovo"], default="ovo"),
+        "tol": Float("tol", bounds=(1e-5, 2), distribution=Uniform(), default=1e-3, log=True),
+        "cap_max_iter": Categorical("cap_max_iter", [True, False], default=False),
+        "max_iter": Integer("max_iter", bounds=(100, 1000000), log=True),
+        "class_weight": Categorical("class_weight", ['balanced', 'none']),
         # "probability": Constant("probability", False),
-        "break_ties": Categorical("break_ties", [False, True], default=False),
-        "tol": Constant("tol", 1e-3)
-    },
+        # "break_ties": Categorical("break_ties", [False, True], default=False), # not relevant,
+        # "tol": Constant("tol", 1e-3)
+        "cache_size": Constant("cache_size", 2000.0),
+    }
 )
 
 kernel = Categorical('kernel', ['linear', 'poly', 'rbf', 'sigmoid'], default='linear')
@@ -60,5 +60,5 @@ cond_3 = OrConjunction(
 cs.add_conditions([cond_1, cond_2, cond_3])
 
 cs_string = cs_json.write(cs)
-with open("_svm_cs.json", "w") as f:
+with open("_libsvm_cs.json", "w") as f:
     f.write(cs_string)
