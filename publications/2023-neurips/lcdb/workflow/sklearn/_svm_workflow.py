@@ -25,8 +25,7 @@ class SVMWorkflow(BaseWorkflow):
         return self
 
     def predict_proba(self, X):
-        Exception("Sorry, we don't do probabilistic classification with SVMs")
-        return self.learner.predict_proba(X)
+        raise Exception("Sorry, we don't do probabilistic classification with SVMs")
 
     def predict(self, X):
         return self.learner.predict(X)
