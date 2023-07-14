@@ -1,9 +1,12 @@
 Bootstrap: docker
 From: condaforge/mambaforge
 
+%files
+	requirements.txt /opt
+
 %post
     conda create -n lcdb python=3.9 -y
-	git clone https://github.com/fmohr/lcdb.git code
-	cd code/publications/2023-neurips
-    exec /opt/conda/envs/lcdb/bin/pip install . 
+    exec /opt/conda/envs/lcdb/bin/pip install -r /opt/requirements.txt 
+	
+
 	
