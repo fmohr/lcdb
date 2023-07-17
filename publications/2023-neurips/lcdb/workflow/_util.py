@@ -125,6 +125,17 @@ def unserialize_config_space(json_filename) -> ConfigSpace.ConfigurationSpace:
         return ConfigSpace.read_and_write.json.read(json_string)
 
 
+def get_default_config(config_space):
+    temp_config = config_space.sample_configuration()
+    mydict = temp_config.get_dictionary().copy()
+    for hyperparameter_name in mydict.keys():
+        hyperparameter = config_space.get_hyperparameter(hyperparameter_name)
+        default = hyperparameter.default_value
+        mydict[hyperparameter_name] = default
+    default_config = ConfigSpace.configuration_space.Configuration(config_space, values=mydict)
+    return default_config
+
+
 def get_all_experiments(
     config_file,
     num_configs: int,
@@ -154,10 +165,14 @@ def get_all_experiments(
     workflow_class = import_attr_from_module(workflow_path)
 
     config_space = workflow_class.get_config_space()
+    default_config = get_default_config(config_space)
+
     config_space.seed(seed)
+
     hp_samples = get_latin_hypercube_sampling(
         config_space=config_space, num_configs=num_configs
     )
+    hp_samples.insert(0, default_config)
 
     # create all rows for the experiments
     experiments = [
