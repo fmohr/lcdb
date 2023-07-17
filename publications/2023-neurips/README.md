@@ -10,11 +10,78 @@ From this directory
 pip install -e "."
 ```
 
+## Example Usage
+
+Create a configuration file in `config/` such as `config/example.cfg`:
+
+```
+[PY_EXPERIMENTER]
+
+provider = sqlite
+database = lcdb
+table = knn
+
+# train_size and hyperparameters are omitted since they are computed automatically
+keyfields = workflow:str, openmlid:int, valid_prop: float, test_prop: float, seed_outer:int, seed_inner:int, train_sizes:text, hyperparameters:text, monotonic:boolean
+workflow = lcdb.workflow.sklearn.KNNWorkflow
+openmlid = 15
+valid_prop = 0.1
+test_prop = 0.1
+seed_outer = 0
+seed_inner = 0
+train_sizes = -1
+hyperparameters = None
+monotonic = 0
+
+resultfields = result:LONGTEXT
+resultfields.timestamps = false
+```
+
+Then test the workflow used in this configuration `lcdb.workflow.sklearn.KNNWorkflow` by running:
+
+```console
+lcdb test --config config/example.cfg --verbose
+```
+
+To create a database of experiments:
+
+```console
+lcdb create --config config/example.cfg
+```
+
+To pull and execute experiments from the database:
+
+```console
+lcdb run --config config/example.cfg --executor-name debug
+```
+
+
+## TODO
+
 ### SVM
 
 ...
 
 ### Neural Networks
+
+Implementing regularization techniques for neural networks:
+
+- [ ] augmentation
+    - [ ] adversarial
+    - [ ] cutmix
+    - [ ] mixup
+    - [ ] cutout
+- [x] batch normalization
+- [ ] stochastic weight averaging (available in torch)
+- [ ] ensembling
+    - [ ] ensembling with uniform weighting
+    - [ ] ensembling with bootstrap resampling
+- [x] residual connections
+- [ ] shake shape (?)
+- [x] weight decay
+- [ ] shake drop
+- [ ] lookahead
+- [x] dropout
 
 
 ```console

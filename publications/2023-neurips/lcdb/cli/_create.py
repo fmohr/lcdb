@@ -1,6 +1,5 @@
 """Command line to create/generate new experiments."""
 
-import sys
 import json
 
 from ..workflow._util import get_all_experiments, get_experimenter
@@ -18,7 +17,7 @@ def add_subparser(subparsers):
     )
 
     subparser.add_argument(
-        "--workflow", type=str, required=True, help="Name of workflow class."
+        "--config", type=str, required=True, help="Path to the configuration file."
     )
     subparser.add_argument(
         "--num_configs",
@@ -35,7 +34,7 @@ def add_subparser(subparsers):
         help="The random seed used in sampling configurations.",
     )
     subparser.add_argument(
-        '--max_num_anchors_per_row',
+        "--max_num_anchors_per_row",
         type=int,
         required=False,
         default=3,
@@ -44,17 +43,25 @@ def add_subparser(subparsers):
     subparser.set_defaults(func=function_to_call)
 
 
-def main(workflow: str, num_configs: int, seed: int, max_num_anchors_per_row=3, *args, **kwargs):
+def main(
+    config: str,
+    num_configs: int,
+    seed: int,
+    max_num_anchors_per_row: int,
+    *args,
+    **kwargs
+):
     """
     :meta private:
     """
 
-    # get workflow class
-    workflow_class = getattr(sys.modules["lcdb.workflow"], workflow)
-
     # create experiment rows
-    experiments = get_all_experiments(workflow_class=workflow_class, num_configs=num_configs, seed=seed,
-                                      max_num_anchors_per_row=max_num_anchors_per_row)
+    workflow_class, experiments = get_all_experiments(
+        config_file=config,
+        num_configs=num_configs,
+        seed=seed,
+        max_num_anchors_per_row=max_num_anchors_per_row,
+    )
 
     # filter experiments
     if hasattr(workflow_class, "is_experiment_valid"):
@@ -66,4 +73,5 @@ def main(workflow: str, num_configs: int, seed: int, max_num_anchors_per_row=3, 
         e["train_sizes"] = json.dumps(e["train_sizes"])
 
     # create all rows for the experiments
-    get_experimenter(workflow_class).fill_table_with_rows(rows=experiments)
+    print(list(experiments[0].keys()))
+    get_experimenter(config_file=config).fill_table_with_rows(rows=experiments)

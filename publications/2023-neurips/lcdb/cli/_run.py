@@ -2,11 +2,10 @@
 
 import json
 import logging
-import sys
 
 from py_experimenter.result_processor import ResultProcessor
 
-from ..workflow._util import get_experimenter, run
+from ..workflow._util import run, import_attr_from_module, get_experimenter
 
 logger = logging.getLogger("lcdb.exp")
 logger.setLevel(logging.DEBUG)
@@ -22,20 +21,16 @@ def add_subparser(subparsers):
     subparser = subparsers.add_parser(subparser_name, help="Run experiments.")
 
     subparser.add_argument(
-        "--workflow", type=str, required=True, help="Name of workflow class."
+        "--config", type=str, required=True, help="Path to the configuration file."
     )
     subparser.add_argument(
-        "--executor_name",
+        "--executor-name",
         type=str,
         required=True,
         help="Name of the executor. Used for debugging.",
     )
 
     subparser.set_defaults(func=function_to_call)
-
-
-def get_workflow_class_from_name(name):
-    return getattr(sys.modules["lcdb.workflow"], name)
 
 
 def run_experiment(
@@ -54,7 +49,7 @@ def run_experiment(
 
     results = run(
         openmlid=int(keyfields["openmlid"]),
-        workflow_class=get_workflow_class_from_name(custom_config["workflow_class"]),
+        workflow_class=import_attr_from_module(keyfields["workflow"]),
         anchors=json.loads(keyfields["train_sizes"]),
         monotonic=bool(keyfields["monotonic"]),
         inner_seed=int(keyfields["seed_inner"]),
@@ -64,9 +59,7 @@ def run_experiment(
     )
 
     # unpack results
-    resultfields = {
-        "result": {}
-    }
+    resultfields = {"result": {}}
     for anchor, results_for_anchor in results.items():
         if type(results_for_anchor) is not tuple:
             resultfields["result"][anchor] = f"Exception: {results_for_anchor}"
@@ -104,16 +97,11 @@ def run_experiment(
     result_processor.process_results(resultfields)
 
 
-def main(workflow: str, executor_name: str, *args, **kwargs):
+def main(config: str, executor_name: str, *args, **kwargs):
     """
     :meta private:
     """
 
-    # get workflow class
-    workflow_class = get_workflow_class_from_name(workflow)
-
-    experimenter = get_experimenter(
-        workflow_class, executor_name=executor_name, config_folder="config"
-    )
+    experimenter = get_experimenter(config_file=config, executor_name=executor_name)
 
     experimenter.execute(run_experiment, -1)
