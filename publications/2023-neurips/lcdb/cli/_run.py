@@ -61,37 +61,10 @@ def run_experiment(
     # unpack results
     resultfields = {"result": {}}
     for anchor, results_for_anchor in results.items():
-        if type(results_for_anchor) is not tuple:
+        if type(results_for_anchor) is not dict:
             resultfields["result"][anchor] = f"Exception: {results_for_anchor}"
         else:
-            (
-                labels,
-                cm_train,
-                cm_valid,
-                cm_test,
-                cm_valid_sub,
-                cm_test_sub,
-                fit_time,
-                predict_time_train,
-                predict_time_valid,
-                predict_time_test,
-                additional_log_data,
-            ) = results_for_anchor
-            resultfields["result"][anchor] = json.dumps(
-                [
-                    labels,
-                    cm_train.tolist(),
-                    cm_valid.tolist(),
-                    cm_test.tolist(),
-                    cm_valid_sub.tolist(),
-                    cm_test_sub.tolist(),
-                    fit_time,
-                    predict_time_train,
-                    predict_time_valid,
-                    predict_time_test,
-                    additional_log_data,
-                ]
-            )
+            resultfields["result"][anchor] = json.dumps(results_for_anchor)
 
     # Write intermediate results to database
     result_processor.process_results(resultfields)

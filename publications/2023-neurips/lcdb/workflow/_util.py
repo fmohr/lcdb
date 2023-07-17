@@ -346,19 +346,19 @@ def run_on_data(
     workflow.update_summary()
 
     logger.info("Computation ready, returning results.")
-    return (
-        labels,
-        cm_train,
-        cm_valid,
-        cm_test,
-        cm_valid_sub,
-        cm_test_sub,
-        fit_time,
-        predict_time_train,
-        predict_time_valid,
-        predict_time_test,
-        workflow.summary,
-    )
+    return {
+        "labels": labels,
+        "cm_train": cm_train.tolist(),
+        "cm_valid": cm_valid.tolist(),
+        "cm_test": cm_test.tolist(),
+        "cm_valid_sub": cm_valid_sub.tolist(),
+        "cm_test_sub": cm_test_sub.tolist(),
+        "fit_time": fit_time,
+        "predict_time_train": predict_time_train,
+        "predict_time_valid": predict_time_valid,
+        "predict_time_test": predict_time_test,
+        "workflow_summary": workflow.summary,
+    }
 
 
 def import_attr_from_module(path: str):
