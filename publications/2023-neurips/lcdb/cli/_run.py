@@ -55,6 +55,7 @@ def run_experiment(
         inner_seed=int(keyfields["seed_inner"]),
         outer_seed=int(keyfields["seed_outer"]),
         hyperparameters=json.loads(keyfields["hyperparameters"]),
+        maxruntime=int(keyfields["maxruntime"]),
         logger=logger,
     )
 

@@ -60,6 +60,7 @@ def get_technical_experiment_grid(
         "seed_outer",
         "seed_inner",
         "monotonic",
+        "maxruntime",
     ]
     keyfield_combinations = list(
         it.product(*[keyfield_domains[kf] for kf in relevant_keyfield_names])
@@ -94,7 +95,7 @@ def get_technical_experiment_grid(
                     [openmlid, val_fold_size, test_fold_size]
                     + combo[:2]
                     + [my_schedule]
-                    + combo[-1:]
+                    + combo[-2:]
                 )
 
     sampled_configurations = pd.DataFrame(
@@ -102,7 +103,7 @@ def get_technical_experiment_grid(
         columns=["openmlid"]
         + relevant_keyfield_names[:4]
         + ["train_sizes"]
-        + relevant_keyfield_names[-1:],
+        + relevant_keyfield_names[-2:],
     )
 
     return config, sampled_configurations
@@ -184,10 +185,11 @@ def get_all_experiments(
             "seed_outer": s_o,
             "seed_inner": s_i,
             "train_sizes": train_sizes,
+            "maxruntime": maxruntime,
             "hyperparameters": dict(hp),
             "monotonic": mon,
         }
-        for (openmlid, v_p, t_p, s_o, s_i, train_sizes, mon), hp in it.product(
+        for (openmlid, v_p, t_p, s_o, s_i, train_sizes, mon, maxruntime), hp in it.product(
             df_experiments.values, hp_samples
         )
     ]
@@ -202,6 +204,7 @@ def run(
     inner_seed: int,
     anchors: list,
     monotonic: bool,
+    maxruntime: int,
     logger=None,
 ):
     if logger is None:
@@ -250,7 +253,7 @@ def run(
         workflow = workflow_class(X_train, y_train, hyperparameters)
         try:
             results[anchor] = func_timeout(
-                60 * 60 * 2,
+                maxruntime,
                 run_on_data,
                 args=(
                     X_train,
