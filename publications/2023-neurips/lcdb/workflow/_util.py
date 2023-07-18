@@ -55,18 +55,18 @@ def get_technical_experiment_grid(
     # get all combinations for the keyfields that are independent of the dataset properties and the learner
     keyfield_domains = pyexp_utils.get_keyfield_data(config=config)
     relevant_keyfield_names = [
-        "valid_prop",
-        "test_prop",
-        "seed_outer",
-        "seed_inner",
+        "validprop",
+        "testprop",
+        "seedouter",
+        "seedinner",
         "monotonic",
     ]
     keyfield_combinations = list(
         it.product(*[keyfield_domains[kf] for kf in relevant_keyfield_names])
     )
 
-    val_fold_size = float(keyfield_domains.get("valid_prop", 0.1)[0])
-    test_fold_size = float(keyfield_domains.get("test_prop", 0.1)[0])
+    val_fold_size = float(keyfield_domains.get("validprop", 0.1)[0])
+    test_fold_size = float(keyfield_domains.get("testprop", 0.1)[0])
 
     rows = []
     for openmlid in keyfield_domains["openmlid"]:
