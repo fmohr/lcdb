@@ -40,6 +40,16 @@
       "weights": null
     },
     {
+      "name": "loss",
+      "type": "categorical",
+      "choices": [
+        "hinge",
+        "squared_hinge"
+      ],
+      "default": "squared_hinge",
+      "weights": null
+    },
+    {
       "name": "max_iter",
       "type": "uniform_int",
       "log": true,
@@ -82,16 +92,6 @@
       "lower": 1.0,
       "upper": 1000.0,
       "default": 1.0
-    },
-    {
-      "name": "loss",
-      "type": "categorical",
-      "choices": [
-        "hinge",
-        "squared_hinge"
-      ],
-      "default": "squared_hinge",
-      "weights": null
     }
   ],
   "conditions": [
@@ -100,15 +100,80 @@
       "parent": "fit_intercept",
       "type": "EQ",
       "value": true
-    },
-    {
-      "child": "loss",
-      "parent": "penalty",
-      "type": "EQ",
-      "value": "l2"
     }
   ],
-  "forbiddens": [],
+  "forbiddens": [
+    {
+      "name": "loss",
+      "type": "AND",
+      "clauses": [
+        {
+          "name": "loss",
+          "type": "EQUALS",
+          "value": "hinge"
+        },
+        {
+          "name": "penalty",
+          "type": "EQUALS",
+          "value": "l1"
+        }
+      ]
+    },
+    {
+      "name": "loss",
+      "type": "AND",
+      "clauses": [
+        {
+          "name": "loss",
+          "type": "AND",
+          "clauses": [
+            {
+              "name": "loss",
+              "type": "EQUALS",
+              "value": "squared_hinge"
+            },
+            {
+              "name": "penalty",
+              "type": "EQUALS",
+              "value": "l1"
+            }
+          ]
+        },
+        {
+          "name": "dual",
+          "type": "EQUALS",
+          "value": true
+        }
+      ]
+    },
+    {
+      "name": "loss",
+      "type": "AND",
+      "clauses": [
+        {
+          "name": "loss",
+          "type": "AND",
+          "clauses": [
+            {
+              "name": "loss",
+              "type": "EQUALS",
+              "value": "hinge"
+            },
+            {
+              "name": "penalty",
+              "type": "EQUALS",
+              "value": "l2"
+            }
+          ]
+        },
+        {
+          "name": "dual",
+          "type": "EQUALS",
+          "value": false
+        }
+      ]
+    }
+  ],
   "python_module_version": "0.6.1",
   "json_format_version": 0.4
 }
