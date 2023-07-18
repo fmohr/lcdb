@@ -64,8 +64,9 @@ def run_experiment(
         if type(results_for_anchor) is not dict:
             resultfields["result"][anchor] = f"Exception: {results_for_anchor}"
         else:
-            resultfields["result"][anchor] = json.dumps(results_for_anchor)
+            resultfields["result"][anchor] = results_for_anchor
 
+    resultfields["result"] = json.dumps(resultfields["result"])
     # Write intermediate results to database
     result_processor.process_results(resultfields)
 
