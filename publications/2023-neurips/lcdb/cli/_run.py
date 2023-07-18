@@ -26,7 +26,8 @@ def add_subparser(subparsers):
     subparser.add_argument(
         "--executor-name",
         type=str,
-        required=True,
+        default='defaultmachine',
+        required=False,
         help="Name of the executor. Used for debugging.",
     )
 

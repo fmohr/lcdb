@@ -1,5 +1,5 @@
 {
-  "name": "svm",
+  "name": "libsvm",
   "hyperparameters": [
     {
       "name": "C",
@@ -10,13 +10,28 @@
       "default": 1.0
     },
     {
-      "name": "break_ties",
+      "name": "cache_size",
+      "type": "constant",
+      "value": 2000.0
+    },
+    {
+      "name": "cap_max_iter",
       "type": "categorical",
       "choices": [
-        false,
-        true
+        true,
+        false
       ],
       "default": false,
+      "weights": null
+    },
+    {
+      "name": "class_weight",
+      "type": "categorical",
+      "choices": [
+        "balanced",
+        "none"
+      ],
+      "default": "balanced",
       "weights": null
     },
     {
@@ -32,9 +47,40 @@
       "weights": null
     },
     {
+      "name": "max_iter",
+      "type": "uniform_int",
+      "log": true,
+      "lower": 100,
+      "upper": 1000000,
+      "default": 10000
+    },
+    {
+      "name": "multiclass",
+      "type": "categorical",
+      "choices": [
+        "ovr-scikit",
+        "ovo"
+      ],
+      "default": "ovo",
+      "weights": null
+    },
+    {
+      "name": "shrinking",
+      "type": "categorical",
+      "choices": [
+        true,
+        false
+      ],
+      "default": true,
+      "weights": null
+    },
+    {
       "name": "tol",
-      "type": "constant",
-      "value": 0.001
+      "type": "uniform_float",
+      "log": true,
+      "lower": 1e-05,
+      "upper": 2.0,
+      "default": 0.001
     },
     {
       "name": "coef0",

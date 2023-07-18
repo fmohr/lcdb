@@ -1,0 +1,179 @@
+{
+  "name": "liblinear",
+  "hyperparameters": [
+    {
+      "name": "C",
+      "type": "uniform_float",
+      "log": true,
+      "lower": 1e-12,
+      "upper": 1000000000000.0,
+      "default": 1.0
+    },
+    {
+      "name": "class_weight",
+      "type": "categorical",
+      "choices": [
+        "balanced",
+        "none"
+      ],
+      "default": "balanced",
+      "weights": null
+    },
+    {
+      "name": "dual",
+      "type": "categorical",
+      "choices": [
+        false,
+        true
+      ],
+      "default": true,
+      "weights": null
+    },
+    {
+      "name": "fit_intercept",
+      "type": "categorical",
+      "choices": [
+        false,
+        true
+      ],
+      "default": true,
+      "weights": null
+    },
+    {
+      "name": "loss",
+      "type": "categorical",
+      "choices": [
+        "hinge",
+        "squared_hinge"
+      ],
+      "default": "squared_hinge",
+      "weights": null
+    },
+    {
+      "name": "max_iter",
+      "type": "uniform_int",
+      "log": true,
+      "lower": 100,
+      "upper": 1000000,
+      "default": 10000
+    },
+    {
+      "name": "multiclass",
+      "type": "categorical",
+      "choices": [
+        "ovr",
+        "ovo-scikit"
+      ],
+      "default": "ovr",
+      "weights": null
+    },
+    {
+      "name": "penalty",
+      "type": "categorical",
+      "choices": [
+        "l2",
+        "l1"
+      ],
+      "default": "l2",
+      "weights": null
+    },
+    {
+      "name": "tol",
+      "type": "uniform_float",
+      "log": true,
+      "lower": 1e-05,
+      "upper": 2.0,
+      "default": 0.001
+    },
+    {
+      "name": "intercept_scaling",
+      "type": "uniform_float",
+      "log": true,
+      "lower": 1.0,
+      "upper": 1000.0,
+      "default": 1.0
+    }
+  ],
+  "conditions": [
+    {
+      "child": "intercept_scaling",
+      "parent": "fit_intercept",
+      "type": "EQ",
+      "value": true
+    }
+  ],
+  "forbiddens": [
+    {
+      "name": "loss",
+      "type": "AND",
+      "clauses": [
+        {
+          "name": "loss",
+          "type": "EQUALS",
+          "value": "hinge"
+        },
+        {
+          "name": "penalty",
+          "type": "EQUALS",
+          "value": "l1"
+        }
+      ]
+    },
+    {
+      "name": "loss",
+      "type": "AND",
+      "clauses": [
+        {
+          "name": "loss",
+          "type": "AND",
+          "clauses": [
+            {
+              "name": "loss",
+              "type": "EQUALS",
+              "value": "squared_hinge"
+            },
+            {
+              "name": "penalty",
+              "type": "EQUALS",
+              "value": "l1"
+            }
+          ]
+        },
+        {
+          "name": "dual",
+          "type": "EQUALS",
+          "value": true
+        }
+      ]
+    },
+    {
+      "name": "loss",
+      "type": "AND",
+      "clauses": [
+        {
+          "name": "loss",
+          "type": "AND",
+          "clauses": [
+            {
+              "name": "loss",
+              "type": "EQUALS",
+              "value": "hinge"
+            },
+            {
+              "name": "penalty",
+              "type": "EQUALS",
+              "value": "l2"
+            }
+          ]
+        },
+        {
+          "name": "dual",
+          "type": "EQUALS",
+          "value": false
+        }
+      ]
+    }
+  ],
+  "python_module_version": "0.6.1",
+  "json_format_version": 0.4
+}
