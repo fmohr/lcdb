@@ -23,7 +23,7 @@ REQUIRED = [
     "ConfigSpace>=0.4.20,<=0.6.1",
     "numpy",
     "openml",
-    "py_experimenter==1.1",
+    "py_experimenter>=1.1,<2",
     "pandas>=0.24.2",
     "scikit-learn>=0.23.1",
     "scipy>=1.7",
