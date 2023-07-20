@@ -56,16 +56,30 @@ def get_splits_for_anchor(X, y, anchor, outer_seed, inner_seed, monotonic):
     return X_train[:anchor], X_valid, X_test, y_train[:anchor], y_valid, y_test
 
 
-def get_mandatory_preprocessing(X, y, binarize_sparse=False, drop_first=True):
+def get_mandatory_preprocessing(X, y, binarize_sparse=False, drop_first=True, scaler='minmax'):
     # determine fixed pre-processing steps for imputation and binarization
     types = [set([type(v) for v in r]) for r in X.T]
     numeric_features = [
         c for c, t in enumerate(types) if len(t) == 1 and list(t)[0] != str
     ]
-    numeric_transformer = Pipeline(
-        [("imputer", sklearn.impute.SimpleImputer(strategy="median")),
-         ("standardscaler", sklearn.preprocessing.MinMaxScaler())]
-    )
+
+    myscaler = None
+    if scaler == 'minmax':
+        myscaler = sklearn.preprocessing.MinMaxScaler()
+    if scaler == 'standardize':
+        myscaler = sklearn.preprocessing.StandardScaler()
+    if scaler == 'none':
+        numeric_transformer = Pipeline(
+            [("imputer", sklearn.impute.SimpleImputer(strategy="median"))]
+        )
+    else:
+        if myscaler == None:
+            raise Exception("The scaler %s is not implemented." % scaler)
+        numeric_transformer = Pipeline(
+            [("imputer", sklearn.impute.SimpleImputer(strategy="median")),
+             ("standardscaler", myscaler)]
+        )
+
     categorical_features = [i for i in range(X.shape[1]) if i not in numeric_features]
     missing_values_per_feature = np.sum(pd.isnull(X), axis=0)
     logging.info(
