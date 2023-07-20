@@ -18,6 +18,7 @@ class XGBoostWorkflow(BaseWorkflow):
 
     @staticmethod
     def get_config_space() -> ConfigSpace.ConfigurationSpace:
+        # TODO: Better to create the configspace in Python directly, see _knn_workflow.py
         path = os.path.abspath(__file__)
         path = path[:path.rfind(os.sep) + 1]
         return unserialize_config_space(path + "_xgboost_cs.json")
