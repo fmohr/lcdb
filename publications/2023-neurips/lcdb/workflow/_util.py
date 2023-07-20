@@ -71,6 +71,7 @@ def get_technical_experiment_grid(
 
     rows = []
     for openmlid in keyfield_domains["openmlid"]:
+        print('trying to download openml dataset %d' % openmlid)
         num_instances = openml.datasets.get_dataset(openmlid).qualities[
             "NumberOfInstances"
         ]
