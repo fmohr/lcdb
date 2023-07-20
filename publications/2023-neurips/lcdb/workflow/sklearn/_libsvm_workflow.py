@@ -5,7 +5,7 @@ import os
 from .._util import unserialize_config_space
 from sklearn.svm import SVC
 from sklearn.multiclass import OneVsRestClassifier
-from _libsvm_congfigspace import get_configspace
+from ._libsvm_congfigspace import get_configspace
 
 class LibSVMWorkflow(BaseWorkflow):
 

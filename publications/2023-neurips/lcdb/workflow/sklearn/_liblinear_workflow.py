@@ -6,7 +6,7 @@ from .._util import unserialize_config_space
 from sklearn.svm import LinearSVC
 from sklearn.multiclass import OneVsOneClassifier
 
-from _liblinear_configspace import get_configspace
+from ._liblinear_configspace import get_configspace
 
 class LibLinearWorkflow(BaseWorkflow):
 
