@@ -6,6 +6,8 @@ from .._util import unserialize_config_space
 from sklearn.svm import LinearSVC
 from sklearn.multiclass import OneVsOneClassifier
 
+from _liblinear_configspace import get_configspace
+
 class LibLinearWorkflow(BaseWorkflow):
 
     def __init__(self, X_train, y_train, hyperparams):
@@ -37,9 +39,7 @@ class LibLinearWorkflow(BaseWorkflow):
 
     @staticmethod
     def get_config_space() -> ConfigSpace.ConfigurationSpace:
-        path = os.path.abspath(__file__)
-        path = path[:path.rfind(os.sep) + 1]
-        return unserialize_config_space(path + "_liblinear_cs.json")
+        return get_configspace()
 
     def fit(self, data_train, data_valid, data_test) -> "BaseWorkflow":
         X_train, y_train = data_train

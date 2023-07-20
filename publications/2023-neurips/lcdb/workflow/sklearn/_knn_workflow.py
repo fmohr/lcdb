@@ -1,5 +1,6 @@
 import ConfigSpace
 
+from ._knn_configspace import get_configspace
 from .._base_workflow import BaseWorkflow
 import os
 from .._util import unserialize_config_space
@@ -17,9 +18,7 @@ class KNNWorkflow(BaseWorkflow):
 
     @staticmethod
     def get_config_space() -> ConfigSpace.ConfigurationSpace:
-        path = os.path.abspath(__file__)
-        path = path[:path.rfind(os.sep) + 1]
-        return unserialize_config_space(path + "_knn_cs.json")
+        return get_configspace()
 
     def fit(self, data_train, data_valid, data_test) -> "BaseWorkflow":
         X_train, y_train = data_train

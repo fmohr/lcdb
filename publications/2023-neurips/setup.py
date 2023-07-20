@@ -144,10 +144,6 @@ setup(
     packages=find_packages(),
     install_requires=REQUIRED,
     extras_require=EXTRAS,
-    data_files=['lcdb/workflow/sklearn/_libsvm_cs.json',
-                'lcdb/workflow/sklearn/_liblinear_cs.json',
-                'lcdb/workflow/sklearn/_knn_cs.json'
-                ],
     cmdclass={
         "upload": UploadCommand,
         "testupload": TestUploadCommand,
