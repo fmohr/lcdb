@@ -127,13 +127,11 @@ def unserialize_config_space(json_filename) -> ConfigSpace.ConfigurationSpace:
 
 
 def get_default_config(config_space):
-    temp_config = config_space.sample_configuration()
-    mydict = temp_config.get_dictionary().copy()
-    for hyperparameter_name in mydict.keys():
-        hyperparameter = config_space.get_hyperparameter(hyperparameter_name)
+    defaulthps = {}
+    for (hyperparameter_name, hyperparameter) in config_space.get_hyperparameters_dict().items():
         default = hyperparameter.default_value
-        mydict[hyperparameter_name] = default
-    default_config = ConfigSpace.configuration_space.Configuration(config_space, values=mydict)
+        defaulthps[hyperparameter_name] = default
+    default_config = ConfigSpace.configuration_space.Configuration(config_space, values=defaulthps, allow_inactive_with_values=True)
     return default_config
 
 
