@@ -17,7 +17,7 @@ def get_configspace():
             # "break_ties": Categorical("break_ties", [False, True], default=False), # not relevant,
             # "tol": Constant("tol", 1e-3)
             "cache_size": Constant("cache_size", 2000.0),
-            "scaler": Categorical("scaler", ["none", "minmax", "standardize"], default="none")
+            "scaler": Categorical("scaler", ["minmax", "standardize", "none"], weights=[0.5, 0.5, 0.0], default="none"),
         }
     )
 
