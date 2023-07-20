@@ -203,6 +203,8 @@ def run(
     anchors: list,
     monotonic: bool,
     maxruntime: int,
+    valid_prop: float,
+    test_prop: float,
     logger=None,
 ):
     if logger is None:
@@ -241,7 +243,7 @@ def run(
     results = {}
     for anchor in anchors:
         X_train, X_valid, X_test, y_train, y_valid, y_test = get_splits_for_anchor(
-            X, y, anchor, outer_seed, inner_seed, monotonic
+            X, y, anchor, outer_seed, inner_seed, monotonic, valid_prop=valid_prop, test_prop=test_prop
         )
         # create the configured workflow
         # TODO: alternatively, one could be lazy and not pass the training data here.
@@ -262,6 +264,8 @@ def run(
                     y_test,
                     binarize_sparse,
                     drop_first,
+                    valid_prop,
+                    test_prop,
                     workflow,
                     logger,
                 ),
@@ -284,6 +288,8 @@ def run_on_data(
     y_test,
     binarize_sparse,
     drop_first,
+    valid_prop,
+    test_prop,
     workflow,
     logger,
 ):
@@ -343,8 +349,10 @@ def run_on_data(
     n_valid = X_valid.shape[0]
     n_test = X_test.shape[0]
 
-    n_valid_sub = int(np.ceil(n_train / 0.8 * 0.1))
-    n_test_sub = int(np.ceil(n_train / 0.8 * 0.1))
+    train_prop = 1 - valid_prop - test_prop
+
+    n_valid_sub = int(np.ceil(n_train / train_prop * valid_prop))
+    n_test_sub = int(np.ceil(n_train / train_prop * test_prop))
     if n_valid_sub > n_valid:
         n_valid_sub = n_valid
     if n_test_sub > n_test:

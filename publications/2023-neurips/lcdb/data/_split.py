@@ -36,11 +36,11 @@ def get_inner_split(X, y, outer_seed, inner_seed, outer_ratio=0.1, inner_ratio=0
     return X_train, X_valid, X_test, y_train, y_valid, y_test
 
 
-def get_splits_for_anchor(X, y, anchor, outer_seed, inner_seed, monotonic):
+def get_splits_for_anchor(X, y, anchor, outer_seed, inner_seed, monotonic, valid_prop=0.1, test_prop=0.1):
     """Returns (X_train, X_valid, X_test, y_train, y_valid, y_test) arrays with len(X_test) / len(X) = outer_ratio and len(X_valid) / (len(X) - len(X_test)) = inner_ratio and X_train is truncated at index anchor."""
 
     X_train, X_valid, X_test, y_train, y_valid, y_test = get_inner_split(
-        X, y, outer_seed, inner_seed
+        X, y, outer_seed, inner_seed, inner_ratio=valid_prop, outer_ratio=test_prop
     )
     if not monotonic:  # shuffle index set if the train fold should not be monotonic.
         rs = np.random.RandomState(inner_seed)
