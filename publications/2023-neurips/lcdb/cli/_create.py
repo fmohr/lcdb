@@ -43,6 +43,12 @@ def add_subparser(subparsers):
     subparser.set_defaults(func=function_to_call)
 
 
+def batch(iterable, n=1):
+    l = len(iterable)
+    for ndx in range(0, l, n):
+        yield iterable[ndx:min(ndx + n, l)]
+
+
 def main(
     config: str,
     num_configs: int,
@@ -74,4 +80,12 @@ def main(
 
     # create all rows for the experiments
     print(list(experiments[0].keys()))
-    get_experimenter(config_file=config).fill_table_with_rows(rows=experiments)
+
+    print('total experiments: %d ' % len(experiments))
+
+    batch_size = 10000
+    batches = batch(experiments, batch_size)
+    num_batches = len(experiments) / batch_size
+    for (cur_batch_num, B) in enumerate(batches):
+        print('inserting batch %d of %d...' % (cur_batch_num, num_batches))
+        get_experimenter(config_file=config).fill_table_with_rows(rows=B)
