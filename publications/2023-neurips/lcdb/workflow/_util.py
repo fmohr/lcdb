@@ -294,7 +294,7 @@ def run_on_data(
         set(np.unique(y_train)) | set(np.unique(y_valid)) | set(np.unique(y_test))
     )
 
-    preprocessing_steps = get_mandatory_preprocessing(
+    preprocessing_steps = workflow.get_preprocessing_pipeline(
         X_train, y_train, binarize_sparse=binarize_sparse, drop_first=drop_first
     )
     if preprocessing_steps:

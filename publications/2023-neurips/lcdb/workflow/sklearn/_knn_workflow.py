@@ -7,7 +7,9 @@ from sklearn.neighbors import KNeighborsClassifier
 class KNNWorkflow(BaseWorkflow):
 
     def __init__(self, X_train, y_train, hyperparams):
-        super().__init__()
+        super().__init__(X_train, y_train, hyperparams)
+        hyperparams = hyperparams.copy()
+        hyperparams.pop('scaler')
         self.learner = KNeighborsClassifier(**hyperparams)
 
     def update_summary(self):

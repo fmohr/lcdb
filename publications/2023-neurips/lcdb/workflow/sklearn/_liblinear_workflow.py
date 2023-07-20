@@ -9,10 +9,11 @@ from sklearn.multiclass import OneVsOneClassifier
 class LibLinearWorkflow(BaseWorkflow):
 
     def __init__(self, X_train, y_train, hyperparams):
-        super().__init__()
+        super().__init__(X_train, y_train, hyperparams)
 
         hyperparams = hyperparams.copy()
         hyperparams['verbose'] = True
+        hyperparams.pop('scaler')
 
         if hyperparams['class_weight'] == 'none':
             hyperparams['class_weight'] = None
