@@ -4,7 +4,7 @@ from lcdb.workflow._util import run
 results = run(
     openmlid=61, #iris
     workflow_class=SimpleTorchMLPWorkflow,
-    anchor=100,
+    anchor=100
     monotonic=False,
     inner_seed=0,
     outer_seed=0,
