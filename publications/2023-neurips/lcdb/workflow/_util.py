@@ -1,6 +1,7 @@
 import importlib
 import itertools as it
 import logging
+import warnings
 import os
 from time import time
 from typing import Dict, List
@@ -15,6 +16,16 @@ from func_timeout import FunctionTimedOut, func_timeout
 from py_experimenter.experimenter import PyExperimenter
 from py_experimenter.experimenter import utils as pyexp_utils
 from sklearn.pipeline import Pipeline
+from scipy.stats.qmc import LatinHypercube
+from ConfigSpace.hyperparameters import (
+    CategoricalHyperparameter,
+    Constant,
+    IntegerHyperparameter,
+    NumericalHyperparameter,
+    OrdinalHyperparameter,
+)
+from ConfigSpace.util import ForbiddenValueError, deactivate_inactive_hyperparameters
+
 
 from ..data._openml import get_openml_dataset
 from ..data._split import get_mandatory_preprocessing, get_splits_for_anchor
@@ -110,15 +121,90 @@ def get_technical_experiment_grid(
     return config, sampled_configurations
 
 
-def get_latin_hypercube_sampling(
-    config_space: ConfigurationSpace, num_configs: int, segmentation=None
-) -> List[Configuration]:
-    # TODO: Implement latin hypercube sampling
-    # TODO: Make this reproducible
-    samples = config_space.sample_configuration(num_configs)
-    if num_configs == 1:
-        samples = [samples]
-    return samples
+# adapted from here https://github.com/automl/SMAC3/blob/e64e1918eeb88e93f9f201ece343624fb2943e9d/smac/initial_design/latin_hypercube_design.py
+# and here https://github.com/automl/SMAC3/blob/e64e1918eeb88e93f9f201ece343624fb2943e9d/smac/initial_design/abstract_initial_design.py
+# TODO: SMAC3 is BSD 3-Clause License need to respect this and handle this properly
+class LHSGenerator:
+    def __init__(
+        self,
+        configuration_space: ConfigurationSpace,
+        n: int,
+        seed: int = 0,
+    ):
+        self.configuration_space = configuration_space
+        self.n = n
+        self.seed = seed
+
+        if len(self.configuration_space.get_hyperparameters()) > 21201:
+            raise ValueError(
+                "The default Latin Hypercube generator can only handle up to 21201 dimensions."
+            )
+
+    def generate(self) -> list[Configuration]:
+        params = self.configuration_space.get_hyperparameters()
+
+        constants = 0
+        for p in params:
+            if isinstance(p, Constant):
+                constants += 1
+
+        dim = len(params) - constants
+        lhd_gen = LatinHypercube(d=dim, seed=self.seed)
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            lhd = lhd_gen.random(self.n)
+
+        return self._transform_continuous_designs(
+            design=lhd,
+            origin="Latin Hypercube sequence",
+            configuration_space=self.configuration_space,
+        )
+
+    def _transform_continuous_designs(
+        self, design: np.ndarray, origin: str, configuration_space: ConfigurationSpace
+    ) -> list[Configuration]:
+        params = configuration_space.get_hyperparameters()
+        for idx, param in enumerate(params):
+            if isinstance(param, IntegerHyperparameter):
+                design[:, idx] = param._inverse_transform(
+                    param._transform(design[:, idx])
+                )
+            elif isinstance(param, NumericalHyperparameter):
+                continue
+            elif isinstance(param, Constant):
+                design_ = np.zeros(np.array(design.shape) + np.array((0, 1)))
+                design_[:, :idx] = design[:, :idx]
+                design_[:, idx + 1 :] = design[:, idx:]
+                design = design_
+            elif isinstance(param, CategoricalHyperparameter):
+                v_design = design[:, idx]
+                v_design[v_design == 1] = 1 - 10**-10
+                design[:, idx] = np.array(v_design * len(param.choices), dtype=int)
+            elif isinstance(param, OrdinalHyperparameter):
+                v_design = design[:, idx]
+                v_design[v_design == 1] = 1 - 10**-10
+                design[:, idx] = np.array(v_design * len(param.sequence), dtype=int)
+            else:
+                raise ValueError(
+                    "Hyperparameter not supported when transforming a continuous design."
+                )
+
+        configs = []
+        for vector in design:
+            try:
+                conf = deactivate_inactive_hyperparameters(
+                    configuration=None,
+                    configuration_space=configuration_space,
+                    vector=vector,
+                )
+            except ForbiddenValueError:
+                continue
+
+            conf.origin = origin
+            configs.append(conf)
+
+        return configs
 
 
 def unserialize_config_space(json_filename) -> ConfigSpace.ConfigurationSpace:
@@ -169,9 +255,8 @@ def get_all_experiments(
 
     config_space.seed(seed)
 
-    hp_samples = get_latin_hypercube_sampling(
-        config_space=config_space, num_configs=num_configs
-    )
+    lhs_generator = LHSGenerator(config_space, n=num_configs, seed=seed)
+    hp_samples = lhs_generator.generate()
     hp_samples.insert(0, default_config)
 
     # create all rows for the experiments
