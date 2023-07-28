@@ -219,6 +219,7 @@ def get_default_config(config_space):
         default = hyperparameter.default_value
         defaulthps[hyperparameter_name] = default
     default_config = ConfigSpace.configuration_space.Configuration(config_space, values=defaulthps, allow_inactive_with_values=True)
+    default_config = config_space.deactivate_inactive_hyperparameters(default_config, config_space)
     return default_config
 
 
