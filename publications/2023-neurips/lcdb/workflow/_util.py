@@ -227,6 +227,7 @@ def get_all_experiments(
     num_configs: int,
     seed: int,
     max_num_anchors_per_row: int,
+    LHS: bool,
 ) -> List[Dict]:
     """Create a sample of experimental configurations for a given workflow.
 
@@ -255,8 +256,15 @@ def get_all_experiments(
 
     config_space.seed(seed)
 
-    lhs_generator = LHSGenerator(config_space, n=num_configs, seed=seed)
-    hp_samples = lhs_generator.generate()
+    if LHS:
+        print('using LHS...')
+        lhs_generator = LHSGenerator(config_space, n=num_configs, seed=seed)
+        hp_samples = lhs_generator.generate()
+    else:
+        print('using random sampling...')
+        hp_samples = config_space.sample_configuration(num_configs)
+        if num_configs == 1:
+            hp_samples = [hp_samples]
     hp_samples.insert(0, default_config)
 
     # create all rows for the experiments

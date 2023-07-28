@@ -40,6 +40,9 @@ def add_subparser(subparsers):
         default=3,
         help="The number of anchors per row in the database.",
     )
+    subparser.add_argument('--LHS', action='store_true')
+    subparser.add_argument('--no-LHS', dest='LHS', action='store_false')
+    subparser.set_defaults(LHS=True)
     subparser.set_defaults(func=function_to_call)
 
 
@@ -54,6 +57,7 @@ def main(
     num_configs: int,
     seed: int,
     max_num_anchors_per_row: int,
+    LHS: bool,
     *args,
     **kwargs
 ):
@@ -67,6 +71,7 @@ def main(
         num_configs=num_configs,
         seed=seed,
         max_num_anchors_per_row=max_num_anchors_per_row,
+        LHS=LHS,
     )
 
     # filter experiments
