@@ -30,7 +30,7 @@ from ConfigSpace.util import ForbiddenValueError, deactivate_inactive_hyperparam
 from ..data._openml import get_openml_dataset
 from ..data._split import get_mandatory_preprocessing, get_splits_for_anchor
 from ._base_workflow import BaseWorkflow
-
+from pynisher import limit, MemoryLimitException, WallTimeoutException
 
 def get_schedule_for_number_of_instances(num_instances, val_fold_size, test_fold_size):
     max_training_set_size = int(
@@ -346,31 +346,54 @@ def run(
         #       Or as a middle-ground solution: We pass the dimensionalities of the task but not the data itself
         logger.info(f"Working on anchor {anchor}, trainset size is {y_train.shape}.")
         workflow = workflow_class(X_train, y_train, hyperparameters)
-        try:
-            results[anchor] = func_timeout(
-                maxruntime,
-                run_on_data,
-                args=(
-                    X_train,
-                    X_valid,
-                    X_test,
-                    y_train,
-                    y_valid,
-                    y_test,
-                    binarize_sparse,
-                    drop_first,
-                    valid_prop,
-                    test_prop,
-                    workflow,
-                    logger,
-                ),
-            )
-        except KeyboardInterrupt:
-            raise
-        except FunctionTimedOut:
-            results[anchor] = "Timed out"
-        except Exception as err:
-            results[anchor] = err
+
+        memory_limit = 8
+        maxruntime = 30
+
+        determine_memory_limit = True
+        try_again = True
+
+        while try_again:
+            print('Starting memory limited experiment...')
+            my_limited_experiment = limit(run_on_data, memory=(memory_limit, "MB"), wall_time=(maxruntime, "s"), terminate_child_processes=False)
+
+            try:
+                results[anchor] = my_limited_experiment(
+                        X_train,
+                        X_valid,
+                        X_test,
+                        y_train,
+                        y_valid,
+                        y_test,
+                        binarize_sparse,
+                        drop_first,
+                        valid_prop,
+                        test_prop,
+                        workflow,
+                        logger,
+                    )
+                try_again = False
+            except KeyboardInterrupt:
+                print("Interrupted by keyboard")
+                results[anchor] = "Interrupted by keyboard"
+                try_again = False
+            except WallTimeoutException:
+                print("Timed out (took more than %d seconds)" % maxruntime)
+                results[anchor] = "Timed out (took more than %d seconds)" % maxruntime
+                try_again = False
+            except MemoryLimitException:
+                print('Used more memory than %d' % memory_limit)
+                results[anchor] = 'Used more memory than %d' % memory_limit
+                if determine_memory_limit:
+                    try_again = True
+                    memory_limit = memory_limit*2
+                    print('Rretrying with %d MB' % memory_limit)
+                else:
+                    try_again = False
+            except Exception as err:
+                print('Exception: %s' % err)
+                results[anchor] = err
+                try_again = False
     return results
 
 
