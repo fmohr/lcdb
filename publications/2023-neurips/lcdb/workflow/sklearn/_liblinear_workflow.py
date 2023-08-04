@@ -46,7 +46,7 @@ class LibLinearWorkflow(BaseWorkflow):
         self.learner.fit(X_train, y_train)
 
         if type(self.learner) is LinearSVC:
-            self.summary["n_iter_"] = self.learner.n_iter_.tolist()
+            self.summary["n_iter_"] = self.learner.n_iter_
         else:
             n_iter_ = []
             for est in self.estimators_:
