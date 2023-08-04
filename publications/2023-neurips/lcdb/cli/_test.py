@@ -76,6 +76,7 @@ def main(
         num_configs=num_configs,
         seed=seed,
         max_num_anchors_per_row=max_num_anchors_per_row,
+        LHS=False,
     )
 
     # filter experiments
