@@ -53,9 +53,9 @@ class LibSVMWorkflow(BaseWorkflow):
         else:
             n_iter_ = []
             n_support_ = []
-            for est in self.estimators_:
-                n_iter_.append(est.n_iter_)
-                n_support_.append(est.n_support_)
+            for est in self.learner.estimators_:
+                n_iter_.append(est.n_iter_.tolist())
+                n_support_.append(est.n_support_.tolist())
             self.summary["n_iter_"] = n_iter_
             self.summary["n_support_"] = n_support_
         return self

@@ -49,7 +49,7 @@ class LibLinearWorkflow(BaseWorkflow):
             self.summary["n_iter_"] = self.learner.n_iter_
         else:
             n_iter_ = []
-            for est in self.estimators_:
+            for est in self.learner.estimators_:
                 n_iter_.append(est.n_iter_)
             self.summary["n_iter_"] = n_iter_
 
