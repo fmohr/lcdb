@@ -356,7 +356,8 @@ def run(
 
         while try_again:
             print('Starting memory limited experiment...')
-            my_limited_experiment = limit(run_on_data, memory=(memory_limit, "MB"), wall_time=(maxruntime, "s"), terminate_child_processes=False)
+            # memory=(memory_limit, "MB")
+            my_limited_experiment = limit(run_on_data, wall_time=(maxruntime, "s"), terminate_child_processes=False)
 
             try:
                 results[anchor] = my_limited_experiment(
