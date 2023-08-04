@@ -362,7 +362,12 @@ def run(
         while try_again:
             print('Starting time limited experiment...')
             # memory=(memory_limit, "MB")
-            my_limited_experiment = limit(run_on_data, wall_time=(maxruntime, "s"), terminate_child_processes=False)
+
+            if os.name == 'nt':
+                # do not timelimit on windows with pynisher, it doesnt work
+                my_limited_experiment = run_on_data
+            else:
+                my_limited_experiment = limit(run_on_data, wall_time=(maxruntime, "s"), terminate_child_processes=False)
 
             try:
                 results[anchor] = my_limited_experiment(
