@@ -6,6 +6,9 @@ import os
 from time import time
 from typing import Dict, List
 import psutil
+import contextlib
+import io
+
 
 import ConfigSpace.read_and_write.json
 import numpy as np
@@ -421,6 +424,20 @@ def profile(func):
     return wrapper
 
 
+@contextlib.contextmanager
+def capture():
+    import sys
+    oldout,olderr = sys.stdout, sys.stderr
+    try:
+        out=[io.StringIO(), io.StringIO()]
+        sys.stdout,sys.stderr = out
+        yield out
+    finally:
+        sys.stdout,sys.stderr = oldout, olderr
+        out[0] = out[0].getvalue()
+        out[1] = out[1].getvalue()
+
+
 def run_on_data(
     X_train,
     X_valid,
@@ -445,7 +462,8 @@ def run_on_data(
         X_train, y_train, binarize_sparse=binarize_sparse, drop_first=drop_first
     )
     if preprocessing_steps:
-        pl = Pipeline(preprocessing_steps).fit(X_train, y_train)
+        with capture() as out:
+            pl = Pipeline(preprocessing_steps).fit(X_train, y_train)
         X_train, X_valid, X_test = (
             pl.transform(X_train),
             pl.transform(X_valid),
@@ -529,6 +547,7 @@ def run_on_data(
         "workflow_summary": workflow.summary,
         "mem_before": mem_before,
         "mem_after": mem_after,
+        "fit_log": out,
     }
 
 
