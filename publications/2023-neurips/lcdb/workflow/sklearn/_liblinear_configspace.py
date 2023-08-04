@@ -15,7 +15,7 @@ def get_configspace():
             "class_weight": Categorical("class_weight", ['balanced', 'none']),
             "loss": Categorical("loss", ["hinge", "squared_hinge"], default="squared_hinge"),
             "penalty": Categorical("penalty", ["l2", "l1"], default="l2"),
-            "scaler": Categorical("scaler", ["minmax", "standardize", "none"], weights=[0.5, 0.5, 0.0], default="none"),
+            "scaler": Categorical("scaler", ["minmax", "standardize", "none"], default="none"),
         }
     )
 

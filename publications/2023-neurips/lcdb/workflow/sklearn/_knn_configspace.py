@@ -7,7 +7,7 @@ def get_configspace():
         name="knn",
         space={
             "n_neighbors": Integer("n_neighbors", (1, 1000), default=5, log=True),
-            "scaler": Categorical("scaler", ["minmax", "standardize", "none"], weights=[0.5, 0.5, 0.0], default="none"),
+            "scaler": Categorical("scaler", ["minmax", "standardize", "none"], default="none"),
             "weights": Categorical("weights", ["uniform", "distance"], default="uniform"),
             "p": Integer("p", (1, 2), default=2),
         }
