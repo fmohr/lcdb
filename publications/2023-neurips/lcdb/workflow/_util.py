@@ -3,6 +3,7 @@ import itertools as it
 import logging
 import warnings
 import os
+import zlib
 from time import time
 from typing import Dict, List
 import psutil
@@ -529,6 +530,9 @@ def run_on_data(
     # ask workflow to update its summary information (post-processing hook)
     logger.debug("Confusion matrices computed. Computing post-hoc data.")
     workflow.update_summary()
+
+    out[0] = zlib.compress(out[0].encode())
+    out[1] = zlib.compress(out[1].encode())
 
     mem_after = process_memory()
 
