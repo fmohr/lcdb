@@ -7,6 +7,8 @@ from py_experimenter.result_processor import ResultProcessor
 
 from ..workflow._util import run, import_attr_from_module, get_experimenter
 
+
+
 logger = logging.getLogger("lcdb.exp")
 logger.setLevel(logging.DEBUG)
 
@@ -47,6 +49,8 @@ def run_experiment(
     for h in logger.handlers:
         logger.removeHandler(h)
     logger.addHandler(ch)
+
+    print(keyfields)
 
     results = run(
         openmlid=int(keyfields["openmlid"]),

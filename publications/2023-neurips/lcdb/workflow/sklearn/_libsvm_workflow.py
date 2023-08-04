@@ -47,6 +47,17 @@ class LibSVMWorkflow(BaseWorkflow):
     def fit(self, data_train, data_valid, data_test) -> "BaseWorkflow":
         X_train, y_train = data_train
         self.learner.fit(X_train, y_train)
+        if type(self.learner) is SVC:
+            self.summary["n_iter_"] = self.learner.n_iter_.tolist()
+            self.summary["n_support_"] = self.learner.n_support_.tolist()
+        else:
+            n_iter_ = []
+            n_support_ = []
+            for est in self.estimators_:
+                n_iter_.append(est.n_iter_)
+                n_support_.append(est.n_support_)
+            self.summary["n_iter_"] = n_iter_
+            self.summary["n_support_"] = n_support_
         return self
 
     def predict_proba(self, X):

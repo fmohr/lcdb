@@ -44,6 +44,15 @@ class LibLinearWorkflow(BaseWorkflow):
     def fit(self, data_train, data_valid, data_test) -> "BaseWorkflow":
         X_train, y_train = data_train
         self.learner.fit(X_train, y_train)
+
+        if type(self.learner) is LinearSVC:
+            self.summary["n_iter_"] = self.learner.n_iter_
+        else:
+            n_iter_ = []
+            for est in self.estimators_:
+                n_iter_.append(est.n_iter_)
+            self.summary["n_iter_"] = n_iter_
+
         return self
 
     def predict_proba(self, X):

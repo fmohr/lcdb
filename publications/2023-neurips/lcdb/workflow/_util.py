@@ -3,8 +3,13 @@ import itertools as it
 import logging
 import warnings
 import os
+import zlib
 from time import time
 from typing import Dict, List
+import psutil
+import contextlib
+import io
+
 
 import ConfigSpace.read_and_write.json
 import numpy as np
@@ -30,7 +35,7 @@ from ConfigSpace.util import ForbiddenValueError, deactivate_inactive_hyperparam
 from ..data._openml import get_openml_dataset
 from ..data._split import get_mandatory_preprocessing, get_splits_for_anchor
 from ._base_workflow import BaseWorkflow
-
+from pynisher import limit, MemoryLimitException, WallTimeoutException
 
 def get_schedule_for_number_of_instances(num_instances, val_fold_size, test_fold_size):
     max_training_set_size = int(
@@ -77,6 +82,7 @@ def get_technical_experiment_grid(
         it.product(*[keyfield_domains[kf] for kf in relevant_keyfield_names])
     )
 
+    # Note: it is not supported to have multiple valid / test props!
     val_fold_size = float(keyfield_domains.get("valid_prop", 0.1)[0])
     test_fold_size = float(keyfield_domains.get("test_prop", 0.1)[0])
 
@@ -104,8 +110,8 @@ def get_technical_experiment_grid(
             for combo in keyfield_combinations:
                 combo = list(combo)
                 rows.append(
-                    [openmlid, val_fold_size, test_fold_size]
-                    + combo[:2]
+                    [openmlid]
+                    + combo[:4] # valid_prop, test_prop, seed_outer, seed_inner
                     + [my_schedule]
                     + combo[-2:]
                 )
@@ -346,32 +352,96 @@ def run(
         #       Or as a middle-ground solution: We pass the dimensionalities of the task but not the data itself
         logger.info(f"Working on anchor {anchor}, trainset size is {y_train.shape}.")
         workflow = workflow_class(X_train, y_train, hyperparameters)
-        try:
-            results[anchor] = func_timeout(
-                maxruntime,
-                run_on_data,
-                args=(
-                    X_train,
-                    X_valid,
-                    X_test,
-                    y_train,
-                    y_valid,
-                    y_test,
-                    binarize_sparse,
-                    drop_first,
-                    valid_prop,
-                    test_prop,
-                    workflow,
-                    logger,
-                ),
-            )
-        except KeyboardInterrupt:
-            raise
-        except FunctionTimedOut:
-            results[anchor] = "Timed out"
-        except Exception as err:
-            results[anchor] = err
+
+        memory_limit = 512
+        maxruntime = 30
+
+        determine_memory_limit = True
+        try_again = True
+
+        while try_again:
+            print('Starting time limited experiment...')
+            # memory=(memory_limit, "MB")
+
+            if os.name == 'nt':
+                # do not timelimit on windows with pynisher, it doesnt work
+                my_limited_experiment = run_on_data
+            else:
+                my_limited_experiment = limit(run_on_data, wall_time=(maxruntime, "s"), terminate_child_processes=False)
+
+            try:
+                results[anchor] = my_limited_experiment(
+                        X_train,
+                        X_valid,
+                        X_test,
+                        y_train,
+                        y_valid,
+                        y_test,
+                        binarize_sparse,
+                        drop_first,
+                        valid_prop,
+                        test_prop,
+                        workflow,
+                        logger,
+                    )
+                try_again = False
+            except KeyboardInterrupt:
+                print("Interrupted by keyboard")
+                results[anchor] = "Interrupted by keyboard"
+                try_again = False
+            except WallTimeoutException:
+                print("Timed out (took more than %d seconds)" % maxruntime)
+                results[anchor] = "Timed out (took more than %d seconds)" % maxruntime
+                try_again = False
+            except MemoryLimitException:
+                print('Used more memory than %d' % memory_limit)
+                results[anchor] = 'Used more memory than %d' % memory_limit
+                if determine_memory_limit:
+                    try_again = True
+                    memory_limit = memory_limit*2
+                    print('Rretrying with %d MB' % memory_limit)
+                else:
+                    try_again = False
+            except Exception as err:
+                print('Exception: %s' % err)
+                results[anchor] = err
+                try_again = False
     return results
+
+# thanks to
+# https://www.geeksforgeeks.org/monitoring-memory-usage-of-a-running-python-program/
+# inner psutil function
+def process_memory():
+    process = psutil.Process(os.getpid())
+    mem_info = process.memory_info()
+    return mem_info.rss
+
+
+# decorator function
+def profile(func):
+    def wrapper(*args, **kwargs):
+        mem_before = process_memory()
+        result = func(*args, **kwargs)
+        mem_after = process_memory()
+        print("{}:consumed memory: {:,}".format(
+            func.__name__,
+            mem_before, mem_after, mem_after - mem_before))
+        return result
+    return wrapper
+
+
+@contextlib.contextmanager
+def capture():
+    import sys
+    oldout,olderr = sys.stdout, sys.stderr
+    try:
+        out=[io.StringIO(), io.StringIO()]
+        sys.stdout,sys.stderr = out
+        yield out
+    finally:
+        sys.stdout,sys.stderr = oldout, olderr
+        out[0] = out[0].getvalue()
+        out[1] = out[1].getvalue()
 
 
 def run_on_data(
@@ -388,6 +458,7 @@ def run_on_data(
     workflow,
     logger,
 ):
+    mem_before = process_memory()
     # get the data for this experiment
     labels = sorted(
         set(np.unique(y_train)) | set(np.unique(y_valid)) | set(np.unique(y_test))
@@ -397,6 +468,7 @@ def run_on_data(
         X_train, y_train, binarize_sparse=binarize_sparse, drop_first=drop_first
     )
     if preprocessing_steps:
+        #with capture() as out:
         pl = Pipeline(preprocessing_steps).fit(X_train, y_train)
         X_train, X_valid, X_test = (
             pl.transform(X_train),
@@ -464,6 +536,11 @@ def run_on_data(
     logger.debug("Confusion matrices computed. Computing post-hoc data.")
     workflow.update_summary()
 
+    # out[0] = zlib.compress(out[0].encode())
+    # out[1] = zlib.compress(out[1].encode())
+
+    mem_after = process_memory()
+
     logger.info("Computation ready, returning results.")
     return {
         "labels": labels,
@@ -477,6 +554,9 @@ def run_on_data(
         "predict_time_valid": predict_time_valid,
         "predict_time_test": predict_time_test,
         "workflow_summary": workflow.summary,
+        "mem_before": mem_before,
+        "mem_after": mem_after,
+        # "fit_log": out,
     }
 
 

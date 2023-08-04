@@ -76,6 +76,7 @@ def main(
         num_configs=num_configs,
         seed=seed,
         max_num_anchors_per_row=max_num_anchors_per_row,
+        LHS=False,
     )
 
     # filter experiments
@@ -87,7 +88,7 @@ def main(
         e["hyperparameters"] = json.dumps(e["hyperparameters"])
         e["train_sizes"] = json.dumps(e["train_sizes"])
 
-        logging.info("Running experiment %s", e)
+        print("Running experiment %s", e)
 
         results = run(
             openmlid=int(e["openmlid"]),
@@ -97,6 +98,9 @@ def main(
             inner_seed=int(e["seed_inner"]),
             outer_seed=int(e["seed_outer"]),
             hyperparameters=json.loads(e["hyperparameters"]),
+            maxruntime=int(e["maxruntime"]),
+            valid_prop=float(e["valid_prop"]),
+            test_prop=float(e["test_prop"]),
             logger=logging,
         )
         logging.info("Results: %s", results)
