@@ -77,6 +77,7 @@ def get_technical_experiment_grid(
         it.product(*[keyfield_domains[kf] for kf in relevant_keyfield_names])
     )
 
+    # Note: it is not supported to have multiple valid / test props!
     val_fold_size = float(keyfield_domains.get("valid_prop", 0.1)[0])
     test_fold_size = float(keyfield_domains.get("test_prop", 0.1)[0])
 
@@ -104,8 +105,8 @@ def get_technical_experiment_grid(
             for combo in keyfield_combinations:
                 combo = list(combo)
                 rows.append(
-                    [openmlid, val_fold_size, test_fold_size]
-                    + combo[:2]
+                    [openmlid]
+                    + combo[:4] # valid_prop, test_prop, seed_outer, seed_inner
                     + [my_schedule]
                     + combo[-2:]
                 )
