@@ -348,7 +348,7 @@ def run(
         logger.info(f"Working on anchor {anchor}, trainset size is {y_train.shape}.")
         workflow = workflow_class(X_train, y_train, hyperparameters)
 
-        memory_limit = 8
+        memory_limit = 512
         maxruntime = 30
 
         determine_memory_limit = True
