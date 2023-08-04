@@ -360,7 +360,7 @@ def run(
         try_again = True
 
         while try_again:
-            print('Starting memory limited experiment...')
+            print('Starting time limited experiment...')
             # memory=(memory_limit, "MB")
             my_limited_experiment = limit(run_on_data, wall_time=(maxruntime, "s"), terminate_child_processes=False)
 
@@ -463,8 +463,8 @@ def run_on_data(
         X_train, y_train, binarize_sparse=binarize_sparse, drop_first=drop_first
     )
     if preprocessing_steps:
-        with capture() as out:
-            pl = Pipeline(preprocessing_steps).fit(X_train, y_train)
+        #with capture() as out:
+        pl = Pipeline(preprocessing_steps).fit(X_train, y_train)
         X_train, X_valid, X_test = (
             pl.transform(X_train),
             pl.transform(X_valid),
@@ -531,8 +531,8 @@ def run_on_data(
     logger.debug("Confusion matrices computed. Computing post-hoc data.")
     workflow.update_summary()
 
-    out[0] = zlib.compress(out[0].encode())
-    out[1] = zlib.compress(out[1].encode())
+    # out[0] = zlib.compress(out[0].encode())
+    # out[1] = zlib.compress(out[1].encode())
 
     mem_after = process_memory()
 
@@ -551,7 +551,7 @@ def run_on_data(
         "workflow_summary": workflow.summary,
         "mem_before": mem_before,
         "mem_after": mem_after,
-        "fit_log": out,
+        # "fit_log": out,
     }
 
 
