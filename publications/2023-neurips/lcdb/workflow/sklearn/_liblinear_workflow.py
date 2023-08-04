@@ -60,3 +60,6 @@ class LibLinearWorkflow(BaseWorkflow):
 
     def predict(self, X):
         return self.learner.predict(X)
+
+    def decision_function(self, X):
+        return self.learner.decision_function(X)
