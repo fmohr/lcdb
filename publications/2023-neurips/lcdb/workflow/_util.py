@@ -1,3 +1,4 @@
+import base64
 import importlib
 import itertools as it
 import logging
@@ -20,6 +21,7 @@ from ConfigSpace import Configuration, ConfigurationSpace
 from func_timeout import FunctionTimedOut, func_timeout
 from py_experimenter.experimenter import PyExperimenter
 from py_experimenter.experimenter import utils as pyexp_utils
+from sklearn.metrics import roc_auc_score
 from sklearn.pipeline import Pipeline
 from scipy.stats.qmc import LatinHypercube
 from ConfigSpace.hyperparameters import (
@@ -487,13 +489,21 @@ def run_on_data(
     predict_time_train = time() - start
     start = time()
     y_hat_valid = workflow.predict(X_valid)
+    y_hat_valid_score = workflow.decision_function(X_valid)
     predict_time_valid = time() - start
     start = time()
     y_hat_test = workflow.predict(X_test)
+    y_hat_test_score = workflow.decision_function(X_test)
     predict_time_test = time() - start
+
     cm_train = sklearn.metrics.confusion_matrix(y_train, y_hat_train, labels=labels)
     cm_valid = sklearn.metrics.confusion_matrix(y_valid, y_hat_valid, labels=labels)
     cm_test = sklearn.metrics.confusion_matrix(y_test, y_hat_test, labels=labels)
+
+    y_valid_error = np.packbits(y_valid != y_hat_valid)
+    y_test_error = np.packbits(y_test != y_hat_test)
+    y_valid_error = base64.b64encode(y_valid_error.astype(np.uint8)).decode('utf-8')
+    y_test_error = base64.b64encode(y_test_error.astype(np.uint8)).decode('utf-8')
 
     n_train = X_train.shape[0]
     n_valid = X_valid.shape[0]
@@ -539,6 +549,8 @@ def run_on_data(
         "workflow_summary": workflow.summary,
         "mem_before": mem_before,
         "mem_after": mem_after,
+        "y_valid_error": y_valid_error,
+        "y_test_error": y_test_error,
         # "fit_log": out,
     }
 
