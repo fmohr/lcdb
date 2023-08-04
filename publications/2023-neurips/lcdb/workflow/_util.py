@@ -1,4 +1,5 @@
 import base64
+import gzip
 import importlib
 import itertools as it
 import logging
@@ -429,6 +430,24 @@ def capture():
         out[1] = out[1].getvalue()
 
 
+def compress_numpy_array(array):
+    array_bytes = array.tobytes()
+    compressed_bytes = gzip.compress(array_bytes)
+    return compressed_bytes
+
+def compress_numpy_array_to_base64_string(array):
+    compressed_bytes = compress_numpy_array(array)
+    base64_string = base64.b64encode(compressed_bytes).decode('utf-8')
+    return base64_string
+
+def decompress_base64_string_to_numpy_array(base64_string, shape, dtype):
+    compressed_bytes = base64.b64decode(base64_string)
+    decompressed_bytes = gzip.decompress(compressed_bytes)
+    array = np.frombuffer(decompressed_bytes, dtype=dtype)
+    array = array.reshape(shape)
+    return array
+
+
 def run_on_data(
     X_train,
     X_valid,
@@ -489,16 +508,16 @@ def run_on_data(
     predict_time_train = time() - start
     start = time()
     y_hat_valid = workflow.predict(X_valid)
-    y_hat_valid_score = workflow.decision_function(X_valid)
+    # y_hat_valid_score = workflow.decision_function(X_valid)
     predict_time_valid = time() - start
     start = time()
     y_hat_test = workflow.predict(X_test)
-    y_hat_test_score = workflow.decision_function(X_test)
+    # y_hat_test_score = workflow.decision_function(X_test)
     predict_time_test = time() - start
 
-    cm_train = sklearn.metrics.confusion_matrix(y_train, y_hat_train, labels=labels)
-    cm_valid = sklearn.metrics.confusion_matrix(y_valid, y_hat_valid, labels=labels)
-    cm_test = sklearn.metrics.confusion_matrix(y_test, y_hat_test, labels=labels)
+    cm_train = compress_numpy_array_to_base64_string(sklearn.metrics.confusion_matrix(y_train, y_hat_train, labels=labels).astype('uint16'))
+    cm_valid = compress_numpy_array_to_base64_string(sklearn.metrics.confusion_matrix(y_valid, y_hat_valid, labels=labels).astype('uint16'))
+    cm_test = compress_numpy_array_to_base64_string(sklearn.metrics.confusion_matrix(y_test, y_hat_test, labels=labels).astype('uint16'))
 
     y_valid_error = np.packbits(y_valid != y_hat_valid)
     y_test_error = np.packbits(y_test != y_hat_test)
@@ -518,12 +537,8 @@ def run_on_data(
     if n_test_sub > n_test:
         n_test_sub = n_test
 
-    cm_valid_sub = sklearn.metrics.confusion_matrix(
-        y_valid[:n_valid_sub], y_hat_valid[:n_valid_sub], labels=labels
-    )
-    cm_test_sub = sklearn.metrics.confusion_matrix(
-        y_test[:n_test_sub], y_hat_test[:n_test_sub], labels=labels
-    )
+    cm_valid_sub = compress_numpy_array_to_base64_string(sklearn.metrics.confusion_matrix(y_valid[:n_valid_sub], y_hat_valid[:n_valid_sub], labels=labels).astype('uint16'))
+    cm_test_sub = compress_numpy_array_to_base64_string(sklearn.metrics.confusion_matrix(y_test[:n_test_sub], y_hat_test[:n_test_sub], labels=labels).astype('uint16'))
 
     # ask workflow to update its summary information (post-processing hook)
     logger.debug("Confusion matrices computed. Computing post-hoc data.")
@@ -537,11 +552,11 @@ def run_on_data(
     logger.info("Computation ready, returning results.")
     return {
         "labels": labels,
-        "cm_train": cm_train.tolist(),
-        "cm_valid": cm_valid.tolist(),
-        "cm_test": cm_test.tolist(),
-        "cm_valid_sub": cm_valid_sub.tolist(),
-        "cm_test_sub": cm_test_sub.tolist(),
+        "cm_train": cm_train,
+        "cm_valid": cm_valid,
+        "cm_test": cm_test,
+        "cm_valid_sub": cm_valid_sub,
+        "cm_test_sub": cm_test_sub,
         "fit_time": fit_time,
         "predict_time_train": predict_time_train,
         "predict_time_valid": predict_time_valid,
