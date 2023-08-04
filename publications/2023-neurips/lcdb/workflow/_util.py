@@ -5,6 +5,7 @@ import warnings
 import os
 from time import time
 from typing import Dict, List
+import psutil
 
 import ConfigSpace.read_and_write.json
 import numpy as np
@@ -398,6 +399,27 @@ def run(
                 try_again = False
     return results
 
+# thanks to
+# https://www.geeksforgeeks.org/monitoring-memory-usage-of-a-running-python-program/
+# inner psutil function
+def process_memory():
+    process = psutil.Process(os.getpid())
+    mem_info = process.memory_info()
+    return mem_info.rss
+
+
+# decorator function
+def profile(func):
+    def wrapper(*args, **kwargs):
+        mem_before = process_memory()
+        result = func(*args, **kwargs)
+        mem_after = process_memory()
+        print("{}:consumed memory: {:,}".format(
+            func.__name__,
+            mem_before, mem_after, mem_after - mem_before))
+        return result
+    return wrapper
+
 
 def run_on_data(
     X_train,
@@ -413,6 +435,7 @@ def run_on_data(
     workflow,
     logger,
 ):
+    mem_before = process_memory()
     # get the data for this experiment
     labels = sorted(
         set(np.unique(y_train)) | set(np.unique(y_valid)) | set(np.unique(y_test))
@@ -489,6 +512,8 @@ def run_on_data(
     logger.debug("Confusion matrices computed. Computing post-hoc data.")
     workflow.update_summary()
 
+    mem_after = process_memory()
+
     logger.info("Computation ready, returning results.")
     return {
         "labels": labels,
@@ -502,6 +527,8 @@ def run_on_data(
         "predict_time_valid": predict_time_valid,
         "predict_time_test": predict_time_test,
         "workflow_summary": workflow.summary,
+        "mem_before": mem_before,
+        "mem_after": mem_after,
     }
 
 
