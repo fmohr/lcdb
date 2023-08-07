@@ -46,11 +46,6 @@ def get_splits_for_anchor2(openmlid, outer_seed, inner_seed, monotonic, valid_pr
     X_train, X_valid, X_test, y_train, y_valid, y_test = get_inner_split(
         X, y, outer_seed, inner_seed, inner_ratio=valid_prop, outer_ratio=test_prop
     )
-    if not monotonic:  # shuffle index set if the train fold should not be monotonic.
-        rs = np.random.RandomState(inner_seed)
-        indices = rs.choice(range(X_train.shape[0]), X_train.shape[0])
-        X_train = X_train[indices]
-        y_train = y_train[indices]
 
     return X_train, X_valid, X_test, y_train, y_valid, y_test, binarize_sparse, drop_first
 

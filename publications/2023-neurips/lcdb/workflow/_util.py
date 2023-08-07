@@ -23,6 +23,7 @@ from func_timeout import FunctionTimedOut, func_timeout
 from py_experimenter.experimenter import PyExperimenter
 from py_experimenter.experimenter import utils as pyexp_utils
 from sklearn.metrics import roc_auc_score
+from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
 from scipy.stats.qmc import LatinHypercube
 from ConfigSpace.hyperparameters import (
@@ -343,8 +344,16 @@ def run(
                 f"Invalid anchor {anchor} when available training instances are only {X_train.shape[0]}."
             )
 
-        X_train_anchor = X_train[:anchor]
-        y_train_anchor = y_train[:anchor]
+        if monotonic:
+            # if monotonic, we shuffle the training set deterministically,
+            # the same way for each innerseed
+            random_seed_train_shuffle = inner_seed
+        else:
+            # if not monotonic, the training set should be shuffled differently for each anchor
+            # so that the training sets of different anchors do not contain eachother
+            random_seed_train_shuffle = anchor
+
+        X_train_anchor, _, y_train_anchor, _ = train_test_split(X_train, y_train, train_size=anchor, stratify=y_train, shuffle=True, random_state=random_seed_train_shuffle)
 
         # X_train, X_valid, X_test, y_train, y_valid, y_test = get_splits_for_anchor(
         #     X, y, anchor, outer_seed, inner_seed, monotonic, valid_prop=valid_prop, test_prop=test_prop
