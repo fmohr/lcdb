@@ -2,8 +2,26 @@ import logging
 import numpy as np
 import openml
 import sklearn
+from functools import lru_cache
 
 
+@lru_cache(maxsize=2)
+def get_openml_dataset_and_check(openmlid):
+    # load data
+    binarize_sparse = openmlid in [1111, 41147, 41150, 42732, 42733]
+    drop_first = False  # openmlid not in [3] # drop first cannot be used in datasets with some very rare categorical values
+    print(f"Reading dataset. Will be binarized sparsely: {binarize_sparse}")
+    X, y = get_openml_dataset(openmlid)
+    y = np.array([str(e) for e in y])  # make sure that labels are strings
+    print(
+        f"ready. Dataset shape is {X.shape}, label column shape is {y.shape}. Now running the algorithm"
+    )
+    if X.shape[0] <= 0:
+        raise Exception("Dataset size invalid!")
+    if X.shape[0] != len(y):
+        raise Exception("X and y do not have the same size.")
+
+    return X, y, binarize_sparse, drop_first
 
 def get_openml_dataset(openmlid):
     """Returns (X, y) arrays from the corresponding OpenML dataset ID."""

@@ -35,8 +35,8 @@ from ConfigSpace.hyperparameters import (
 from ConfigSpace.util import ForbiddenValueError, deactivate_inactive_hyperparameters
 
 
-from ..data._openml import get_openml_dataset
-from ..data._split import get_mandatory_preprocessing, get_splits_for_anchor
+from ..data._openml import get_openml_dataset, get_openml_dataset_and_check
+from ..data._split import get_mandatory_preprocessing, get_splits_for_anchor, get_splits_for_anchor2
 from ._base_workflow import BaseWorkflow
 from pynisher import limit, MemoryLimitException, WallTimeoutException
 
@@ -330,29 +330,30 @@ def run(
     ]:
         logger.info(f"\t{v}: {os.environ[v] if v in os.environ else 'n/a'}")
 
-    # load data
-    binarize_sparse = openmlid in [1111, 41147, 41150, 42732, 42733]
-    drop_first = False  # openmlid not in [3] # drop first cannot be used in datasets with some very rare categorical values
-    logger.info(f"Reading dataset. Will be binarized sparsely: {binarize_sparse}")
-    X, y = get_openml_dataset(openmlid)
-    y = np.array([str(e) for e in y])  # make sure that labels are strings
-    logger.info(
-        f"ready. Dataset shape is {X.shape}, label column shape is {y.shape}. Now running the algorithm"
-    )
-    if X.shape[0] <= 0:
-        raise Exception("Dataset size invalid!")
-    if X.shape[0] != len(y):
-        raise Exception("X and y do not have the same size.")
+    # X, y = get_openml_dataset_and_check(openmlid)
 
     results = {}
     for anchor in anchors:
-        X_train, X_valid, X_test, y_train, y_valid, y_test = get_splits_for_anchor(
-            X, y, anchor, outer_seed, inner_seed, monotonic, valid_prop=valid_prop, test_prop=test_prop
-        )
+
+        X_train, X_valid, X_test, y_train, y_valid, y_test, binarize_sparse, drop_first = get_splits_for_anchor2(openmlid, outer_seed, inner_seed, monotonic, valid_prop=valid_prop, test_prop=test_prop)
+
+        # check that anchor is not bigger than allowed
+        if anchor > X_train.shape[0]:
+            raise ValueError(
+                f"Invalid anchor {anchor} when available training instances are only {X_train.shape[0]}."
+            )
+
+        X_train_anchor = X_train[:anchor]
+        y_train_anchor = y_train[:anchor]
+
+        # X_train, X_valid, X_test, y_train, y_valid, y_test = get_splits_for_anchor(
+        #     X, y, anchor, outer_seed, inner_seed, monotonic, valid_prop=valid_prop, test_prop=test_prop
+        # )
         # create the configured workflow
         # TODO: alternatively, one could be lazy and not pass the training data here.
         #       Then the workflow might have to do some setup routine at the beginning of `fit`
         #       Or as a middle-ground solution: We pass the dimensionalities of the task but not the data itself
+
         logger.info(f"Working on anchor {anchor}, trainset size is {y_train.shape}.")
         workflow = workflow_class(X_train, y_train, hyperparameters)
 
@@ -367,10 +368,10 @@ def run(
 
         try:
             results[anchor] = my_limited_experiment(
-                    X_train,
+                    X_train_anchor,
                     X_valid,
                     X_test,
-                    y_train,
+                    y_train_anchor,
                     y_valid,
                     y_test,
                     binarize_sparse,

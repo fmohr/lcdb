@@ -10,6 +10,9 @@ from sklearn.pipeline import Pipeline
 import logging
 import sklearn.impute
 
+from lcdb.data._openml import get_openml_dataset_and_check
+from functools import lru_cache
+
 def get_outer_split(X, y, seed, ratio=0.1):
     """Returns (X_train, X_test, y_train, y_test) arrays with len(X_test) / len(X) = ratio."""
     return sklearn.model_selection.train_test_split(
@@ -34,6 +37,22 @@ def get_inner_split(X, y, outer_seed, inner_seed, outer_ratio=0.1, inner_ratio=0
         stratify=y_learn,
     )
     return X_train, X_valid, X_test, y_train, y_valid, y_test
+
+
+@lru_cache(maxsize=2)
+def get_splits_for_anchor2(openmlid, outer_seed, inner_seed, monotonic, valid_prop=0.1, test_prop=0.1):
+    X, y, binarize_sparse, drop_first = get_openml_dataset_and_check(openmlid)
+
+    X_train, X_valid, X_test, y_train, y_valid, y_test = get_inner_split(
+        X, y, outer_seed, inner_seed, inner_ratio=valid_prop, outer_ratio=test_prop
+    )
+    if not monotonic:  # shuffle index set if the train fold should not be monotonic.
+        rs = np.random.RandomState(inner_seed)
+        indices = rs.choice(range(X_train.shape[0]), X_train.shape[0])
+        X_train = X_train[indices]
+        y_train = y_train[indices]
+
+    return X_train, X_valid, X_test, y_train, y_valid, y_test, binarize_sparse, drop_first
 
 
 def get_splits_for_anchor(X, y, anchor, outer_seed, inner_seed, monotonic, valid_prop=0.1, test_prop=0.1):
