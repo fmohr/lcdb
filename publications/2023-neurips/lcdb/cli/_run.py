@@ -2,7 +2,7 @@
 
 import json
 import logging
-
+from time import time
 from py_experimenter.result_processor import ResultProcessor
 
 from ..workflow._util import run, import_attr_from_module, get_experimenter
@@ -31,6 +31,14 @@ def add_subparser(subparsers):
         default='defaultmachine',
         required=False,
         help="Name of the executor. Used for debugging.",
+    )
+
+    subparser.add_argument(
+        "--num",
+        type=int,
+        default=-1,
+        required=False,
+        help="Number of configurations to run"
     )
 
     subparser.set_defaults(func=function_to_call)
@@ -79,11 +87,16 @@ def run_experiment(
     result_processor.process_results(resultfields)
 
 
-def main(config: str, executor_name: str, *args, **kwargs):
+def main(config: str, executor_name: str, num:int, *args, **kwargs):
     """
     :meta private:
     """
 
     experimenter = get_experimenter(config_file=config, executor_name=executor_name)
 
-    experimenter.execute(run_experiment, -1)
+    ts_fit_start = time()
+    experimenter.execute(run_experiment, num)
+    ts_fit_end = time()
+    run_time = ts_fit_end - ts_fit_start
+    print('Took %d seconds' % run_time)
+
