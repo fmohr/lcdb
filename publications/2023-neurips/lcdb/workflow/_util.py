@@ -335,7 +335,7 @@ def run(
 
     results = {}
     for anchor in anchors:
-
+        start = time()
         X_train, X_valid, X_test, y_train, y_valid, y_test, binarize_sparse, drop_first = get_splits_for_anchor2(openmlid, outer_seed, inner_seed, monotonic, valid_prop=valid_prop, test_prop=test_prop)
 
         # check that anchor is not bigger than allowed
@@ -363,8 +363,14 @@ def run(
         #       Then the workflow might have to do some setup routine at the beginning of `fit`
         #       Or as a middle-ground solution: We pass the dimensionalities of the task but not the data itself
 
+        time_load_data = time() - start
+
+        start = time()
+
         logger.info(f"Working on anchor {anchor}, trainset size is {y_train.shape}.")
         workflow = workflow_class(X_train, y_train, hyperparameters)
+
+        time_workflow = time() - start
 
         print('Starting time limited experiment...')
         # memory=(memory_limit, "MB")
@@ -389,6 +395,8 @@ def run(
                     test_prop,
                     workflow,
                     logger,
+                    time_load_data,
+                    time_workflow,
                 )
         except KeyboardInterrupt:
             print("Interrupted by keyboard")
@@ -471,13 +479,18 @@ def run_on_data(
     test_prop,
     workflow,
     logger,
+    time_load_data,
+    time_workflow,
 ):
     mem_before = process_memory()
+
+    ts_innerloop_start = time()
+
+    start = time()
     # get the data for this experiment
     labels = sorted(
         set(np.unique(y_train)) | set(np.unique(y_valid)) | set(np.unique(y_test))
     )
-
     preprocessing_steps = workflow.get_preprocessing_pipeline(
         X_train, y_train, binarize_sparse=binarize_sparse, drop_first=drop_first
     )
@@ -489,7 +502,6 @@ def run_on_data(
             pl.transform(X_valid),
             pl.transform(X_test),
         )
-
     X_train_std = np.std(X_train, axis=0)
     X_train_std_max = np.max(X_train_std)
     X_train_std_min = np.min(X_train_std)
@@ -501,6 +513,8 @@ def run_on_data(
     logger.debug(
         f'f"Largest value of feature and smallest: {X_train_min} {X_train_max}'
     )
+    preprocessing_time = time()-start
+
     # train the workflow
     logger.debug(f"Start fitting the workflow...")
     ts_fit_start = time()
@@ -516,48 +530,50 @@ def run_on_data(
     start = time()
     y_hat_train = workflow.predict(X_train)
     predict_time_train = time() - start
+
     start = time()
     y_hat_valid = workflow.predict(X_valid)
     # y_hat_valid_score = workflow.decision_function(X_valid)
     predict_time_valid = time() - start
+
     start = time()
     y_hat_test = workflow.predict(X_test)
     # y_hat_test_score = workflow.decision_function(X_test)
     predict_time_test = time() - start
 
+    start = time()
+    # compute and compress confusion matrices
     cm_train = compress_numpy_array_to_base64_string(sklearn.metrics.confusion_matrix(y_train, y_hat_train, labels=labels).astype('uint16'))
     cm_valid = compress_numpy_array_to_base64_string(sklearn.metrics.confusion_matrix(y_valid, y_hat_valid, labels=labels).astype('uint16'))
     cm_test = compress_numpy_array_to_base64_string(sklearn.metrics.confusion_matrix(y_test, y_hat_test, labels=labels).astype('uint16'))
-
+    # compute the zero-one loss and store in a string
     y_valid_error = np.packbits(y_valid != y_hat_valid)
     y_test_error = np.packbits(y_test != y_hat_test)
     y_valid_error = base64.b64encode(y_valid_error.astype(np.uint8)).decode('utf-8')
     y_test_error = base64.b64encode(y_test_error.astype(np.uint8)).decode('utf-8')
+    compress_time = time() - start
 
+    start = time()
     n_train = X_train.shape[0]
     n_valid = X_valid.shape[0]
     n_test = X_test.shape[0]
-
     train_prop = 1 - valid_prop - test_prop
-
     n_valid_sub = int(np.ceil(n_train / train_prop * valid_prop))
     n_test_sub = int(np.ceil(n_train / train_prop * test_prop))
     if n_valid_sub > n_valid:
         n_valid_sub = n_valid
     if n_test_sub > n_test:
         n_test_sub = n_test
-
     cm_valid_sub = compress_numpy_array_to_base64_string(sklearn.metrics.confusion_matrix(y_valid[:n_valid_sub], y_hat_valid[:n_valid_sub], labels=labels).astype('uint16'))
     cm_test_sub = compress_numpy_array_to_base64_string(sklearn.metrics.confusion_matrix(y_test[:n_test_sub], y_hat_test[:n_test_sub], labels=labels).astype('uint16'))
+    subsample_time = time()-start
 
     # ask workflow to update its summary information (post-processing hook)
     logger.debug("Confusion matrices computed. Computing post-hoc data.")
     workflow.update_summary()
 
-    # out[0] = zlib.compress(out[0].encode())
-    # out[1] = zlib.compress(out[1].encode())
-
     mem_after = process_memory()
+    time_innerloop = time() - ts_innerloop_start
 
     logger.info("Computation ready, returning results.")
     return {
@@ -571,6 +587,11 @@ def run_on_data(
         "predict_time_train": predict_time_train,
         "predict_time_valid": predict_time_valid,
         "predict_time_test": predict_time_test,
+        "subsample_time": subsample_time,
+        "compress_time": compress_time,
+        "time_load_data": time_load_data,
+        "time_workflow": time_workflow,
+        "time_innerloop": time_innerloop,
         "workflow_summary": workflow.summary,
         "mem_before": mem_before,
         "mem_after": mem_after,
