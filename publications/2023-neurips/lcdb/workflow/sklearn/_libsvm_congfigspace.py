@@ -9,14 +9,14 @@ def get_configspace():
             "C": Float("C", bounds=(1e-12, 1e12), distribution=Uniform(), default=1, log=True),
             "shrinking": Categorical("shrinking", [True, False], default=True),
             "multiclass": Categorical("multiclass", ["ovr-scikit", "ovo"], default="ovo"),
-            "tol": Float("tol", bounds=(1e-5, 2), distribution=Uniform(), default=1e-3, log=True),
-            "cap_max_iter": Categorical("cap_max_iter", [True, False], default=False),
-            "max_iter": Integer("max_iter", bounds=(100, 1000000), log=True, default=1000000),
+            "tol": Float("tol", bounds=(1e-5, 1e-1), distribution=Uniform(), default=1e-3, log=True),
+            "cap_max_iter": Constant("cap_max_iter", True, default=False),
+            "max_iter": Constant("max_iter", 1000),
             "class_weight": Categorical("class_weight", ['balanced', 'none'], default='none'),
             # "probability": Constant("probability", False),
             # "break_ties": Categorical("break_ties", [False, True], default=False), # not relevant,
             # "tol": Constant("tol", 1e-3)
-            "cache_size": Constant("cache_size", 2000.0),
+            "cache_size": Constant("cache_size", 16000.0),
             "scaler": Categorical("scaler", ["minmax", "standardize", "none"], default="none"),
         }
     )
