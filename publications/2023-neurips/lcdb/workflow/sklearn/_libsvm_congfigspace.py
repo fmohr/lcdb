@@ -21,7 +21,7 @@ def get_configspace():
         }
     )
 
-    kernel = Categorical('kernel', ['linear', 'poly', 'rbf', 'sigmoid'], default='linear')
+    kernel = Categorical('kernel', ['poly', 'rbf', 'sigmoid'], default='rbf')
     gamma = Float(
                 "gamma",
                 bounds=(10**(-12), 10**12),
