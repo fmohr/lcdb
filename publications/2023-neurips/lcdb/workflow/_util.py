@@ -356,7 +356,11 @@ def run(
             # so that the training sets of different anchors do not contain eachother
             random_seed_train_shuffle = anchor
 
-        X_train_anchor, _, y_train_anchor, _ = train_test_split(X_train, y_train, train_size=anchor, stratify=y_train, shuffle=True, random_state=random_seed_train_shuffle)
+        if anchor < len(y_train):
+            X_train_anchor, _, y_train_anchor, _ = train_test_split(X_train, y_train, train_size=anchor, stratify=y_train, shuffle=True, random_state=random_seed_train_shuffle)
+        else:
+            X_train_anchor = X_train
+            y_train_anchor = y_train
 
         # X_train, X_valid, X_test, y_train, y_valid, y_test = get_splits_for_anchor(
         #     X, y, anchor, outer_seed, inner_seed, monotonic, valid_prop=valid_prop, test_prop=test_prop
