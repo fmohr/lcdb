@@ -471,6 +471,21 @@ def decompress_base64_string_to_numpy_array(base64_string, shape, dtype):
     return array
 
 
+def batch_predict(workflow, X, batch_size=10000):
+    # Predict in batches
+    num_samples = X.shape[0]
+    predictions = []
+
+    for start in range(0, num_samples, batch_size):
+        end = start + batch_size
+        batch_predictions = workflow.predict(X[start:end])
+        predictions.extend(batch_predictions)
+
+    # Convert predictions list to numpy array
+    predictions = np.array(predictions)
+    return predictions
+
+
 def run_on_data(
     X_train,
     X_valid,
@@ -537,16 +552,16 @@ def run_on_data(
 
     # compute confusion matrices
     start = time()
-    y_hat_train = workflow.predict(X_train)
+    y_hat_train = batch_predict(workflow, X_train)
     predict_time_train = time() - start
 
     start = time()
-    y_hat_valid = workflow.predict(X_valid)
+    y_hat_valid = batch_predict(workflow, X_valid)
     # y_hat_valid_score = workflow.decision_function(X_valid)
     predict_time_valid = time() - start
 
     start = time()
-    y_hat_test = workflow.predict(X_test)
+    y_hat_test = batch_predict(workflow, X_test)
     # y_hat_test_score = workflow.decision_function(X_test)
     predict_time_test = time() - start
 
