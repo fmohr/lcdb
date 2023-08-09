@@ -65,5 +65,6 @@ def get_configspace():
         EqualsCondition(gamma, kernel, 'sigmoid')
     )
     cs.add_conditions([cond_1, cond_2, cond_4])
+    # TODO: Conditional hps don't seem to work (???)
 
     return cs
