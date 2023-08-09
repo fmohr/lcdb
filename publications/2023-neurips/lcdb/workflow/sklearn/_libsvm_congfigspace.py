@@ -58,8 +58,12 @@ def get_configspace():
     cond_3 = OrConjunction(
         EqualsCondition(gamma, kernel, 'rbf'),
         EqualsCondition(gamma, kernel, 'poly'),
+
+    )
+    cond_4 = OrConjunction(
+        cond_3,
         EqualsCondition(gamma, kernel, 'sigmoid')
     )
-    cs.add_conditions([cond_1, cond_2, cond_3])
+    cs.add_conditions([cond_1, cond_2, cond_4])
 
     return cs
