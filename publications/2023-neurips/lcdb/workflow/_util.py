@@ -81,6 +81,7 @@ def get_technical_experiment_grid(
         "seed_inner",
         "monotonic",
         "maxruntime",
+        "measure_memory",
     ]
     keyfield_combinations = list(
         it.product(*[keyfield_domains[kf] for kf in relevant_keyfield_names])
@@ -117,7 +118,7 @@ def get_technical_experiment_grid(
                     [openmlid]
                     + combo[:4] # valid_prop, test_prop, seed_outer, seed_inner
                     + [my_schedule]
-                    + combo[-2:]
+                    + combo[-3:]
                 )
 
     sampled_configurations = pd.DataFrame(
@@ -125,7 +126,7 @@ def get_technical_experiment_grid(
         columns=["openmlid"]
         + relevant_keyfield_names[:4]
         + ["train_sizes"]
-        + relevant_keyfield_names[-2:],
+        + relevant_keyfield_names[-3:],
     )
 
     return config, sampled_configurations
@@ -291,8 +292,9 @@ def get_all_experiments(
             "maxruntime": maxruntime,
             "hyperparameters": dict(hp),
             "monotonic": mon,
+            "measure_memory": measure_memory,
         }
-        for (openmlid, v_p, t_p, s_o, s_i, train_sizes, mon, maxruntime), hp in it.product(
+        for (openmlid, v_p, t_p, s_o, s_i, train_sizes, mon, maxruntime, measure_memory), hp in it.product(
             df_experiments.values, hp_samples
         )
     ]
@@ -310,6 +312,7 @@ def run(
     maxruntime: int,
     valid_prop: float,
     test_prop: float,
+    measure_memory: bool,
     logger=None,
 ):
     if logger is None:
@@ -397,6 +400,7 @@ def run(
                     logger,
                     time_load_data,
                     time_workflow,
+                    measure_memory,
                 )
         except KeyboardInterrupt:
             print("Interrupted by keyboard")
@@ -410,6 +414,7 @@ def run(
         except Exception as err:
             print('Exception: %s' % err)
             results[anchor] = err
+
     return results
 
 # thanks to
@@ -481,8 +486,12 @@ def run_on_data(
     logger,
     time_load_data,
     time_workflow,
+    measure_memory,
 ):
     mem_before = process_memory()
+    if measure_memory:
+        import tracemalloc
+        tracemalloc.start()
 
     ts_innerloop_start = time()
 
@@ -575,6 +584,12 @@ def run_on_data(
     mem_after = process_memory()
     time_innerloop = time() - ts_innerloop_start
 
+    if measure_memory:
+        _, memory_peak = tracemalloc.get_traced_memory()
+        tracemalloc.stop()
+    else:
+        memory_peak = np.nan
+
     logger.info("Computation ready, returning results.")
     return {
         "labels": labels,
@@ -597,6 +612,7 @@ def run_on_data(
         "mem_after": mem_after,
         "y_valid_error": y_valid_error,
         "y_test_error": y_test_error,
+        "memory_peak": memory_peak,
         # "fit_log": out,
     }
 

@@ -71,6 +71,7 @@ def run_experiment(
         maxruntime=int(keyfields["maxruntime"]),
         valid_prop=float(keyfields["valid_prop"]),
         test_prop=float(keyfields["test_prop"]),
+        measure_memory=bool(keyfields["measure_memory"]),
         logger=logger,
     )
 
