@@ -337,24 +337,28 @@ def run(
     # X, y = get_openml_dataset_and_check(openmlid)
 
     results = {}
-    for anchor in anchors:
-        start = time()
-        X_train, X_valid, X_test, y_train, y_valid, y_test, binarize_sparse, drop_first = get_splits_for_anchor2(openmlid, outer_seed, inner_seed, monotonic, valid_prop=valid_prop, test_prop=test_prop)
+    for inner_seed in range(0, 5):
+        results_tmp2 = {}
+        for outer_seed in range(0, 5):
+            results_tmp = {}
+            for anchor in anchors:
+                start = time()
+                X_train, X_valid, X_test, y_train, y_valid, y_test, binarize_sparse, drop_first = get_splits_for_anchor2(openmlid, outer_seed, inner_seed, monotonic, valid_prop=valid_prop, test_prop=test_prop)
 
-        # check that anchor is not bigger than allowed
-        if anchor > X_train.shape[0]:
-            raise ValueError(
-                f"Invalid anchor {anchor} when available training instances are only {X_train.shape[0]}."
-            )
+                # check that anchor is not bigger than allowed
+                if anchor > X_train.shape[0]:
+                    raise ValueError(
+                        f"Invalid anchor {anchor} when available training instances are only {X_train.shape[0]}."
+                    )
 
-        if monotonic:
-            # if monotonic, we shuffle the training set deterministically,
-            # the same way for each innerseed
-            random_seed_train_shuffle = inner_seed
-        else:
-            # if not monotonic, the training set should be shuffled differently for each anchor
-            # so that the training sets of different anchors do not contain eachother
-            random_seed_train_shuffle = anchor
+                if monotonic:
+                    # if monotonic, we shuffle the training set deterministically,
+                    # the same way for each innerseed
+                    random_seed_train_shuffle = inner_seed
+                else:
+                    # if not monotonic, the training set should be shuffled differently for each anchor
+                    # so that the training sets of different anchors do not contain eachother
+                    random_seed_train_shuffle = anchor
 
         if anchor < len(y_train):
             X_train_anchor, _, y_train_anchor, _ = train_test_split(X_train, y_train, train_size=anchor, stratify=y_train, shuffle=True, random_state=random_seed_train_shuffle)
@@ -362,63 +366,64 @@ def run(
             X_train_anchor = X_train
             y_train_anchor = y_train
 
-        # X_train, X_valid, X_test, y_train, y_valid, y_test = get_splits_for_anchor(
-        #     X, y, anchor, outer_seed, inner_seed, monotonic, valid_prop=valid_prop, test_prop=test_prop
-        # )
-        # create the configured workflow
-        # TODO: alternatively, one could be lazy and not pass the training data here.
-        #       Then the workflow might have to do some setup routine at the beginning of `fit`
-        #       Or as a middle-ground solution: We pass the dimensionalities of the task but not the data itself
+                # X_train, X_valid, X_test, y_train, y_valid, y_test = get_splits_for_anchor(
+                #     X, y, anchor, outer_seed, inner_seed, monotonic, valid_prop=valid_prop, test_prop=test_prop
+                # )
+                # create the configured workflow
+                # TODO: alternatively, one could be lazy and not pass the training data here.
+                #       Then the workflow might have to do some setup routine at the beginning of `fit`
+                #       Or as a middle-ground solution: We pass the dimensionalities of the task but not the data itself
 
-        time_load_data = time() - start
+                time_load_data = time() - start
 
-        start = time()
+                start = time()
 
-        logger.info(f"Working on anchor {anchor}, trainset size is {y_train.shape}.")
-        workflow = workflow_class(X_train, y_train, hyperparameters)
+                logger.info(f"Working on anchor {anchor}, trainset size is {y_train.shape}.")
+                workflow = workflow_class(X_train, y_train, hyperparameters)
 
-        time_workflow = time() - start
+                time_workflow = time() - start
 
-        print('Starting time limited experiment...')
-        # memory=(memory_limit, "MB")
+                print('Starting time limited experiment...')
+                # memory=(memory_limit, "MB")
 
-        if os.name == 'nt':
-            # do not timelimit on windows with pynisher, it doesnt work
-            my_limited_experiment = run_on_data
-        else:
-            my_limited_experiment = limit(run_on_data, wall_time=(maxruntime, "s"), terminate_child_processes=False)
+                if os.name == 'nt':
+                    # do not timelimit on windows with pynisher, it doesnt work
+                    my_limited_experiment = run_on_data
+                else:
+                    my_limited_experiment = limit(run_on_data, wall_time=(maxruntime, "s"), terminate_child_processes=False)
 
-        try:
-            results[anchor] = my_limited_experiment(
-                    X_train_anchor,
-                    X_valid,
-                    X_test,
-                    y_train_anchor,
-                    y_valid,
-                    y_test,
-                    binarize_sparse,
-                    drop_first,
-                    valid_prop,
-                    test_prop,
-                    workflow,
-                    logger,
-                    time_load_data,
-                    time_workflow,
-                    measure_memory,
-                )
-        except KeyboardInterrupt:
-            print("Interrupted by keyboard")
-            results[anchor] = "Interrupted by keyboard"
-        except WallTimeoutException:
-            print("Timed out (took more than %d seconds)" % maxruntime)
-            results[anchor] = "Timed out (took more than %d seconds)" % maxruntime
-        # except MemoryLimitException:
-        #     print('Used more memory than %d' % memory_limit)
-        #     results[anchor] = 'Used more memory than %d' % memory_limit
-        except Exception as err:
-            print('Exception: %s' % err)
-            results[anchor] = err
-
+                try:
+                    results_tmp[anchor] = my_limited_experiment(
+                            X_train_anchor,
+                            X_valid,
+                            X_test,
+                            y_train_anchor,
+                            y_valid,
+                            y_test,
+                            binarize_sparse,
+                            drop_first,
+                            valid_prop,
+                            test_prop,
+                            workflow,
+                            logger,
+                            time_load_data,
+                            time_workflow,
+                            measure_memory,
+                        )
+                except KeyboardInterrupt:
+                    print("Interrupted by keyboard")
+                    results_tmp[anchor] = "Interrupted by keyboard"
+                except WallTimeoutException:
+                    print("Timed out (took more than %d seconds)" % maxruntime)
+                    results_tmp[anchor] = "Timed out (took more than %d seconds)" % maxruntime
+                # except MemoryLimitException:
+                #     print('Used more memory than %d' % memory_limit)
+                #     results[anchor] = 'Used more memory than %d' % memory_limit
+                except Exception as err:
+                    print('Exception: %s' % err)
+                    results_tmp[anchor] = err
+            results_tmp2[outer_seed] = results_tmp
+        results[inner_seed] = results_tmp2
     return results
 
 # thanks to
