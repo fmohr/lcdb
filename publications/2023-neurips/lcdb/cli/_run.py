@@ -47,6 +47,9 @@ def add_subparser(subparsers):
 def run_experiment(
     keyfields: dict, result_processor: ResultProcessor, custom_config: dict
 ):
+
+    print('**** starting experiment ****')
+    print(time())
     # activate logger
     ch = logging.StreamHandler()
     ch.setLevel(logging.DEBUG)
