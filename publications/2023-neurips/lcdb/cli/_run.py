@@ -78,15 +78,8 @@ def run_experiment(
         logger=logger,
     )
 
-    # unpack results
-    resultfields = {"result": {}}
-    for anchor, results_for_anchor in results.items():
-        if type(results_for_anchor) is not dict:
-            resultfields["result"][anchor] = f"Exception: {results_for_anchor}"
-        else:
-            resultfields["result"][anchor] = results_for_anchor
-
-    resultfields["result"] = json.dumps(resultfields["result"])
+    resultfields = {}
+    resultfields["result"] = json.dumps(results)
     # Write intermediate results to database
     result_processor.process_results(resultfields)
 

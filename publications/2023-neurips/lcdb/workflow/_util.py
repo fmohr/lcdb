@@ -423,7 +423,7 @@ def run(
                 #     results[anchor] = 'Used more memory than %d' % memory_limit
                 except Exception as err:
                     print('Exception: %s' % err)
-                    results_tmp[anchor] = err
+                    results_tmp[anchor] = str(err)
             results_tmp2[outer_seed] = results_tmp
         results[inner_seed] = results_tmp2
     return results
