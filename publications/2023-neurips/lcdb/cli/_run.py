@@ -63,7 +63,7 @@ def run_experiment(
 
     print(keyfields)
 
-    results = run(
+    results, postprocess = run(
         openmlid=int(keyfields["openmlid"]),
         workflow_class=import_attr_from_module(keyfields["workflow"]),
         anchors=json.loads(keyfields["train_sizes"]),
@@ -80,6 +80,7 @@ def run_experiment(
 
     resultfields = {}
     resultfields["result"] = json.dumps(results)
+    resultfields["postprocess"] = postprocess
     # Write intermediate results to database
     result_processor.process_results(resultfields)
 

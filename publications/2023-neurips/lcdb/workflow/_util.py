@@ -335,13 +335,15 @@ def run(
         logger.info(f"\t{v}: {os.environ[v] if v in os.environ else 'n/a'}")
 
     # X, y = get_openml_dataset_and_check(openmlid)
-
+    postprocess = False
     results = {}
-    for inner_seed in range(0, 5):
+    for anchor in anchors:
         results_tmp2 = {}
-        for outer_seed in range(0, 5):
+        time_outs = 0
+        for inner_seed in range(0, 5):
             results_tmp = {}
-            for anchor in anchors:
+            for outer_seed in range(0, 5):
+
                 start = time()
                 X_train, X_valid, X_test, y_train, y_valid, y_test, binarize_sparse, drop_first = get_splits_for_anchor2(openmlid, outer_seed, inner_seed, monotonic, valid_prop=valid_prop, test_prop=test_prop)
 
@@ -395,7 +397,7 @@ def run(
                     my_limited_experiment = limit(run_on_data, wall_time=(maxruntime, "s"), terminate_child_processes=False)
 
                 try:
-                    results_tmp[anchor] = my_limited_experiment(
+                    results_tmp[outer_seed] = my_limited_experiment(
                             X_train_anchor,
                             X_valid,
                             X_test,
@@ -414,19 +416,35 @@ def run(
                         )
                 except KeyboardInterrupt:
                     print("Interrupted by keyboard")
-                    results_tmp[anchor] = "Interrupted by keyboard"
+                    results_tmp[outer_seed] = "Interrupted by keyboard"
                 except WallTimeoutException:
                     print("Timed out (took more than %d seconds)" % maxruntime)
-                    results_tmp[anchor] = "Timed out (took more than %d seconds)" % maxruntime
+                    results_tmp[outer_seed] = "Timed out (took more than %d seconds)" % maxruntime
+                    time_outs = time_outs + 1
                 # except MemoryLimitException:
                 #     print('Used more memory than %d' % memory_limit)
                 #     results[anchor] = 'Used more memory than %d' % memory_limit
                 except Exception as err:
                     print('Exception: %s' % err)
-                    results_tmp[anchor] = str(err)
-            results_tmp2[outer_seed] = results_tmp
-        results[inner_seed] = results_tmp2
-    return results
+                    results_tmp[outer_seed] = str(err)
+
+            results_tmp2[inner_seed] = results_tmp
+        results[anchor] = results_tmp2
+
+
+        if time_outs == 25:
+            print("Skipping the remaining anchors because we had 25 timeouts.")
+
+            postprocess = True
+
+            anchors_done = set(results.keys())
+            anchors_all = set(anchors)
+            anchors_todo = anchors_all - anchors_done
+            for anchor_skip in anchors_todo:
+                results[anchor_skip] = "Anchor skipped because previous anchor timed out"
+            break
+
+    return results, postprocess
 
 # thanks to
 # https://www.geeksforgeeks.org/monitoring-memory-usage-of-a-running-python-program/
