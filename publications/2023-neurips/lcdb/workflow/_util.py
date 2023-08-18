@@ -240,6 +240,7 @@ def get_all_experiments(
     seed: int,
     max_num_anchors_per_row: int,
     LHS: bool,
+    random_hps_per_dataset: bool,
 ) -> List[Dict]:
     """Create a sample of experimental configurations for a given workflow.
 
@@ -259,45 +260,55 @@ def get_all_experiments(
         max_num_anchors_per_row=max_num_anchors_per_row,
     )
 
-    # import the workflow class
-    workflow_path = config.get("PY_EXPERIMENTER", "workflow")
-    workflow_class = import_attr_from_module(workflow_path)
+    df_experiments_grouped = df_experiments.groupby("openmlid")
 
-    config_space = workflow_class.get_config_space()
-    default_config = get_default_config(config_space)
+    experiments = []
 
-    config_space.seed(seed)
+    for name, group in df_experiments_grouped:
+        print('working on dataset %d...' % name)
+        # import the workflow class
+        workflow_path = config.get("PY_EXPERIMENTER", "workflow")
+        workflow_class = import_attr_from_module(workflow_path)
 
-    if LHS:
-        print('using LHS...')
-        lhs_generator = LHSGenerator(config_space, n=num_configs, seed=seed)
-        hp_samples = lhs_generator.generate()
-    else:
-        print('using random sampling...')
-        hp_samples = config_space.sample_configuration(num_configs)
-        if num_configs == 1:
-            hp_samples = [hp_samples]
-    hp_samples.insert(0, default_config)
+        config_space = workflow_class.get_config_space()
+        default_config = get_default_config(config_space)
 
-    # create all rows for the experiments
-    experiments = [
-        {
-            "workflow": workflow_path,
-            "openmlid": openmlid,
-            "valid_prop": v_p,
-            "test_prop": t_p,
-            "seed_outer": s_o,
-            "seed_inner": s_i,
-            "train_sizes": train_sizes,
-            "maxruntime": maxruntime,
-            "hyperparameters": dict(hp),
-            "monotonic": mon,
-            "measure_memory": measure_memory,
-        }
-        for (openmlid, v_p, t_p, s_o, s_i, train_sizes, mon, maxruntime, measure_memory), hp in it.product(
-            df_experiments.values, hp_samples
-        )
-    ]
+        seed_post_processed = seed
+        if random_hps_per_dataset:
+            seed_post_processed = seed_post_processed + int(name)
+        config_space.seed(seed_post_processed)
+
+        if LHS:
+            print('using LHS with seed %d...' % seed_post_processed)
+            lhs_generator = LHSGenerator(config_space, n=num_configs, seed=seed)
+            hp_samples = lhs_generator.generate()
+        else:
+            print('using random sampling with seed %d...' % seed_post_processed)
+            hp_samples = config_space.sample_configuration(num_configs)
+            if num_configs == 1:
+                hp_samples = [hp_samples]
+        hp_samples.insert(0, default_config)
+
+        # create all rows for the experiments
+        experiments = experiments + [
+            {
+                "workflow": workflow_path,
+                "openmlid": openmlid,
+                "valid_prop": v_p,
+                "test_prop": t_p,
+                "seed_outer": s_o,
+                "seed_inner": s_i,
+                "train_sizes": train_sizes,
+                "maxruntime": maxruntime,
+                "hyperparameters": dict(hp),
+                "monotonic": mon,
+                "measure_memory": measure_memory,
+            }
+            for (openmlid, v_p, t_p, s_o, s_i, train_sizes, mon, maxruntime, measure_memory), hp in it.product(
+                group.values, hp_samples
+            )
+        ]
+
     return workflow_class, experiments
 
 

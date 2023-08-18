@@ -43,6 +43,11 @@ def add_subparser(subparsers):
     subparser.add_argument('--LHS', action='store_true')
     subparser.add_argument('--no-LHS', dest='LHS', action='store_false')
     subparser.set_defaults(LHS=True)
+
+    subparser.add_argument('--random_hps_per_dataset', action='store_true')
+    subparser.add_argument('--no-random_hps_per_dataset', dest='random_hps_per_dataset', action='store_false')
+    subparser.set_defaults(random_hps_per_dataset=True)
+
     subparser.set_defaults(func=function_to_call)
 
 
@@ -58,6 +63,7 @@ def main(
     seed: int,
     max_num_anchors_per_row: int,
     LHS: bool,
+    random_hps_per_dataset: bool,
     *args,
     **kwargs
 ):
@@ -72,6 +78,7 @@ def main(
         seed=seed,
         max_num_anchors_per_row=max_num_anchors_per_row,
         LHS=LHS,
+        random_hps_per_dataset=random_hps_per_dataset,
     )
 
     # filter experiments
