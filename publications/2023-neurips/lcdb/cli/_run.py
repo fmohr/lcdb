@@ -2,6 +2,7 @@
 
 import json
 import logging
+import os
 from time import time
 from py_experimenter.result_processor import ResultProcessor
 
@@ -48,7 +49,7 @@ def run_experiment(
     keyfields: dict, result_processor: ResultProcessor, custom_config: dict
 ):
 
-    print('**** starting experiment ****')
+    print('**** starting experiment on process id %d ****' % os.getpid())
     print(time())
     # activate logger
     ch = logging.StreamHandler()
