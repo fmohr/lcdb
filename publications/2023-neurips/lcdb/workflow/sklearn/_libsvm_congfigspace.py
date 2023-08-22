@@ -1,5 +1,4 @@
 from ConfigSpace import ConfigurationSpace, Integer, Float, Uniform, Constant, Categorical, EqualsCondition, OrConjunction
-from ConfigSpace.read_and_write import json as cs_json
 
 def get_configspace():
 

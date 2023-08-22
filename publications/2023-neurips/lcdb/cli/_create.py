@@ -1,8 +1,20 @@
-"""Command line to create/generate new experiments."""
+"""Command line to run experiments."""
+import logging
+import os
+import pathlib
+import warnings
 
-import json
-
-from ..workflow._util import get_all_experiments, get_experimenter
+import numpy as np
+import pandas as pd
+from deephyper.evaluator import Evaluator, RunningJob, profile
+from deephyper.evaluator.callback import TqdmCallback
+from deephyper.problem import HpProblem
+from deephyper.search.hps import CBO
+from lcdb.data import load_task
+from lcdb.data.split import train_valid_test_split
+from lcdb.utils import import_attr_from_module
+from sklearn.metrics import accuracy_score, zero_one_loss
+from sklearn.preprocessing import FunctionTransformer, OneHotEncoder
 
 
 def add_subparser(subparsers):
@@ -13,84 +25,46 @@ def add_subparser(subparsers):
     function_to_call = main
 
     subparser = subparsers.add_parser(
-        subparser_name, help="Create new experiments from a configuration file."
+        subparser_name, help="Generate a list of hyperparameter configurations."
     )
 
+    subparser.add_argument("-w", "--workflow-class", type=str, required=True)
+    subparser.add_argument("-n", "--num-configs", type=int, required=True)
     subparser.add_argument(
-        "--config", type=str, required=True, help="Path to the configuration file."
+        "-o", "--output-file", type=str, required=False, default="configs.csv"
     )
     subparser.add_argument(
-        "--num_configs",
-        type=int,
-        required=False,
-        default=10,
-        help="The number of hyperparameter configurations that are being sampled.",
+        "-v", "--verbose", action="store_true", default=False, required=False
     )
-    subparser.add_argument(
-        "--seed",
-        type=int,
-        required=False,
-        default=42,
-        help="The random seed used in sampling configurations.",
-    )
-    subparser.add_argument(
-        "--max_num_anchors_per_row",
-        type=int,
-        required=False,
-        default=3,
-        help="The number of anchors per row in the database.",
-    )
-    subparser.add_argument('--LHS', action='store_true')
-    subparser.add_argument('--no-LHS', dest='LHS', action='store_false')
-    subparser.set_defaults(LHS=True)
+
     subparser.set_defaults(func=function_to_call)
 
 
-def batch(iterable, n=1):
-    l = len(iterable)
-    for ndx in range(0, l, n):
-        yield iterable[ndx:min(ndx + n, l)]
-
-
 def main(
-    config: str,
-    num_configs: int,
-    seed: int,
-    max_num_anchors_per_row: int,
-    LHS: bool,
-    *args,
-    **kwargs
+    workflow_class,
+    num_configs,
+    output_file,
+    verbose,
 ):
     """
     :meta private:
     """
+    log_dir = os.path.dirname(output_file)
+    pathlib.Path(log_dir).mkdir(parents=True, exist_ok=True)
 
-    # create experiment rows
-    workflow_class, experiments = get_all_experiments(
-        config_file=config,
-        num_configs=num_configs,
-        seed=seed,
-        max_num_anchors_per_row=max_num_anchors_per_row,
-        LHS=LHS,
-    )
+    # Load the workflow to get its config space
+    WorkflowClass = import_attr_from_module(workflow_class)
+    config_space = WorkflowClass.config_space()
 
-    # filter experiments
-    if hasattr(workflow_class, "is_experiment_valid"):
-        experiments = [e for e in experiments if workflow_class.is_experiment_valid(e)]
+    # Sample the configurations
+    # TODO: LHS should be done here
+    configs = config_space.sample_configuration(num_configs - 1)
 
-    # replace hyperparameters by strings
-    for e in experiments:
-        e["hyperparameters"] = json.dumps(e["hyperparameters"])
-        e["train_sizes"] = json.dumps(e["train_sizes"])
+    # Add the default configuration
+    config_default = config_space.get_default_configuration()
+    configs.insert(0, config_default) # at the beginning
 
-    # create all rows for the experiments
-    print(list(experiments[0].keys()))
+    # Convert the configurations to a dictionnary
+    configs = map(lambda c: c.get_dictionary(), configs)
 
-    print('total experiments: %d ' % len(experiments))
-
-    batch_size = 10000
-    batches = batch(experiments, batch_size)
-    num_batches = len(experiments) / batch_size
-    for (cur_batch_num, B) in enumerate(batches):
-        print('inserting batch %d of %d...' % (cur_batch_num, num_batches))
-        get_experimenter(config_file=config).fill_table_with_rows(rows=B)
+    pd.DataFrame(configs).to_csv(output_file, index=False)

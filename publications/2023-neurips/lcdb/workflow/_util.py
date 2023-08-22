@@ -5,7 +5,6 @@ import itertools as it
 import logging
 import warnings
 import os
-import zlib
 from time import time
 from typing import Dict, List
 import psutil
@@ -19,11 +18,8 @@ import openml
 import pandas as pd
 import sklearn.metrics
 from ConfigSpace import Configuration, ConfigurationSpace
-from func_timeout import FunctionTimedOut, func_timeout
 from py_experimenter.experimenter import PyExperimenter
 from py_experimenter.experimenter import utils as pyexp_utils
-from sklearn.metrics import roc_auc_score
-from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
 from scipy.stats.qmc import LatinHypercube
 from ConfigSpace.hyperparameters import (
@@ -36,10 +32,12 @@ from ConfigSpace.hyperparameters import (
 from ConfigSpace.util import ForbiddenValueError, deactivate_inactive_hyperparameters
 
 
-from ..data._openml import get_openml_dataset, get_openml_dataset_and_check
-from ..data._split import get_mandatory_preprocessing, get_splits_for_anchor, get_splits_for_anchor2
+from ..data.split import (
+    get_splits_for_anchor2,
+)
 from ._base_workflow import BaseWorkflow
-from pynisher import limit, MemoryLimitException, WallTimeoutException
+from pynisher import limit, WallTimeoutException
+
 
 def get_schedule_for_number_of_instances(num_instances, val_fold_size, test_fold_size):
     max_training_set_size = int(
@@ -93,10 +91,12 @@ def get_technical_experiment_grid(
 
     rows = []
     for openmlid in keyfield_domains["openmlid"]:
-        print('trying to download openml dataset %d' % openmlid)
-        num_instances = openml.datasets.get_dataset(openmlid).qualities[
-            "NumberOfInstances"
-        ]
+        print("trying to download openml dataset %d" % openmlid)
+        num_instances = openml.datasets.get_dataset(
+            dataset_id=openmlid,
+            download_data=True,
+            download_qualities=True,
+        ).qualities["NumberOfInstances"]
         schedule = get_schedule_for_number_of_instances(
             num_instances, val_fold_size, test_fold_size
         )
@@ -116,7 +116,7 @@ def get_technical_experiment_grid(
                 combo = list(combo)
                 rows.append(
                     [openmlid]
-                    + combo[:4] # valid_prop, test_prop, seed_outer, seed_inner
+                    + combo[:4]  # valid_prop, test_prop, seed_outer, seed_inner
                     + [my_schedule]
                     + combo[-3:]
                 )
@@ -221,15 +221,20 @@ class LHSGenerator:
 def unserialize_config_space(json_filename) -> ConfigSpace.ConfigurationSpace:
     with open(json_filename, "r") as f:
         json_string = f.read()
-        return ConfigSpace.read_and_write.json.read(json_string)
+    return ConfigSpace.read_and_write.json.read(json_string)
 
 
 def get_default_config(config_space):
     defaulthps = {}
-    for (hyperparameter_name, hyperparameter) in config_space.get_hyperparameters_dict().items():
+    for (
+        hyperparameter_name,
+        hyperparameter,
+    ) in config_space.get_hyperparameters_dict().items():
         default = hyperparameter.default_value
         defaulthps[hyperparameter_name] = default
-    default_config = ConfigSpace.configuration_space.Configuration(config_space, values=defaulthps, allow_inactive_with_values=True)
+    default_config = ConfigSpace.configuration_space.Configuration(
+        config_space, values=defaulthps, allow_inactive_with_values=True
+    )
     # default_config = config_space.deactivate_inactive_hyperparameters(default_config, config_space) # only available in later version...
     return default_config
 
@@ -269,11 +274,11 @@ def get_all_experiments(
     config_space.seed(seed)
 
     if LHS:
-        print('using LHS...')
+        print("using LHS...")
         lhs_generator = LHSGenerator(config_space, n=num_configs, seed=seed)
         hp_samples = lhs_generator.generate()
     else:
-        print('using random sampling...')
+        print("using random sampling...")
         hp_samples = config_space.sample_configuration(num_configs)
         if num_configs == 1:
             hp_samples = [hp_samples]
@@ -294,9 +299,17 @@ def get_all_experiments(
             "monotonic": mon,
             "measure_memory": measure_memory,
         }
-        for (openmlid, v_p, t_p, s_o, s_i, train_sizes, mon, maxruntime, measure_memory), hp in it.product(
-            df_experiments.values, hp_samples
-        )
+        for (
+            openmlid,
+            v_p,
+            t_p,
+            s_o,
+            s_i,
+            train_sizes,
+            mon,
+            maxruntime,
+            measure_memory,
+        ), hp in it.product(df_experiments.values, hp_samples)
     ]
     return workflow_class, experiments
 
@@ -343,9 +356,24 @@ def run(
         for inner_seed in range(0, 5):
             results_tmp = {}
             for outer_seed in range(0, 5):
-
                 start = time()
-                X_train, X_valid, X_test, y_train, y_valid, y_test, binarize_sparse, drop_first = get_splits_for_anchor2(openmlid, outer_seed, inner_seed, monotonic, valid_prop=valid_prop, test_prop=test_prop)
+                (
+                    X_train,
+                    X_valid,
+                    X_test,
+                    y_train,
+                    y_valid,
+                    y_test,
+                    binarize_sparse,
+                    drop_first,
+                ) = get_splits_for_anchor2(
+                    openmlid,
+                    outer_seed,
+                    inner_seed,
+                    monotonic,
+                    valid_prop=valid_prop,
+                    test_prop=test_prop,
+                )
 
                 # check that anchor is not bigger than allowed
                 if anchor > X_train.shape[0]:
@@ -382,55 +410,62 @@ def run(
 
                 start = time()
 
-                logger.info(f"Working on anchor {anchor}, trainset size is {y_train.shape}.")
+                logger.info(
+                    f"Working on anchor {anchor}, trainset size is {y_train.shape}."
+                )
                 workflow = workflow_class(X_train, y_train, hyperparameters)
 
                 time_workflow = time() - start
 
-                print('Starting time limited experiment...')
+                print("Starting time limited experiment...")
                 # memory=(memory_limit, "MB")
 
-                if os.name == 'nt':
+                if os.name == "nt":
                     # do not timelimit on windows with pynisher, it doesnt work
                     my_limited_experiment = run_on_data
                 else:
-                    my_limited_experiment = limit(run_on_data, wall_time=(maxruntime, "s"), terminate_child_processes=False)
+                    my_limited_experiment = limit(
+                        run_on_data,
+                        wall_time=(maxruntime, "s"),
+                        terminate_child_processes=False,
+                    )
 
                 try:
                     results_tmp[outer_seed] = my_limited_experiment(
-                            X_train_anchor,
-                            X_valid,
-                            X_test,
-                            y_train_anchor,
-                            y_valid,
-                            y_test,
-                            binarize_sparse,
-                            drop_first,
-                            valid_prop,
-                            test_prop,
-                            workflow,
-                            logger,
-                            time_load_data,
-                            time_workflow,
-                            measure_memory,
-                        )
+                        X_train_anchor,
+                        X_valid,
+                        X_test,
+                        y_train_anchor,
+                        y_valid,
+                        y_test,
+                        binarize_sparse,
+                        drop_first,
+                        valid_prop,
+                        test_prop,
+                        workflow,
+                        logger,
+                        time_load_data,
+                        time_workflow,
+                        measure_memory,
+                    )
                 except KeyboardInterrupt:
                     print("Interrupted by keyboard")
                     results_tmp[outer_seed] = "Interrupted by keyboard"
                 except WallTimeoutException:
                     print("Timed out (took more than %d seconds)" % maxruntime)
-                    results_tmp[outer_seed] = "Timed out (took more than %d seconds)" % maxruntime
+                    results_tmp[outer_seed] = (
+                        "Timed out (took more than %d seconds)" % maxruntime
+                    )
                     time_outs = time_outs + 1
                 # except MemoryLimitException:
                 #     print('Used more memory than %d' % memory_limit)
                 #     results[anchor] = 'Used more memory than %d' % memory_limit
                 except Exception as err:
-                    print('Exception: %s' % err)
+                    print("Exception: %s" % err)
                     results_tmp[outer_seed] = str(err)
 
             results_tmp2[inner_seed] = results_tmp
         results[anchor] = results_tmp2
-
 
         if time_outs == 25:
             print("Skipping the remaining anchors because we had 25 timeouts.")
@@ -441,10 +476,13 @@ def run(
             anchors_all = set(anchors)
             anchors_todo = anchors_all - anchors_done
             for anchor_skip in anchors_todo:
-                results[anchor_skip] = "Anchor skipped because previous anchor timed out"
+                results[
+                    anchor_skip
+                ] = "Anchor skipped because previous anchor timed out"
             break
 
     return results, postprocess
+
 
 # thanks to
 # https://www.geeksforgeeks.org/monitoring-memory-usage-of-a-running-python-program/
@@ -461,23 +499,27 @@ def profile(func):
         mem_before = process_memory()
         result = func(*args, **kwargs)
         mem_after = process_memory()
-        print("{}:consumed memory: {:,}".format(
-            func.__name__,
-            mem_before, mem_after, mem_after - mem_before))
+        print(
+            "{}:consumed memory: {:,}".format(
+                func.__name__, mem_before, mem_after, mem_after - mem_before
+            )
+        )
         return result
+
     return wrapper
 
 
 @contextlib.contextmanager
 def capture():
     import sys
-    oldout,olderr = sys.stdout, sys.stderr
+
+    oldout, olderr = sys.stdout, sys.stderr
     try:
-        out=[io.StringIO(), io.StringIO()]
-        sys.stdout,sys.stderr = out
+        out = [io.StringIO(), io.StringIO()]
+        sys.stdout, sys.stderr = out
         yield out
     finally:
-        sys.stdout,sys.stderr = oldout, olderr
+        sys.stdout, sys.stderr = oldout, olderr
         out[0] = out[0].getvalue()
         out[1] = out[1].getvalue()
 
@@ -487,10 +529,12 @@ def compress_numpy_array(array):
     compressed_bytes = gzip.compress(array_bytes)
     return compressed_bytes
 
+
 def compress_numpy_array_to_base64_string(array):
     compressed_bytes = compress_numpy_array(array)
-    base64_string = base64.b64encode(compressed_bytes).decode('utf-8')
+    base64_string = base64.b64encode(compressed_bytes).decode("utf-8")
     return base64_string
+
 
 def decompress_base64_string_to_numpy_array(base64_string, shape, dtype):
     compressed_bytes = base64.b64decode(base64_string)
@@ -535,6 +579,7 @@ def run_on_data(
     mem_before = process_memory()
     if measure_memory:
         import tracemalloc
+
         tracemalloc.start()
 
     ts_innerloop_start = time()
@@ -548,7 +593,7 @@ def run_on_data(
         X_train, y_train, binarize_sparse=binarize_sparse, drop_first=drop_first
     )
     if preprocessing_steps:
-        #with capture() as out:
+        # with capture() as out:
         pl = Pipeline(preprocessing_steps).fit(X_train, y_train)
         X_train, X_valid, X_test = (
             pl.transform(X_train),
@@ -566,7 +611,7 @@ def run_on_data(
     logger.debug(
         f'f"Largest value of feature and smallest: {X_train_min} {X_train_max}'
     )
-    preprocessing_time = time()-start
+    preprocessing_time = time() - start
 
     # train the workflow
     logger.debug(f"Start fitting the workflow...")
@@ -596,14 +641,26 @@ def run_on_data(
 
     start = time()
     # compute and compress confusion matrices
-    cm_train = compress_numpy_array_to_base64_string(sklearn.metrics.confusion_matrix(y_train, y_hat_train, labels=labels).astype('uint16'))
-    cm_valid = compress_numpy_array_to_base64_string(sklearn.metrics.confusion_matrix(y_valid, y_hat_valid, labels=labels).astype('uint16'))
-    cm_test = compress_numpy_array_to_base64_string(sklearn.metrics.confusion_matrix(y_test, y_hat_test, labels=labels).astype('uint16'))
+    cm_train = compress_numpy_array_to_base64_string(
+        sklearn.metrics.confusion_matrix(y_train, y_hat_train, labels=labels).astype(
+            "uint16"
+        )
+    )
+    cm_valid = compress_numpy_array_to_base64_string(
+        sklearn.metrics.confusion_matrix(y_valid, y_hat_valid, labels=labels).astype(
+            "uint16"
+        )
+    )
+    cm_test = compress_numpy_array_to_base64_string(
+        sklearn.metrics.confusion_matrix(y_test, y_hat_test, labels=labels).astype(
+            "uint16"
+        )
+    )
     # compute the zero-one loss and store in a string
     y_valid_error = np.packbits(y_valid != y_hat_valid)
     y_test_error = np.packbits(y_test != y_hat_test)
-    y_valid_error = base64.b64encode(y_valid_error.astype(np.uint8)).decode('utf-8')
-    y_test_error = base64.b64encode(y_test_error.astype(np.uint8)).decode('utf-8')
+    y_valid_error = base64.b64encode(y_valid_error.astype(np.uint8)).decode("utf-8")
+    y_test_error = base64.b64encode(y_test_error.astype(np.uint8)).decode("utf-8")
     compress_time = time() - start
 
     start = time()
@@ -617,9 +674,17 @@ def run_on_data(
         n_valid_sub = n_valid
     if n_test_sub > n_test:
         n_test_sub = n_test
-    cm_valid_sub = compress_numpy_array_to_base64_string(sklearn.metrics.confusion_matrix(y_valid[:n_valid_sub], y_hat_valid[:n_valid_sub], labels=labels).astype('uint16'))
-    cm_test_sub = compress_numpy_array_to_base64_string(sklearn.metrics.confusion_matrix(y_test[:n_test_sub], y_hat_test[:n_test_sub], labels=labels).astype('uint16'))
-    subsample_time = time()-start
+    cm_valid_sub = compress_numpy_array_to_base64_string(
+        sklearn.metrics.confusion_matrix(
+            y_valid[:n_valid_sub], y_hat_valid[:n_valid_sub], labels=labels
+        ).astype("uint16")
+    )
+    cm_test_sub = compress_numpy_array_to_base64_string(
+        sklearn.metrics.confusion_matrix(
+            y_test[:n_test_sub], y_hat_test[:n_test_sub], labels=labels
+        ).astype("uint16")
+    )
+    subsample_time = time() - start
 
     # ask workflow to update its summary information (post-processing hook)
     logger.debug("Confusion matrices computed. Computing post-hoc data.")

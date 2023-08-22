@@ -5,7 +5,7 @@ $ lcdb run ...
 """
 import argparse
 
-from lcdb.cli import _create, _run, _test
+from lcdb.cli import _create, _run
 
 
 def create_parser():
@@ -16,14 +16,11 @@ def create_parser():
 
     subparsers = parser.add_subparsers()
 
-    # creation of experiments
+    # generation of hyperparameter configurations
     _create.add_subparser(subparsers)
 
     # execution of experiments
     _run.add_subparser(subparsers)
-
-    # testing a workflow
-    _test.add_subparser(subparsers)
 
     return parser
 

@@ -1,29 +1,27 @@
 import ConfigSpace
 
 from .._base_workflow import BaseWorkflow
-import os
-from .._util import unserialize_config_space
 from sklearn.svm import SVC
 from sklearn.multiclass import OneVsRestClassifier
 from ._libsvm_congfigspace import get_configspace
 
-class LibSVMWorkflow(BaseWorkflow):
 
+class LibSVMWorkflow(BaseWorkflow):
     def __init__(self, X_train, y_train, hyperparams):
         super().__init__(X_train, y_train, hyperparams)
 
         hyperparams = hyperparams.copy()
-        hyperparams['verbose'] = False
-        hyperparams.pop('scaler')
+        hyperparams["verbose"] = False
+        hyperparams.pop("scaler")
 
         if hyperparams["cap_max_iter"]:
-            pass # do nothing, max_iter already set
+            pass  # do nothing, max_iter already set
         else:
             hyperparams["max_iter"] = -1
         del hyperparams["cap_max_iter"]
 
-        if hyperparams['class_weight'] == 'none':
-            hyperparams['class_weight'] = None
+        if hyperparams["class_weight"] == "none":
+            hyperparams["class_weight"] = None
 
         if hyperparams["multiclass"] == "ovo":
             del hyperparams["multiclass"]
@@ -32,7 +30,9 @@ class LibSVMWorkflow(BaseWorkflow):
             return
         if hyperparams["multiclass"] == "ovr-scikit":
             del hyperparams["multiclass"]
-            self.learner = OneVsRestClassifier(SVC(**hyperparams), n_jobs=None, verbose=50)
+            self.learner = OneVsRestClassifier(
+                SVC(**hyperparams), n_jobs=None, verbose=50
+            )
             return
 
         raise Exception("Multiclass strategy not implemented")

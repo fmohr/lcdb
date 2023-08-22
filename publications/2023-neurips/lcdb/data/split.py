@@ -10,67 +10,38 @@ from sklearn.pipeline import Pipeline
 import logging
 import sklearn.impute
 
-from lcdb.data._openml import get_openml_dataset_and_check
-from functools import lru_cache
 
-def get_outer_split(X, y, seed, ratio=0.1):
-    """Returns (X_train, X_test, y_train, y_test) arrays with len(X_test) / len(X) = ratio."""
-    return sklearn.model_selection.train_test_split(
-        X, y, train_size=1 - ratio, random_state=seed, stratify=y
-    )
-
-
-def get_inner_split(X, y, outer_seed, inner_seed, outer_ratio=0.1, inner_ratio=0.1):
-    """Returns (X_train, X_valid, X_test, y_train, y_valid, y_test) arrays with len(X_test) / len(X) = outer_ratio and len(X_valid) / (len(X) - len(X_test)) = inner_ratio."""
-
-    num_instances = X.shape[0]
-    max_training_set_size = int((1 - outer_ratio) * (1 - inner_ratio) * num_instances)
-
-    X_learn, X_test, y_learn, y_test = get_outer_split(
-        X, y, outer_seed, ratio=outer_ratio
+def train_valid_test_split(
+    X,
+    y,
+    test_seed,
+    valid_seed,
+    test_prop=0.1,
+    valid_prop=0.1,
+    stratify=True,
+):
+    X_learn, X_test, y_learn, y_test = sklearn.model_selection.train_test_split(
+        X,
+        y,
+        test_size=test_prop,
+        random_state=test_seed,
+        stratify=y if stratify else None,
+        shuffle=True,
     )
     X_train, X_valid, y_train, y_valid = sklearn.model_selection.train_test_split(
         X_learn,
         y_learn,
-        train_size=max_training_set_size,
-        random_state=inner_seed,
-        stratify=y_learn,
+        train_size=int(X.shape[0] * (1 - test_prop - valid_prop)),
+        random_state=valid_seed,
+        stratify=y_learn if stratify else None,
+        shuffle=True,  # TODO: check
     )
     return X_train, X_valid, X_test, y_train, y_valid, y_test
 
 
-@lru_cache(maxsize=2)
-def get_splits_for_anchor2(openmlid, outer_seed, inner_seed, monotonic, valid_prop=0.1, test_prop=0.1):
-    X, y, binarize_sparse, drop_first = get_openml_dataset_and_check(openmlid)
-
-    X_train, X_valid, X_test, y_train, y_valid, y_test = get_inner_split(
-        X, y, outer_seed, inner_seed, inner_ratio=valid_prop, outer_ratio=test_prop
-    )
-
-    return X_train, X_valid, X_test, y_train, y_valid, y_test, binarize_sparse, drop_first
-
-
-def get_splits_for_anchor(X, y, anchor, outer_seed, inner_seed, monotonic, valid_prop=0.1, test_prop=0.1):
-    """Returns (X_train, X_valid, X_test, y_train, y_valid, y_test) arrays with len(X_test) / len(X) = outer_ratio and len(X_valid) / (len(X) - len(X_test)) = inner_ratio and X_train is truncated at index anchor."""
-
-    X_train, X_valid, X_test, y_train, y_valid, y_test = get_inner_split(
-        X, y, outer_seed, inner_seed, inner_ratio=valid_prop, outer_ratio=test_prop
-    )
-    if not monotonic:  # shuffle index set if the train fold should not be monotonic.
-        rs = np.random.RandomState(inner_seed)
-        indices = rs.choice(range(X_train.shape[0]), X_train.shape[0])
-        X_train = X_train[indices]
-        y_train = y_train[indices]
-
-    # check that anchor is not bigger than allowed
-    if anchor > X_train.shape[0]:
-        raise ValueError(
-            f"Invalid anchor {anchor} when available training instances are only {X_train.shape[0]}."
-        )
-    return X_train[:anchor], X_valid, X_test, y_train[:anchor], y_valid, y_test
-
-
-def get_mandatory_preprocessing(X, y, binarize_sparse=False, drop_first=True, scaler='minmax'):
+def get_mandatory_preprocessing(
+    X, y, binarize_sparse=False, drop_first=True, scaler="minmax"
+):
     # determine fixed pre-processing steps for imputation and binarization
     types = [set([type(v) for v in r]) for r in X.T]
     numeric_features = [
@@ -78,11 +49,11 @@ def get_mandatory_preprocessing(X, y, binarize_sparse=False, drop_first=True, sc
     ]
 
     myscaler = None
-    if scaler == 'minmax':
+    if scaler == "minmax":
         myscaler = sklearn.preprocessing.MinMaxScaler()
-    if scaler == 'standardize':
+    if scaler == "standardize":
         myscaler = sklearn.preprocessing.StandardScaler()
-    if scaler == 'none':
+    if scaler == "none":
         numeric_transformer = Pipeline(
             [("imputer", sklearn.impute.SimpleImputer(strategy="median"))]
         )
@@ -90,8 +61,10 @@ def get_mandatory_preprocessing(X, y, binarize_sparse=False, drop_first=True, sc
         if myscaler == None:
             raise Exception("The scaler %s is not implemented." % scaler)
         numeric_transformer = Pipeline(
-            [("imputer", sklearn.impute.SimpleImputer(strategy="median")),
-             ("standardscaler", myscaler)]
+            [
+                ("imputer", sklearn.impute.SimpleImputer(strategy="median")),
+                ("standardscaler", myscaler),
+            ]
         )
 
     categorical_features = [i for i in range(X.shape[1]) if i not in numeric_features]
@@ -103,7 +76,9 @@ def get_mandatory_preprocessing(X, y, binarize_sparse=False, drop_first=True, sc
         f"Missing values for the different attributes are {missing_values_per_feature}."
     )
     # if len(categorical_features) > 0 or sum(missing_values_per_feature) > 0:
-    if True: # always do preprocessing, because training set may not contain nans by coincidence
+    if (
+        True
+    ):  # always do preprocessing, because training set may not contain nans by coincidence
         handle_unknown = "error" if drop_first else "ignore"
         categorical_transformer = Pipeline(
             [
@@ -131,6 +106,7 @@ def get_mandatory_preprocessing(X, y, binarize_sparse=False, drop_first=True, sc
         ]
     else:
         return []
+
 
 def random_split_from_array(
     *arrays: Tuple[np.ndarray],

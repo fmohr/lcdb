@@ -19,7 +19,6 @@ def _load_iris() -> Tuple[np.ndarray, np.ndarray, dict]:
 
     metadata = {
         "type": "classification",
-        "input_dimension": X.shape[1],
         "num_classes": len(iris["target_names"]),
         "description": {k: v for k, v in iris.items() if k not in ["data", "target"]}
     }
@@ -45,11 +44,5 @@ def load_from_sklearn(dataset_name: str) -> Tuple[np.ndarray, np.ndarray, dict]:
         raise ValueError(f"Dataset {dataset_name} not found.")
 
     data, metadata = load_function()
-
-    # Verifications of metadata format
-    assert "type" in metadata
-    if metadata["type"] == "classification":
-        assert "input_dimension" in metadata
-        assert "num_classes" in metadata
 
     return data, metadata

@@ -1,7 +1,7 @@
 """Sub-package for sklearn models.
 """
-from ._knn_workflow import KNNWorkflow
-from ._libsvm_workflow import LibSVMWorkflow
-from ._liblinear_workflow import LibLinearWorkflow
+from ._knn import KNNWorkflow
+from ._libsvm import LibSVMWorkflow
+from ._liblinear import LibLinearWorkflow
 
 __all__ = ["KNNWorkflow", "LibSVMWorkflow", "LibLinearWorkflow"]

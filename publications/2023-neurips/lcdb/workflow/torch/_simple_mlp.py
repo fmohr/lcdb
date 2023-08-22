@@ -3,7 +3,6 @@ import torch.nn.functional as F
 import torch.nn as nn
 import os
 from ._base import PytorchWorkflow
-from .._util import unserialize_config_space
 
 import numpy as np
 
@@ -40,5 +39,7 @@ class SimpleTorchMLPWorkflow(PytorchWorkflow):
     @staticmethod
     def get_config_space() -> ConfigSpace.ConfigurationSpace:
         path = os.path.abspath(__file__)
-        path = path[:path.rfind(os.sep) + 1]
-        return unserialize_config_space(path + "_simple_mlp_cs.json")
+        path = path[:path.rfind(os.sep) + 1] + "_simple_mlp_cs.json"
+        with open(path, "r") as f:
+            json_string = f.read()
+        return ConfigSpace.read_and_write.json.read(json_string)
