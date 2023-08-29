@@ -321,6 +321,7 @@ def test_default_config():
     config_default = config_space.get_default_configuration().get_dictionary()
 
     # config_default["transform_cat"] = "ordinal"
+    config_default["optimizer"] = "Ftrl"
 
     # id 3, 6 are good tests
     output = run(

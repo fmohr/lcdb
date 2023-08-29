@@ -1,5 +1,8 @@
+import importlib
+import logging
 import time
 
+import absl.logging
 import numpy as np
 import tensorflow as tf
 from ConfigSpace import Categorical, ConfigurationSpace, Float, Integer
@@ -13,9 +16,7 @@ from sklearn.preprocessing import (
 )
 
 from .._base_workflow import BaseWorkflow
-
-import logging
-import absl.logging
+from .utils import ACTIVATIONS, OPTIMIZERS
 
 logging.root.removeHandler(absl.logging._absl_handler)
 absl.logging._warn_preinit_stderr = False
@@ -27,8 +28,10 @@ CONFIG_SPACE = ConfigurationSpace(
     name="keras._dense",
     space={
         "num_units": Integer("num_units", bounds=(1, 200), log=True, default=32),
-        "activation": Categorical("activation", items=["relu"], default="relu"),
-        "optimizer": Categorical("optimizer", items=["Adam"], default="Adam"),
+        "activation": Categorical("activation", items=ACTIVATIONS, default="relu"),
+        "optimizer": Categorical(
+            "optimizer", items=list(OPTIMIZERS.keys()), default="Adam"
+        ),
         "learning_rate": Float(
             "learning_rate", bounds=(1e-5, 10.0), log=True, default=1e-3
         ),
@@ -88,7 +91,7 @@ class DenseNNWorkflow(BaseWorkflow):
         self.requires_valid_to_fit = True
 
         self.num_units = num_units
-        self.activation = activation
+        self.activation = None if activation == "none" else activation
         self.optimizer = optimizer
         self.learning_rate = learning_rate
         self.batch_size = batch_size
@@ -189,8 +192,8 @@ class DenseNNWorkflow(BaseWorkflow):
 
         self.learner = self.build_model(X.shape[1:], metadata["num_classes"])
 
-        OptimizerClass = getattr(tf.keras.optimizers, self.optimizer)
-        optimizer = OptimizerClass(learning_rate=self.learning_rate)
+        optimizer = OPTIMIZERS[self.optimizer]()
+        optimizer.learning_rate = self.learning_rate
 
         self.learner.compile(
             optimizer=optimizer,
@@ -207,7 +210,12 @@ class DenseNNWorkflow(BaseWorkflow):
             epochs=self.num_epochs,
             shuffle=self.shuffle_each_epoch,
             validation_data=(X_valid, y_valid),
-            callbacks=[timing_callback],
+            callbacks=[
+                timing_callback,
+                tf.keras.callbacks.TerminateOnNaN(),
+                tf.keras.callbacks.ReduceLROnPlateau(),
+                tf.keras.callbacks.EarlyStopping(patience=10),
+            ],
             verbose=self.verbose,
         ).history
 
