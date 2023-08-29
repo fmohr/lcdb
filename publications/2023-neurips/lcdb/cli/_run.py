@@ -16,6 +16,9 @@ from lcdb.utils import import_attr_from_module
 from sklearn.metrics import accuracy_score, zero_one_loss
 from sklearn.preprocessing import FunctionTransformer, OneHotEncoder
 
+# Avoid Tensorflow Warnings
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = str(3)
+
 
 def add_subparser(subparsers):
     """
@@ -84,7 +87,24 @@ def run(
     test_seed: int = 42,
     valid_prop: float = 0.1,
     test_prop: float = 0.1,
+    known_categories: bool = True,
 ):
+    """This function trains the workflow on a dataset and returns performance metrics.
+
+    Args:
+        job (RunningJob): A running job passed by DeepHyper (represent an instance of the function).
+        openml_id (int, optional): The identifier of the OpenML dataset. Defaults to 3.
+        workflow_class (str, optional): The "path" of the workflow to train. Defaults to "lcdb.workflow.sklearn.LibLinearWorkflow".
+        monotonic (bool, optional): A boolean indicating if the sample-wise learning curve should be monotonic (i.e., sample set at smaller anchors are always included in sample sets at larger anchors) or not. Defaults to True.
+        valid_seed (int, optional): Random state seed of train/validation split. Defaults to 42.
+        test_seed (int, optional): Random state seed of train+validation/test split. Defaults to 42.
+        valid_prop (float, optional): Ratio of validation/(train+validation). Defaults to 0.1.
+        test_prop (float, optional): Ratio of test/data . Defaults to 0.1.
+        known_categories (bool, optional): If all the possible categories are assumed to be known in advance. Defaults to True.
+
+    Returns:
+        dict: a dictionnary with 2 keys (objective, metadata) where objective is the objective maximized by deephyper (if used) and metadata is a JSON serializable sub-dictionnary which are complementary information about the workflow.
+    """
     # Load the workflow
     WorkflowClass = import_attr_from_module(workflow_class)
 
@@ -93,15 +113,21 @@ def run(
     num_instances = X.shape[0]
 
     # Transform categorical features
-    categories = np.asarray(dataset_metadata["categories"], dtype=bool)
+    columns_categories = np.asarray(dataset_metadata["categories"], dtype=bool)
+    values_categories = None
 
-    if not (np.any(categories)):
+    if not (np.any(columns_categories)):
         one_hot_encoder = FunctionTransformer(func=lambda x: x, validate=False)
     else:
+        dataset_metadata["categories"] = {"columns": columns_categories, "values": None}
         one_hot_encoder = OneHotEncoder(
             drop="first", sparse_output=False
         )  # TODO: drop "first" could be an hyperparameter
-        one_hot_encoder.fit(X[:, categories])
+        one_hot_encoder.fit(X[:, columns_categories])
+        if known_categories:
+            values_categories = one_hot_encoder.categories_
+            values_categories = [v.tolist() for v in values_categories]
+            dataset_metadata["categories"]["values"] = values_categories
 
     anchors = get_anchor_schedule(int(num_instances * (1 - test_prop - valid_prop)))
 
@@ -114,6 +140,7 @@ def run(
         "score_values": [],
         "time_types": ["fit", "predict"],
         "time_values": [],
+        "child_fidelities": [],
     }
 
     # Build sample-wise learning curve
@@ -143,27 +170,27 @@ def run(
         X_train = X_train[:anchor]
         y_train = y_train[:anchor]
 
-        # Preprocessing
-        # TODO: could be a module of a workflow
-        logging.info("Preprocessing the data...")
-        # 1. Start by fitting the scaler on the training set
-        X_train_cat = one_hot_encoder.transform(X_train[:, categories])
-        X_train = np.concatenate([X_train_cat, X_train[:, ~categories]], axis=1)
-
-        # 2. Then transform the validation and test sets
-        X_valid_cat = one_hot_encoder.transform(X_valid[:, categories])
-        X_valid = np.concatenate([X_valid_cat, X_valid[:, ~categories]], axis=1)
-
-        X_test_cat = one_hot_encoder.transform(X_test[:, categories])
-        X_test = np.concatenate([X_test_cat, X_test[:, ~categories]], axis=1)
-
         # Create and fit the workflow
         logging.info("Creating and fitting the workflow...")
         workflow = WorkflowClass(**job.parameters)
 
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            workflow.fit(X_train, y_train)
+
+            try:
+                if workflow.requires_valid_to_fit:
+                    workflow.fit(
+                        X_train,
+                        y_train,
+                        X_valid=X_valid,
+                        y_valid=y_valid,
+                        metadata=dataset_metadata,
+                    )
+                else:
+                    workflow.fit(X_train, y_train, metadata=dataset_metadata)
+            except Exception as e:
+                logging.error(f"Error while fitting the workflow: {e}")
+                return {"objective": "F", "metadata": None}
 
         time_fit = workflow.infos["fit_time"]
 
@@ -186,6 +213,10 @@ def run(
         infos["fidelity_values"].append(anchor)
         infos["score_values"].append(scores)
         infos["time_values"].append([time_fit, time_predict])
+
+        # Collect child fidelities (e.g., iteration learning curves with epochs) if available
+        if hasattr(workflow, "fidelities"):
+            infos["child_fidelities"].append(workflow.fidelities)
 
     # Other infos
     infos["dataset_id"] = openml_id
@@ -246,7 +277,7 @@ def main(
         for _, row in ip_df.iterrows():
             initial_points.append(row.to_dict())
     else:
-        initial_points.append(config_default.get_dictionary()) 
+        initial_points.append(config_default.get_dictionary())
 
     evaluator = Evaluator.create(
         run,
@@ -282,14 +313,21 @@ def main(
     results = search.search(max_evals, timeout=timeout)
 
 
-def test_default_config_run_deephyper():
-    workflow_class = "lcdb.workflow.sklearn.LibLinearWorkflow"
-    workflow_class = import_attr_from_module(workflow_class)
-    config_space = workflow_class.get_config_space()
+def test_default_config():
+    # workflow_class = "lcdb.workflow.sklearn.LibLinearWorkflow"
+    workflow_class = "lcdb.workflow.keras.DenseNNWorkflow"
+    WorkflowClass = import_attr_from_module(workflow_class)
+    config_space = WorkflowClass.config_space()
     config_default = config_space.get_default_configuration().get_dictionary()
 
+    # config_default["transform_cat"] = "ordinal"
+
     # id 3, 6 are good tests
-    output = run(RunningJob(id=0, parameters=config_default), openml_id=3, verbose=0)
+    output = run(
+        RunningJob(id=0, parameters=config_default),
+        openml_id=3,
+        workflow_class=workflow_class,
+    )
     import pprint
 
     pprint.pprint(output)
@@ -349,4 +387,4 @@ if __name__ == "__main__":
     #     format="%(asctime)s - %(levelname)s - %(filename)s:%(funcName)s - %(message)s",
     #     force=True,
     # )
-    test_random_sampling()
+    test_default_config()

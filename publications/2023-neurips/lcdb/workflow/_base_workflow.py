@@ -1,10 +1,12 @@
 import abc
 import time
 
-from typing import Any
-
+from typing import Any, Tuple, Dict
 import ConfigSpace
+
 import numpy as np
+
+NP_ARRAY = np.ndarray
 
 from ..data.split import get_mandatory_preprocessing
 
@@ -16,21 +18,28 @@ class BaseWorkflow(abc.ABC):
             "fit_time": None,
             "predict_time": None,
         }
+        # Attributes which indicates if the .transform(...) method was called
+        self.transform_fitted = False
+        self.workflow_fitted = False
 
-    def fit(self, *args, **kwargs) -> "BaseWorkflow":
+        # Indicates if the workflow requires validation data to be fitted
+        self.requires_valid_to_fit = False
+
+    def fit(self, X, y, metadata, *args, **kwargs) -> "BaseWorkflow":
         """Fit the workflow to the data."""
         timestamp_start = time.time()
-        self._fit(*args, **kwargs)
+        self._fit(X=X, y=y, metadata=metadata, *args, **kwargs)
         timestamp_end = time.time()
         self.infos["fit_time"] = timestamp_end - timestamp_start
+        self.workflow_fitted = True
         return self
 
     @abc.abstractmethod
-    def _fit(self, *args, **kwargs) -> "BaseWorkflow":
+    def _fit(self, X, y, metadata, *args, **kwargs) -> "BaseWorkflow":
         """Fit the workflow to the data."""
         raise NotImplementedError
 
-    def predict(self, *args, **kwargs) -> np.ndarray:
+    def predict(self, *args, **kwargs) -> NP_ARRAY:
         """Predict from the data."""
         timestamp_start = time.time()
         y_pred = self._predict(*args, **kwargs)
@@ -45,19 +54,19 @@ class BaseWorkflow(abc.ABC):
         """Predict from the data."""
         raise NotImplementedError
 
-    def get_preprocessing_pipeline(self, X_train, y_train, binarize_sparse, drop_first):
-        preprocessing_steps = get_mandatory_preprocessing(
-            X_train,
-            y_train,
-            binarize_sparse=binarize_sparse,
-            drop_first=drop_first,
-            scaler=self.hyperparams["scaler"],
-        )
-        return preprocessing_steps
+    def transform(self, X, metadata) -> NP_ARRAY:
+        """Transform the data."""
+        timestamp_start = time.time()
+        X = self._transform(X, metadata)
+        timestamp_end = time.time()
+        self.infos["transform_time"] = timestamp_end - timestamp_start
+        self.transform_fitted = True
+        return X
 
     @abc.abstractmethod
-    def update_summary(self) -> dict:
-        """updates the summary in case that it is not updated online."""
+    def _transform(self, X, metadata) -> NP_ARRAY:
+        """Transform the data."""
+        raise NotImplementedError
 
     @abc.abstractclassmethod
     def config_space() -> ConfigSpace.ConfigurationSpace:
