@@ -68,6 +68,5 @@ class BaseWorkflow(abc.ABC):
         """Transform the data."""
         raise NotImplementedError
 
-    @abc.abstractclassmethod
-    def config_space() -> ConfigSpace.ConfigurationSpace:
-        raise NotImplementedError
+    def config_space(cls) -> ConfigSpace.ConfigurationSpace:
+        return cls._config_space

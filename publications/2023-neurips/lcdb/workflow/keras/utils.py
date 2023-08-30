@@ -6,6 +6,7 @@ def is_arm_mac():
     return platform.system() == "Darwin" and platform.processor() == "arm"
 
 
+# !On MacOS arm64, some optimizers are not available and some performance issues exist.
 if is_arm_mac():
     OPTIMIZERS = {
         "SGD": tf.keras.optimizers.SGD,

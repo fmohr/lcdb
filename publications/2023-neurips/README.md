@@ -1,4 +1,6 @@
-# Learning Curves Database for Hyperparameter Optimization
+# LCDB 2.0: Learning Curves Database of Configurable Learning Workflows
+
+LCDB 2.0 is a database of learning workflows with diverse configurations (or hyperparameters).
 
 ## Installation
 
@@ -10,131 +12,24 @@ From this directory
 pip install -e "."
 ```
 
-## Example Usage
+## Data Standards
 
-Create a configuration file in `config/` such as `config/example.cfg`:
+### Representation of Learning Curves
 
-```
-[PY_EXPERIMENTER]
-
-provider = sqlite
-database = lcdb
-table = knn
-
-# train_size and hyperparameters are omitted since they are computed automatically
-keyfields = workflow:str, openmlid:int, valid_prop: float, test_prop: float, seed_outer:int, seed_inner:int, train_sizes:text, hyperparameters:text, monotonic:boolean
-workflow = lcdb.workflow.sklearn.KNNWorkflow
-openmlid = 15
-valid_prop = 0.1
-test_prop = 0.1
-seed_outer = 0
-seed_inner = 0
-train_sizes = -1
-hyperparameters = None
-monotonic = 0
-
-resultfields = result:LONGTEXT
-resultfields.timestamps = false
+```python
+learning_curve = {
+    "fidelity_unit": "epochs",
+    "fidelity_values": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+    "score_types": ["loss", "accuracy"],
+    "score_values": [...],
+    "time_types": ["epoch"],
+    "time_values": [...],
+}
 ```
 
-Then test the workflow used in this configuration `lcdb.workflow.sklearn.KNNWorkflow` by running:
-
-```console
-lcdb test --config config/example.cfg --verbose
-```
-
-To create a database of experiments:
-
-```console
-lcdb create --config config/example.cfg
-```
-
-To pull and execute experiments from the database:
-
-```console
-lcdb run --config config/example.cfg --executor-name debug
-```
-
-
-## TODO
-
-### SVM
-
-...
-
-### Neural Networks
-
-Implementing regularization techniques for neural networks:
-
-- [ ] augmentation
-    - [ ] adversarial
-    - [ ] cutmix
-    - [ ] mixup
-    - [ ] cutout
-- [x] batch normalization
-- [ ] stochastic weight averaging (available in torch)
-- [ ] ensembling
-    - [ ] ensembling with uniform weighting
-    - [ ] ensembling with bootstrap resampling
-- [x] residual connections
-- [ ] shake shape (?)
-- [x] weight decay
-- [ ] shake drop
-- [ ] lookahead
-- [x] dropout
-
-
-```console
-conda create -n lcdb python=3.9 -y
-conda activate lcdb
-mkdir build && cd build/
-git clone https://github.com/automl/Auto-PyTorch.git && cd Auto-PyTorch/
-
-# The following line will not run on MacOS (arm64)
-conda install gxx_linux-64 gcc_linux-64 swig -y
-
-cat requirements.txt | xargs -n 1 -L 1 pip install
-pip install -e "."
-
-git checkout regularization_cocktails
-
-cd ..
-git clone https://github.com/releaunifreiburg/WellTunedSimpleNets.git
-```
-
-```
-pip install "pandas<2.0.0"
-pip install "smac<2.0.0"
-```
-
-**Comment**:
-- Installing directly the requirements from `regularization_cocktails` is not working... the requirements are very strict (i.e., strict version is used for all dependencies) and can hardly adapt to other environments.
-
-
-**Regularization Cocktails**:
-- [ ] `stochastic_weight_averaging`
-    - Description: If stochastic weight averaging should be used.
-    - Value: `[True, False]`
-- [ ] `snapshot_ensembling`
-    - Description: If snapshot ensembling should be used.
-    - Value: `[True, False]`
-- [ ] `lookahead`
-    - Description: If the lookahead optimizing technique should be used.
-    - Value: `[True, False]`
-- [ ] `weight_decay`
-    - Description: If weight decay regularization should be used.
-    - Value: `[True, False]`
-- [ ] `batch_normalization`
-    - Description: If batch normalization regularization should be used.
-    - Value: `[True, False]`
-- [ ] `skip_connection`
-    - Description: If skip connections should be used. Turns the network into a residual network.- Value: `[True, False]`
-- [ ] `dropout` 
-    - Description: If dropout regularization should be used.
-    - Value: `[True, False]`
-- [ ] `multi_branch_choice`
-    - Description: Multibranch network regularization. Only active when `skip_connection` is active.
-    - Value: `['none', 'shake-shake', 'shake-drop']`
-- [ ] `augmentation`
-    - Description: If methods that augment examples should be used.
-    - Value: `['mixup', 'cutout', 'cutmix', 'standard', 'adversarial']`
+- `fidelity_unit`: a string, describing the unit of the fidelity (e.g., `samples`, `epochs`, `batches`, `resolution`, etc.).
+- `fidelity_values`: a 1-D array of reals, giving the fidelity value at which the `score_values` and `time_values` are collected.
+- `score_types`: a 1-D array of strings, describing the name(s) of the scoring function(s) collected (e.g., `loss`, `accuracy`, `balanced_accuracy`, etc.).
+- `score_values`: a 3-D array of reals, where `axis=0` corresponds to `fidelity_values` and has the same length, where `axis=1` corresponds to data splits `["train", "valid", "test"]` (the 3 are not always present) with a length from 1 to 3, where `axis=2` corresponds to `score_types` and has the same length.
+- `time_types`: a 1-D array of strings, where each value describes a type of timing (e.g., `fit`, `predict`, `epoch`).
+- `times_values`: a 3-D array of reals, where `axis=0` corresponds to `fidelity_values` and has the same length, where `axis=1` corresponds to data splits `["train", "valid", "test"]` (the 3 are not always present) with a length from 1 to 3, where `axis=2` corresponds to `time_types` and has the same length. **REFINE**

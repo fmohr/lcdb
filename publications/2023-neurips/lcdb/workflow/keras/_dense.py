@@ -107,7 +107,7 @@ class DenseNNWorkflow(BaseWorkflow):
         self.fidelities = {
             "fidelity_unit": "epochs",
             "fidelity_values": [],
-            "score_types": ["loss", "accuracy", "val_loss", "val_accuracy"],
+            "score_types": ["loss", "accuracy"],
             "score_values": [],
             "time_types": ["epoch"],
             "time_values": [],
@@ -115,7 +115,6 @@ class DenseNNWorkflow(BaseWorkflow):
 
     @classmethod
     def config_space(cls):
-        # TODO: If the config_space needs to be expanded with preprocessing module it should be done here
         return cls._config_space
 
     def _transform(self, X, metadata):
@@ -219,12 +218,17 @@ class DenseNNWorkflow(BaseWorkflow):
             verbose=self.verbose,
         ).history
 
+        # Collect metrics
+        n = len(self.fidelities["score_types"])
+        keys = self.fidelities["score_types"] + [
+            f"val_{k}" for k in self.fidelities["score_types"]
+        ]
         self.fidelities["fidelity_values"] = (
             np.arange(len(fit_history["loss"])) + 1
         ).tolist()
         self.fidelities["score_values"] = [
-            list(scores)
-            for scores in zip(*(fit_history[k] for k in self.fidelities["score_types"]))
+            [list(scores[:n]), list(scores[n:])]
+            for scores in zip(*(fit_history[k] for k in keys))
         ]
         self.fidelities["time_values"] = timing_callback.times
 
