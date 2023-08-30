@@ -12,7 +12,13 @@ From this directory
 pip install -e "."
 ```
 
+
+
 ## Data Standards
+
+### Results Dataframes
+
+DeepHyper returns `results.csv` files. Such files can be opened with Pandas.
 
 ### Representation of Learning Curves
 

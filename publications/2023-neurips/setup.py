@@ -21,17 +21,16 @@ platform_infos = platform.platform()
 # What packages are required for this module to be executed?
 REQUIRED = [
     "ConfigSpace>=0.4.20,<=0.6.1",
+    "deephyper[default,ray,redis-hiredis]>=0.6.0",
     "numpy",
     "openml",
-    "py_experimenter>=1.1,<2",
     "pandas>=0.24.2",
+    # "py_experimenter>=1.1,<2",
+    "pyyaml",
     "scikit-learn>=0.23.1",
     "scipy>=1.7",
-    "torch>=1.13.1",
     "tqdm>=4.64.0",
-    "pyyaml",
     "xgboost>=1.7.6",
-    "func_timeout",
 ]
 
 
