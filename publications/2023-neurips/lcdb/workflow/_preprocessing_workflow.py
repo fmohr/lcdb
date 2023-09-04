@@ -106,7 +106,7 @@ class PreprocessedWorkflow(BaseWorkflow, ABC):
                     f"Unknown {KEY_CAT_ENCODER} technique {kwargs['cat_encoder']}"
                 )
             cat_steps.append((KEY_CAT_ENCODER, cat_encoder))
-            treated_kws.append(KEY_CAT_ENCODER)
+        treated_kws.append(KEY_CAT_ENCODER)
 
         # initialize steps with the preliminary transformers
         transformers = []

@@ -31,89 +31,31 @@ def add_subparser(subparsers):
         subparser_name, help="Run experiments with DeepHyper."
     )
 
+    subparser.add_argument("-id", "--openml-id", type=int, required=True)
+    subparser.add_argument("-w", "--workflow-class", type=str, required=True)
     subparser.add_argument(
-        "-id", "--openml-id", type=int, required=True, help="OpenML task ID"
+        "-m", "--monotonic", action="store_true", default=False, required=False
+    )
+    subparser.add_argument("-vs", "--valid-seed", type=int, default=42, required=False)
+    subparser.add_argument("-ts", "--test-seed", type=int, default=42, required=False)
+    subparser.add_argument(
+        "-vp", "--valid-prop", type=float, default=0.1, required=False
     )
     subparser.add_argument(
-        "-w", "--workflow-class", type=str, required=True, help="Workflow class path"
+        "-tp", "--test-prop", type=float, default=0.1, required=False
     )
-    subparser.add_argument(
-        "-m",
-        "--monotonic",
-        action="store_true",
-        default=False,
-        required=False,
-        help="Use monotonic constraints for sample-wise learning curves (larger anchors are providing supersets of smaller anchors).",
-    )
-    subparser.add_argument(
-        "-vs",
-        "--valid-seed",
-        type=int,
-        default=42,
-        required=False,
-        help="Seed for validation split",
-    )
-    subparser.add_argument(
-        "-ts",
-        "--test-seed",
-        type=int,
-        default=42,
-        required=False,
-        help="Seed for test split",
-    )
-    subparser.add_argument(
-        "-vp",
-        "--valid-prop",
-        type=float,
-        default=0.1,
-        required=False,
-        help="Validation split proportion",
-    )
-    subparser.add_argument(
-        "-tp",
-        "--test-prop",
-        type=float,
-        default=0.1,
-        required=False,
-        help="Test split proportion",
-    )
-    subparser.add_argument(
-        "-d",
-        "--log-dir",
-        type=str,
-        default=".",
-        required=False,
-        help="Directory to log results to",
-    )
+    subparser.add_argument("-d", "--log-dir", type=str, default=".", required=False)
     subparser.add_argument(
         "--max-evals",
         type=int,
         default=100,
         required=False,
-        help="Maximum number of evaluations",
+        help="Number of configurations to run",
     )
+    subparser.add_argument("-t", "--timeout", type=int, default=1800, required=False)
+    subparser.add_argument("--initial-configs", type=str, required=False, default=None)
     subparser.add_argument(
-        "-t",
-        "--timeout",
-        type=int,
-        default=1800,
-        required=False,
-        help="Evaluation timeout in seconds (for all cumulated evaluations)",
-    )
-    subparser.add_argument(
-        "--initial-configs",
-        type=str,
-        required=False,
-        default=None,
-        help="Path to initial configurations CSV file",
-    )
-    subparser.add_argument(
-        "-v",
-        "--verbose",
-        action="store_true",
-        default=False,
-        required=False,
-        help="Verbose logging",
+        "-v", "--verbose", action="store_true", default=False, required=False
     )
 
     subparser.set_defaults(func=function_to_call)
@@ -146,6 +88,7 @@ def run(
     valid_prop: float = 0.1,
     test_prop: float = 0.1,
     known_categories: bool = True,
+    raise_errors: bool = False
 ):
     """This function trains the workflow on a dataset and returns performance metrics.
 
@@ -159,6 +102,7 @@ def run(
         valid_prop (float, optional): Ratio of validation/(train+validation). Defaults to 0.1.
         test_prop (float, optional): Ratio of test/data . Defaults to 0.1.
         known_categories (bool, optional): If all the possible categories are assumed to be known in advance. Defaults to True.
+        raise_errors (bool, optional): If `True`, then errors are risen to the outside. Otherwise, just a log message is generated. Defaults to True.
 
     Returns:
         dict: a dictionnary with 2 keys (objective, metadata) where objective is the objective maximized by deephyper (if used) and metadata is a JSON serializable sub-dictionnary which are complementary information about the workflow.
@@ -174,10 +118,11 @@ def run(
     columns_categories = np.asarray(dataset_metadata["categories"], dtype=bool)
     values_categories = None
 
+    dataset_metadata["categories"] = {"columns": columns_categories}
     if not (np.any(columns_categories)):
         one_hot_encoder = FunctionTransformer(func=lambda x: x, validate=False)
     else:
-        dataset_metadata["categories"] = {"columns": columns_categories, "values": None}
+        dataset_metadata["categories"]["values"] = None
         one_hot_encoder = OneHotEncoder(
             drop="first", sparse_output=False
         )  # TODO: drop "first" could be an hyperparameter
@@ -215,7 +160,7 @@ def run(
         train_idx = np.arange(X_train.shape[0])
         # If not monotonic, the training set should be shuffled differently for each anchor
         # so that the training sets of different anchors do not contain eachother
-        if not (monotonic):
+        if not monotonic:
             random_seed_train_shuffle = np.random.RandomState(valid_seed).randint(
                 0, 2**32 - 1, size=len(anchors)
             )[i]
@@ -248,6 +193,8 @@ def run(
                     workflow.fit(X_train, y_train, metadata=dataset_metadata)
             except Exception as e:
                 logging.error(f"Error while fitting the workflow: {e}")
+                if raise_errors:
+                    raise
                 return {"objective": "F", "metadata": None}
 
         time_fit = workflow.infos["fit_time"]
@@ -384,8 +331,9 @@ def test_default_config():
     # id 3, 6 are good tests
     output = run(
         RunningJob(id=0, parameters=config_default),
-        openml_id=188,
+        openml_id=3,
         workflow_class=workflow_class,
+        raise_errors=True
     )
     import pprint
 
