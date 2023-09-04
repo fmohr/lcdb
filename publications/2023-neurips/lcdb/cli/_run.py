@@ -31,31 +31,89 @@ def add_subparser(subparsers):
         subparser_name, help="Run experiments with DeepHyper."
     )
 
-    subparser.add_argument("-id", "--openml-id", type=int, required=True)
-    subparser.add_argument("-w", "--workflow-class", type=str, required=True)
     subparser.add_argument(
-        "-m", "--monotonic", action="store_true", default=False, required=False
-    )
-    subparser.add_argument("-vs", "--valid-seed", type=int, default=42, required=False)
-    subparser.add_argument("-ts", "--test-seed", type=int, default=42, required=False)
-    subparser.add_argument(
-        "-vp", "--valid-prop", type=float, default=0.1, required=False
+        "-id", "--openml-id", type=int, required=True, help="OpenML task ID"
     )
     subparser.add_argument(
-        "-tp", "--test-prop", type=float, default=0.1, required=False
+        "-w", "--workflow-class", type=str, required=True, help="Workflow class path"
     )
-    subparser.add_argument("-d", "--log-dir", type=str, default=".", required=False)
+    subparser.add_argument(
+        "-m",
+        "--monotonic",
+        action="store_true",
+        default=False,
+        required=False,
+        help="Use monotonic constraints for sample-wise learning curves (larger anchors are providing supersets of smaller anchors).",
+    )
+    subparser.add_argument(
+        "-vs",
+        "--valid-seed",
+        type=int,
+        default=42,
+        required=False,
+        help="Seed for validation split",
+    )
+    subparser.add_argument(
+        "-ts",
+        "--test-seed",
+        type=int,
+        default=42,
+        required=False,
+        help="Seed for test split",
+    )
+    subparser.add_argument(
+        "-vp",
+        "--valid-prop",
+        type=float,
+        default=0.1,
+        required=False,
+        help="Validation split proportion",
+    )
+    subparser.add_argument(
+        "-tp",
+        "--test-prop",
+        type=float,
+        default=0.1,
+        required=False,
+        help="Test split proportion",
+    )
+    subparser.add_argument(
+        "-d",
+        "--log-dir",
+        type=str,
+        default=".",
+        required=False,
+        help="Directory to log results to",
+    )
     subparser.add_argument(
         "--max-evals",
         type=int,
         default=100,
         required=False,
-        help="Number of configurations to run",
+        help="Maximum number of evaluations",
     )
-    subparser.add_argument("-t", "--timeout", type=int, default=1800, required=False)
-    subparser.add_argument("--initial-configs", type=str, required=False, default=None)
     subparser.add_argument(
-        "-v", "--verbose", action="store_true", default=False, required=False
+        "-t",
+        "--timeout",
+        type=int,
+        default=1800,
+        required=False,
+        help="Evaluation timeout in seconds (for all cumulated evaluations)",
+    )
+    subparser.add_argument(
+        "--initial-configs",
+        type=str,
+        required=False,
+        default=None,
+        help="Path to initial configurations CSV file",
+    )
+    subparser.add_argument(
+        "-v",
+        "--verbose",
+        action="store_true",
+        default=False,
+        required=False,
+        help="Verbose logging",
     )
 
     subparser.set_defaults(func=function_to_call)
