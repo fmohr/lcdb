@@ -26,12 +26,11 @@ def load_from_openml(dataset_id: str) -> Tuple[np.ndarray, np.ndarray, dict]:
     X, y, categorical_indicator, _ = dataset.get_data(
         target=dataset.default_target_attribute
     )
-
     X, y = X.values, y.values
 
     metadata = {
         "type": "classification",
-        "num_classes": len(dataset.retrieve_class_labels()),
+        "num_classes": len(np.unique(y)),
         "categories": categorical_indicator,
         "description": dataset.description,
     }

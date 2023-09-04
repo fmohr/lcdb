@@ -271,13 +271,13 @@ def main(
 
     # Initial Configs
     initial_points = []
-    if os.path.exists(initial_configs):
+    if initial_configs is not None and os.path.exists(initial_configs):
         ip_df = pd.read_csv(initial_configs)
         ip_df = ip_df[problem.hyperparameter_names]
         for _, row in ip_df.iterrows():
             initial_points.append(row.to_dict())
     else:
-        initial_points.append(config_default.get_dictionary())
+        initial_points.append(config_default)
 
     evaluator = Evaluator.create(
         run,
@@ -314,8 +314,8 @@ def main(
 
 
 def test_default_config():
-    # workflow_class = "lcdb.workflow.sklearn.LibLinearWorkflow"
-    workflow_class = "lcdb.workflow.keras.DenseNNWorkflow"
+    workflow_class = "lcdb.workflow.sklearn.LibLinearWorkflow"
+    #workflow_class = "lcdb.workflow.keras.DenseNNWorkflow"
     WorkflowClass = import_attr_from_module(workflow_class)
     config_space = WorkflowClass.config_space()
     config_default = config_space.get_default_configuration().get_dictionary()
@@ -326,7 +326,7 @@ def test_default_config():
     # id 3, 6 are good tests
     output = run(
         RunningJob(id=0, parameters=config_default),
-        openml_id=3,
+        openml_id=188,
         workflow_class=workflow_class,
     )
     import pprint

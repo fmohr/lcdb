@@ -19,7 +19,7 @@ from sklearn.preprocessing import (
 )
 from sklearn.svm import LinearSVC
 
-from .._base_workflow import BaseWorkflow
+from .._preprocessing_workflow import PreprocessedWorkflow
 
 CONFIG_SPACE = ConfigurationSpace(
     name="sklearn._liblinear",
@@ -39,13 +39,6 @@ CONFIG_SPACE = ConfigurationSpace(
         "fit_intercept": Categorical("fit_intercept", [False, True], default=True),
         "intercept_scaling": Float(
             "intercept_scaling", bounds=(1.0, 1e3), default=1.0, log=True
-        ),
-        # TODO: refine preprocessing
-        "transform_real": Categorical(
-            "transform_real", ["minmax", "std", "none"], default="none"
-        ),
-        "transform_cat": Categorical(
-            "transform_cat", ["onehot", "ordinal"], default="onehot"
         ),
     },
 )
@@ -73,9 +66,14 @@ forbidden_clause5 = ForbiddenAndConjunction(forbidden_clause4, forbidden_clause_
 CONFIG_SPACE.add_forbidden_clause(forbidden_clause5)
 
 
-class LibLinearWorkflow(BaseWorkflow):
+class LibLinearWorkflow(PreprocessedWorkflow):
     # Static Attribute
     _config_space = CONFIG_SPACE
+    _config_space.add_configuration_space(
+        prefix="",
+        delimiter="",
+        configuration_space=PreprocessedWorkflow.config_space()
+    )
 
     def __init__(
         self,
@@ -89,14 +87,9 @@ class LibLinearWorkflow(BaseWorkflow):
         penalty="l2",
         fit_intercept=True,
         intercept_scaling=1.0,
-        transform_real="none",
-        transform_cat="onehot",
         **kwargs,
     ):
-        super().__init__()
-
-        self.transform_real = transform_real
-        self.transform_cat = transform_cat
+        super().__init__(**kwargs)
 
         learner_kwargs = dict(
             dual=dual,
@@ -109,6 +102,7 @@ class LibLinearWorkflow(BaseWorkflow):
             penalty=penalty,
             fit_intercept=fit_intercept,
             intercept_scaling=intercept_scaling,
+            random_state=0  # no randomness desired for the learner itself
         )
 
         if multi_class == "ovr":
@@ -118,65 +112,11 @@ class LibLinearWorkflow(BaseWorkflow):
 
     @classmethod
     def config_space(cls):
-        # TODO: If the config_space needs to be expanded with preprocessing module it should be done here
         return cls._config_space
-
-    def _transform(self, X, metadata):
-        X_cat = X[:, metadata["categories"]["columns"]]
-        X_real = X[:, ~metadata["categories"]["columns"]]
-
-        has_cat = X_cat.shape[1] > 0
-        has_real = X_real.shape[1] > 0
-
-        if not (self.transform_fitted):
-            # Categorical features
-            if self.transform_cat == "onehot":
-                self._transformer_cat = OneHotEncoder(drop="first", sparse_output=False)
-            elif self.transform_cat == "ordinal":
-                self._transformer_cat = OrdinalEncoder()
-            else:
-                raise ValueError(
-                    f"Unknown categorical transformation {self.transform_cat}"
-                )
-
-            if metadata["categories"]["values"] is not None:
-                max_categories = max(len(x) for x in metadata["categories"]["values"])
-                values = np.array(
-                    [
-                        c_val + [c_val[-1]] * (max_categories - len(c_val))
-                        for c_val in metadata["categories"]["values"]
-                    ]
-                ).T
-            else:
-                values = X_cat
-
-            if has_cat:
-                self._transformer_cat.fit(values)
-
-            # Real features
-            if self.transform_real == "minmax":
-                self._transformer_real = MinMaxScaler()
-            elif self.transform_real == "std":
-                self._transformer_real = StandardScaler()
-            elif self.transform_real == "none":
-                # No transformation
-                self._transformer_real = FunctionTransformer(func=lambda x: x)
-            else:
-                raise ValueError(f"Unknown real transformation {self.transform_real}")
-
-            if has_real:
-                self._transformer_real.fit(X_real)
-
-        if has_cat:
-            X_cat = self._transformer_cat.transform(X_cat)
-        if has_real:
-            X_real = self._transformer_real.transform(X_real)
-        X = np.concatenate([X_real, X_cat], axis=1)
-        return X
 
     def _fit(self, X, y, metadata):
         self.metadata = metadata
-        X = self.transform(X, metadata)
+        X = self.transform(X, y, metadata)
 
         self.learner.fit(X, y)
 
@@ -189,5 +129,5 @@ class LibLinearWorkflow(BaseWorkflow):
             self.infos["n_iter_"] = n_iter_
 
     def _predict(self, X):
-        X = self.transform(X, metadata=self.metadata)
+        X = self.pp_pipeline.transform(X)
         return self.learner.predict(X)

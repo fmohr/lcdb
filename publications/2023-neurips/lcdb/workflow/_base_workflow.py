@@ -8,16 +8,15 @@ import numpy as np
 
 NP_ARRAY = np.ndarray
 
-from ..data.split import get_mandatory_preprocessing
-
 
 class BaseWorkflow(abc.ABC):
-    def __init__(self) -> None:
+    def __init__(self, **kwargs) -> None:
         super().__init__()
         self.infos = {
             "fit_time": None,
             "predict_time": None,
         }
+
         # Attributes which indicates if the .transform(...) method was called
         self.transform_fitted = False
         self.workflow_fitted = False
@@ -54,17 +53,17 @@ class BaseWorkflow(abc.ABC):
         """Predict from the data."""
         raise NotImplementedError
 
-    def transform(self, X, metadata) -> NP_ARRAY:
+    def transform(self, X, y, metadata) -> NP_ARRAY:
         """Transform the data."""
         timestamp_start = time.time()
-        X = self._transform(X, metadata)
+        X = self._transform(X, y, metadata)
         timestamp_end = time.time()
         self.infos["transform_time"] = timestamp_end - timestamp_start
         self.transform_fitted = True
         return X
 
     @abc.abstractmethod
-    def _transform(self, X, metadata) -> NP_ARRAY:
+    def _transform(self, X, y, metadata) -> NP_ARRAY:
         """Transform the data."""
         raise NotImplementedError
 

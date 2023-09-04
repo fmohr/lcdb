@@ -183,10 +183,10 @@ class DenseNNWorkflow(BaseWorkflow):
 
     def _fit(self, X, y, X_valid, y_valid, metadata):
         self.metadata = metadata
-        X = self.transform(X, metadata).astype(np.float32)
+        X = self.transform(X, y, metadata).astype(np.float32)
         y = self._transformer_label.fit_transform(y)
 
-        X_valid = self.transform(X_valid, metadata).astype(np.float32)
+        X_valid = self.transform(X_valid, y_valid, metadata).astype(np.float32)
         y_valid = self._transformer_label.transform(y_valid)
 
         self.learner = self.build_model(X.shape[1:], metadata["num_classes"])
