@@ -1,5 +1,4 @@
 # Define the Config Space
-import numpy as np
 from ConfigSpace import (
     Categorical,
     ConfigurationSpace,
@@ -7,16 +6,8 @@ from ConfigSpace import (
     ForbiddenAndConjunction,
     ForbiddenEqualsClause,
     Integer,
-    Uniform,
 )
 from sklearn.multiclass import OneVsOneClassifier
-from sklearn.preprocessing import (
-    OneHotEncoder,
-    MinMaxScaler,
-    StandardScaler,
-    FunctionTransformer,
-    OrdinalEncoder,
-)
 from sklearn.svm import LinearSVC
 
 from .._preprocessing_workflow import PreprocessedWorkflow
@@ -70,9 +61,7 @@ class LibLinearWorkflow(PreprocessedWorkflow):
     # Static Attribute
     _config_space = CONFIG_SPACE
     _config_space.add_configuration_space(
-        prefix="",
-        delimiter="",
-        configuration_space=PreprocessedWorkflow.config_space()
+        prefix="", delimiter="", configuration_space=PreprocessedWorkflow.config_space()
     )
 
     def __init__(
@@ -87,6 +76,7 @@ class LibLinearWorkflow(PreprocessedWorkflow):
         penalty="l2",
         fit_intercept=True,
         intercept_scaling=1.0,
+        random_state=None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -102,7 +92,7 @@ class LibLinearWorkflow(PreprocessedWorkflow):
             penalty=penalty,
             fit_intercept=fit_intercept,
             intercept_scaling=intercept_scaling,
-            random_state=0  # no randomness desired for the learner itself
+            random_state=random_state,
         )
 
         if multi_class == "ovr":

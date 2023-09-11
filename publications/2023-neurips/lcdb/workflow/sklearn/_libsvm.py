@@ -1,70 +1,105 @@
-import ConfigSpace
-
-from .._base_workflow import BaseWorkflow
+from ConfigSpace import (
+    Categorical,
+    ConfigurationSpace,
+    Constant,
+    EqualsCondition,
+    Float,
+    Integer,
+    OrConjunction,
+)
 from sklearn.svm import SVC
-from sklearn.multiclass import OneVsRestClassifier
-from ._libsvm_congfigspace import get_configspace
+
+from .._preprocessing_workflow import PreprocessedWorkflow
+
+CONFIG_SPACE = ConfigurationSpace(
+    name="libsvm",
+    space={
+        "C": Float("C", bounds=(1e-12, 1e12), default=1, log=True),
+        "shrinking": Categorical("shrinking", [True, False], default=True),
+        "tol": Float("tol", bounds=(4.5e-5, 2), default=1e-3, log=True),
+        "cap_max_iter": Categorical("cap_max_iter", [True, False], default=False),
+        "max_iter": Integer("max_iter", bounds=(100, 10000), log=True, default=10000),
+        "class_weight": Categorical(
+            "class_weight", ["balanced", "none"], default="none"
+        ),
+        # "probability": Constant("probability", False),
+        # "break_ties": Categorical("break_ties", [False, True], default=False), # not relevant,
+    },
+)
+
+kernel = Categorical("kernel", ["poly", "rbf", "sigmoid"], default="rbf")
+gamma = Float(
+    "gamma",
+    bounds=(1e-12, 1e12),
+    default=1,
+    log=True,
+)
+degree = Integer(
+    "degree",
+    bounds=(2, 5),
+    default=2,
+)
+coef0 = Float(
+    "coef0",
+    bounds=(1e-12, 1e12),
+    default=0.1,  # strange, 0.0 is not allowed?
+    log=True,
+)
+CONFIG_SPACE.add_hyperparameters([kernel, degree, coef0, gamma])
 
 
-class LibSVMWorkflow(BaseWorkflow):
-    def __init__(self, X_train, y_train, hyperparams):
-        super().__init__(X_train, y_train, hyperparams)
+class LibSVMWorkflow(PreprocessedWorkflow):
+    # Static Attribute
+    _config_space = CONFIG_SPACE
+    _config_space.add_configuration_space(
+        prefix="", delimiter="", configuration_space=PreprocessedWorkflow.config_space()
+    )
 
-        hyperparams = hyperparams.copy()
-        hyperparams["verbose"] = False
-        hyperparams.pop("scaler")
+    def __init__(
+        self,
+        C=1,
+        shrinking=True,
+        tol=1e-4,
+        cap_max_iter=False,
+        max_iter=10_000,
+        class_weight="none",
+        cache_size=16000.0,
+        kernel="rbf",
+        gamma=1,
+        degree=2,
+        coef0=0.1,
+        random_state=None,
+        **kwargs,
+    ):
+        super().__init__(**kwargs)
 
-        if hyperparams["cap_max_iter"]:
-            pass  # do nothing, max_iter already set
-        else:
-            hyperparams["max_iter"] = -1
-        del hyperparams["cap_max_iter"]
+        learner_kwargs = dict(
+            C=C,
+            shrinking=shrinking,
+            tol=tol,
+            max_iter=max_iter if cap_max_iter else -1,
+            class_weight=None if class_weight == "none" else class_weight,
+            cache_size=cache_size,
+            kernel=kernel,
+            gamma=gamma,
+            degree=degree,
+            coef0=coef0,
+            random_state=random_state,
+        )
+        self.learner = SVC(**learner_kwargs)
 
-        if hyperparams["class_weight"] == "none":
-            hyperparams["class_weight"] = None
+    @classmethod
+    def config_space(cls):
+        return cls._config_space
 
-        if hyperparams["multiclass"] == "ovo":
-            del hyperparams["multiclass"]
-            hyperparams["decision_function_shape"] = "ovo"
-            self.learner = SVC(**hyperparams)
-            return
-        if hyperparams["multiclass"] == "ovr-scikit":
-            del hyperparams["multiclass"]
-            self.learner = OneVsRestClassifier(
-                SVC(**hyperparams), n_jobs=None, verbose=50
-            )
-            return
+    def _fit(self, X, y, metadata):
+        self.metadata = metadata
+        X = self.transform(X, y, metadata)
 
-        raise Exception("Multiclass strategy not implemented")
+        self.learner.fit(X, y)
 
-    def update_summary(self):
-        pass
+        self.infos["n_iter_"] = self.learner.n_iter_
 
-    @staticmethod
-    def get_config_space() -> ConfigSpace.ConfigurationSpace:
-        return get_configspace()
-
-    def fit(self, data_train, data_valid, data_test) -> "BaseWorkflow":
-        X_train, y_train = data_train
-        self.learner.fit(X_train, y_train)
-        if type(self.learner) is SVC:
-            self.summary["n_iter_"] = self.learner.n_iter_.tolist()
-            self.summary["n_support_"] = self.learner.n_support_.tolist()
-        else:
-            n_iter_ = []
-            n_support_ = []
-            for est in self.learner.estimators_:
-                n_iter_.append(est.n_iter_.tolist())
-                n_support_.append(est.n_support_.tolist())
-            self.summary["n_iter_"] = n_iter_
-            self.summary["n_support_"] = n_support_
-        return self
-
-    def predict_proba(self, X):
-        raise Exception("Sorry, we don't do probabilistic classification with SVMs")
-
-    def decision_function(self, X):
-        return self.learner.decision_function(X)
-
-    def predict(self, X):
+    def _predict(self, X):
+        X = self.pp_pipeline.transform(X)
         return self.learner.predict(X)

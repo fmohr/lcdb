@@ -58,4 +58,6 @@ def main(
     configs = map(lambda c: c.get_dictionary(), configs)
 
     pd.DataFrame(configs).to_csv(output_file, index=False)
-    print(f"Experiments written to {output_file}")
+
+    if verbose:
+        print(f"Experiments written to {output_file}")

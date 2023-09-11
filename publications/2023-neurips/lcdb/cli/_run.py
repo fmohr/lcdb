@@ -1,11 +1,15 @@
 """Command line to run experiments."""
+import functools
+import json
 import logging
 import os
 import pathlib
+import traceback
 import warnings
 
 import numpy as np
 import pandas as pd
+from deephyper.core.utils._timeout import terminate_on_timeout
 from deephyper.evaluator import Evaluator, RunningJob, profile
 from deephyper.evaluator.callback import TqdmCallback
 from deephyper.problem import HpProblem
@@ -31,31 +35,112 @@ def add_subparser(subparsers):
         subparser_name, help="Run experiments with DeepHyper."
     )
 
-    subparser.add_argument("-id", "--openml-id", type=int, required=True)
-    subparser.add_argument("-w", "--workflow-class", type=str, required=True)
     subparser.add_argument(
-        "-m", "--monotonic", action="store_true", default=False, required=False
-    )
-    subparser.add_argument("-vs", "--valid-seed", type=int, default=42, required=False)
-    subparser.add_argument("-ts", "--test-seed", type=int, default=42, required=False)
-    subparser.add_argument(
-        "-vp", "--valid-prop", type=float, default=0.1, required=False
+        "-id",
+        "--openml-id",
+        type=int,
+        required=True,
+        help="The identifier of the OpenML dataset.",
     )
     subparser.add_argument(
-        "-tp", "--test-prop", type=float, default=0.1, required=False
+        "-w",
+        "--workflow-class",
+        type=str,
+        required=True,
+        help="The 'path' of the workflow to train.",
     )
-    subparser.add_argument("-d", "--log-dir", type=str, default=".", required=False)
+    subparser.add_argument(
+        "-m",
+        "--monotonic",
+        action="store_true",
+        default=False,
+        required=False,
+        help="A boolean indicating if the sample-wise learning curve should be monotonic (i.e., sample set at smaller anchors are always included in sample sets at larger anchors) or not.",
+    )
+    subparser.add_argument(
+        "-vs",
+        "--valid-seed",
+        type=int,
+        default=42,
+        required=False,
+        help="Random state seed of train/validation split.",
+    )
+    subparser.add_argument(
+        "-ts",
+        "--test-seed",
+        type=int,
+        default=42,
+        required=False,
+        help="Random state seed of train+validation/test split.",
+    )
+    subparser.add_argument(
+        "-ws",
+        "--workflow-seed",
+        type=int,
+        default=42,
+        required=False,
+        help="Random state seed of the workflow.",
+    )
+    subparser.add_argument(
+        "-vp",
+        "--valid-prop",
+        type=float,
+        default=0.1,
+        required=False,
+        help="Ratio of validation/(train+validation).",
+    )
+    subparser.add_argument(
+        "-tp",
+        "--test-prop",
+        type=float,
+        default=0.1,
+        required=False,
+        help="Ratio of test/data.",
+    )
+    subparser.add_argument(
+        "--timeout-on-fit",
+        type=int,
+        default=-1
+        required=False,
+        help="Timeout in seconds for the fit method. Defaults to -1 for unlimited time.",
+    )
+    subparser.add_argument(
+        "-d",
+        "--log-dir",
+        type=str,
+        default=".",
+        required=False,
+        help="Directory where to store the outputs/logs.",
+    )
     subparser.add_argument(
         "--max-evals",
         type=int,
         default=100,
         required=False,
-        help="Number of configurations to run",
+        help="Number of configurations to run.",
     )
-    subparser.add_argument("-t", "--timeout", type=int, default=1800, required=False)
-    subparser.add_argument("--initial-configs", type=str, required=False, default=None)
     subparser.add_argument(
-        "-v", "--verbose", action="store_true", default=False, required=False
+        "-t",
+        "--timeout",
+        type=int,
+        default=1800,
+        required=False,
+        help="Overall timeout in seconds.",
+    )
+    subparser.add_argument(
+        "--initial-configs",
+        type=str,
+        required=False,
+        default=None,
+        help="Path to a CSV file containing initial configurations.",
+    )
+    subparser.add_argument(
+        "-v",
+        "--verbose",
+        action="store_true",
+        default=False,
+        required=False,
+        help="Boolean to activate or not the verbose mode.",
     )
 
     subparser.set_defaults(func=function_to_call)
@@ -85,10 +170,12 @@ def run(
     monotonic: bool = True,
     valid_seed: int = 42,
     test_seed: int = 42,
+    workflow_seed: int = 42,
     valid_prop: float = 0.1,
     test_prop: float = 0.1,
+    timeout_on_fit=-1,
     known_categories: bool = True,
-    raise_errors: bool = False
+    raise_errors: bool = False,
 ):
     """This function trains the workflow on a dataset and returns performance metrics.
 
@@ -99,10 +186,12 @@ def run(
         monotonic (bool, optional): A boolean indicating if the sample-wise learning curve should be monotonic (i.e., sample set at smaller anchors are always included in sample sets at larger anchors) or not. Defaults to True.
         valid_seed (int, optional): Random state seed of train/validation split. Defaults to 42.
         test_seed (int, optional): Random state seed of train+validation/test split. Defaults to 42.
+        workflow_seed (int, optional): Random state seed of the workflow. Defaults to 42.
         valid_prop (float, optional): Ratio of validation/(train+validation). Defaults to 0.1.
         test_prop (float, optional): Ratio of test/data . Defaults to 0.1.
+        timeout_on_fit (int, optional): Timeout in seconds for the fit method. Defaults to -1 for infinite time.
         known_categories (bool, optional): If all the possible categories are assumed to be known in advance. Defaults to True.
-        raise_errors (bool, optional): If `True`, then errors are risen to the outside. Otherwise, just a log message is generated. Defaults to True.
+        raise_errors (bool, optional): If `True`, then errors are risen to the outside. Otherwise, just a log message is generated. Defaults to False.
 
     Returns:
         dict: a dictionnary with 2 keys (objective, metadata) where objective is the objective maximized by deephyper (if used) and metadata is a JSON serializable sub-dictionnary which are complementary information about the workflow.
@@ -175,7 +264,14 @@ def run(
 
         # Create and fit the workflow
         logging.info("Creating and fitting the workflow...")
-        workflow = WorkflowClass(**job.parameters)
+        workflow_kwargs = job.parameters
+        workflow_kwargs["random_state"] = workflow_seed
+        workflow = WorkflowClass(**workflow_kwargs)
+
+        if timeout_on_fit > 0:
+            workflow.fit = functools.partial(
+                terminate_on_timeout, timeout_on_fit, workflow.fit
+            )
 
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
@@ -192,10 +288,39 @@ def run(
                 else:
                     workflow.fit(X_train, y_train, metadata=dataset_metadata)
             except Exception as e:
-                logging.error(f"Error while fitting the workflow: {e}")
                 if raise_errors:
                     raise
-                return {"objective": "F", "metadata": None}
+
+                # Collect child fidelities (e.g., iteration learning curves with epochs) if available
+                if hasattr(workflow, "fidelities"):
+                    infos["child_fidelities"].append(workflow.fidelities)
+
+                infos["dataset_id"] = openml_id
+                infos["workflow"] = workflow_class
+                infos["valid_prop"] = valid_prop
+                infos["test_prop"] = valid_prop
+                infos["monotonic"] = monotonic
+                infos["valid_seed"] = valid_seed
+                infos["test_seed"] = test_seed
+                infos["workflow_seed"] = workflow_seed
+                infos["traceback"] = traceback.format_exc()
+
+                logging.error(
+                    f"Error while fitting the workflow: \n{infos['traceback']}"
+                )
+
+                infos["traceback"] = r"{}".format(infos["traceback"])
+
+                if (
+                    len(infos["score_values"]) > 0
+                    and len(infos["score_values"][-1]) > 0
+                ):
+                    # -1: last fidelity, 1: validation set, 0: accuracy
+                    objective = infos["score_values"][-1][1][0]
+                else:
+                    objective = "F"
+
+                return {"objective": objective, "metadata": infos}
 
         time_fit = workflow.infos["fit_time"]
 
@@ -205,7 +330,10 @@ def run(
         for i, (X_, y_true) in enumerate(
             [(X_train, y_train), (X_valid, y_valid), (X_test, y_test)]
         ):
-            y_pred = workflow.predict(X_)
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+
+                y_pred = workflow.predict(X_)
 
             if i == 0:
                 time_predict = workflow.infos["predict_time"]
@@ -231,6 +359,8 @@ def run(
     infos["monotonic"] = monotonic
     infos["valid_seed"] = valid_seed
     infos["test_seed"] = test_seed
+    infos["workflow_seed"] = workflow_seed
+    infos["traceback"] = ""
 
     # Meaning of indexes
     # -1: last fidelity, 1: validation set, 0: accuracy
@@ -246,8 +376,10 @@ def main(
     monotonic,
     valid_seed,
     test_seed,
+    workflow_seed,
     valid_prop,
     test_prop,
+    timeout_on_fit,
     log_dir,
     max_evals,
     timeout,
@@ -297,8 +429,10 @@ def main(
                 "monotonic": monotonic,
                 "valid_seed": valid_seed,
                 "test_seed": test_seed,
+                "workflow_seed": workflow_seed,
                 "valid_prop": valid_prop,
                 "test_prop": test_prop,
+                "timeout_on_fit": timeout_on_fit,
             },
             "callbacks": [TqdmCallback()] if verbose else [],
         },
@@ -320,20 +454,52 @@ def main(
 
 def test_default_config():
     workflow_class = "lcdb.workflow.sklearn.LibLinearWorkflow"
-    #workflow_class = "lcdb.workflow.keras.DenseNNWorkflow"
+    # workflow_class = "lcdb.workflow.keras.DenseNNWorkflow"
     WorkflowClass = import_attr_from_module(workflow_class)
     config_space = WorkflowClass.config_space()
     config_default = config_space.get_default_configuration().get_dictionary()
 
     # config_default["transform_cat"] = "ordinal"
-    config_default["optimizer"] = "Ftrl"
+    # config_default["optimizer"] = "Ftrl"
+    config_default = {
+        "p:C": 6.165666572362732,
+        "p:class_weight": "balanced",
+        "p:dual": False,
+        "p:fit_intercept": False,
+        "p:intercept_scaling": 33.513181992610626,
+        "p:loss": "squared_hinge",
+        "p:max_iter": 4536,
+        "p:multiclass": "ovo-scikit",
+        "p:penalty": "l2",
+        #! ERROR
+        # "p:pp_cat_encoder": "ordinal",
+        # "p:pp_decomposition": "lda",
+        # "p:pp_featuregen": "none",
+        # "p:pp_featureselector": "select50",
+        # "p:pp_scaler": "std",
+        #!
+        "p:pp_cat_encoder": "ordinal",
+        "p:pp_decomposition": "none",
+        "p:pp_featuregen": "poly2",
+        "p:pp_featureselector": "generic",
+        "p:pp_scaler": "minmax",
+        "p:tol": 0.0013005105948736,
+        "objective": "F",
+        "job_id": 6,
+        "m:timestamp_submit": 1.7238471508026123,
+        "m:timestamp_gather": 6.4399919509887695,
+        "m:timestamp_start": 1694424265.106677,
+        "m:timestamp_end": 1694424266.134169,
+        "m:memory": 10653821,
+    }
+    config_default = {k[2:]: v for k, v in config_default.items() if k.startswith("p:")}
 
     # id 3, 6 are good tests
     output = run(
         RunningJob(id=0, parameters=config_default),
         openml_id=3,
         workflow_class=workflow_class,
-        raise_errors=True
+        raise_errors=True,
     )
     import pprint
 
