@@ -1,20 +1,10 @@
-"""Command line to run experiments."""
+"""Command line to create a list of hyperparameter configurations to be evaluated later."""
 import logging
 import os
 import pathlib
-import warnings
 
-import numpy as np
 import pandas as pd
-from deephyper.evaluator import Evaluator, RunningJob, profile
-from deephyper.evaluator.callback import TqdmCallback
-from deephyper.problem import HpProblem
-from deephyper.search.hps import CBO
-from lcdb.data import load_task
-from lcdb.data.split import train_valid_test_split
 from lcdb.utils import import_attr_from_module
-from sklearn.metrics import accuracy_score, zero_one_loss
-from sklearn.preprocessing import FunctionTransformer, OneHotEncoder
 
 
 def add_subparser(subparsers):
@@ -62,7 +52,7 @@ def main(
 
     # Add the default configuration
     config_default = config_space.get_default_configuration()
-    configs.insert(0, config_default) # at the beginning
+    configs.insert(0, config_default)  # at the beginning
 
     # Convert the configurations to a dictionnary
     configs = map(lambda c: c.get_dictionary(), configs)
