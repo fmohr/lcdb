@@ -100,7 +100,7 @@ def add_subparser(subparsers):
     subparser.add_argument(
         "--timeout-on-fit",
         type=int,
-        default=-1
+        default=-1,
         required=False,
         help="Timeout in seconds for the fit method. Defaults to -1 for unlimited time.",
     )
