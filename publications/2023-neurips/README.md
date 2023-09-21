@@ -14,7 +14,9 @@ pip install -e "."
 
 To install DeepHyper (develop) version:
 
+```console
 pip install "deephyper @ git+https://github.com/deephyper/deephyper@develop"
+```
 
 ## Experiments
 
