@@ -1,4 +1,3 @@
-# Define the Config Space
 from ConfigSpace import (
     Categorical,
     ConfigurationSpace,
@@ -10,6 +9,7 @@ from ConfigSpace import (
 from sklearn.multiclass import OneVsOneClassifier
 from sklearn.svm import LinearSVC
 
+from ...utils import filter_keys_with_prefix
 from .._preprocessing_workflow import PreprocessedWorkflow
 
 CONFIG_SPACE = ConfigurationSpace(
@@ -81,10 +81,7 @@ class LibLinearWorkflow(PreprocessedWorkflow):
         random_state=None,
         **kwargs,
     ):
-        preprocessing_kwargs = {
-            k[3:]: v for k, v in kwargs.items() if k.startswith("pp@")
-        }
-        super().__init__(**preprocessing_kwargs)
+        super().__init__(**filter_keys_with_prefix(kwargs, prefix="pp@"))
 
         learner_kwargs = dict(
             dual=dual,

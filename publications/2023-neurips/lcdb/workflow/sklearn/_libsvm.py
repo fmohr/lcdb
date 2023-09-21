@@ -9,6 +9,7 @@ from ConfigSpace import (
 )
 from sklearn.svm import SVC
 
+from ...utils import filter_keys_with_prefix
 from .._preprocessing_workflow import PreprocessedWorkflow
 
 CONFIG_SPACE = ConfigurationSpace(
@@ -52,7 +53,9 @@ class LibSVMWorkflow(PreprocessedWorkflow):
     # Static Attribute
     _config_space = CONFIG_SPACE
     _config_space.add_configuration_space(
-        prefix="", delimiter="", configuration_space=PreprocessedWorkflow.config_space()
+        prefix="pp",
+        delimiter="@",
+        configuration_space=PreprocessedWorkflow.config_space(),
     )
 
     def __init__(
@@ -71,7 +74,7 @@ class LibSVMWorkflow(PreprocessedWorkflow):
         random_state=None,
         **kwargs,
     ):
-        super().__init__(**kwargs)
+        super().__init__(**filter_keys_with_prefix(kwargs, prefix="pp@"))
 
         learner_kwargs = dict(
             C=C,
