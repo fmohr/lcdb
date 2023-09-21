@@ -39,6 +39,8 @@ def main(
     """
     :meta private:
     """
+    from deephyper.problem._hyperparameter import convert_to_skopt_space
+
     log_dir = os.path.dirname(output_file)
     pathlib.Path(log_dir).mkdir(parents=True, exist_ok=True)
 
@@ -46,18 +48,30 @@ def main(
     WorkflowClass = import_attr_from_module(workflow_class)
     config_space = WorkflowClass.config_space()
 
+    if verbose:
+        print(config_space)
+
+    # Convert the config space to a skopt space
+    skopt_space = convert_to_skopt_space(config_space, surrogate_model="RF")
+
     # Sample the configurations
     # TODO: LHS should be done here
-    configs = config_space.sample_configuration(num_configs - 1)
+    configs = skopt_space.rvs(n_samples=num_configs - 1)
 
     # Add the default configuration
     config_default = config_space.get_default_configuration()
-    configs.insert(0, config_default)  # at the beginning
+    x = []
+    for i, k in enumerate(skopt_space.dimension_names):
+        if k in config_default.keys():
+            val = config_default[k]
+        else:
+            val = skopt_space.dimensions[i].bounds[0]
+        x.append(val)
+    configs.insert(0, x)  # at the beginning
 
-    # Convert the configurations to a dictionnary
-    configs = map(lambda c: c.get_dictionary(), configs)
-
-    pd.DataFrame(configs).to_csv(output_file, index=False)
+    pd.DataFrame(configs, columns=skopt_space.dimension_names).to_csv(
+        output_file, index=False
+    )
 
     if verbose:
         print(f"Experiments written to {output_file}")

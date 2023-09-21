@@ -10,6 +10,7 @@ import warnings
 import numpy as np
 import pandas as pd
 from deephyper.core.utils._timeout import terminate_on_timeout
+from deephyper.core.exceptions import SearchTerminationError
 from deephyper.evaluator import Evaluator, RunningJob, profile
 from deephyper.evaluator.callback import TqdmCallback
 from deephyper.problem import HpProblem
@@ -287,7 +288,7 @@ def run(
                     )
                 else:
                     workflow.fit(X_train, y_train, metadata=dataset_metadata)
-            except Exception as e:
+            except Exception as exception:
                 if raise_errors:
                     raise
 
@@ -309,8 +310,10 @@ def run(
                     f"Error while fitting the workflow: \n{infos['traceback']}"
                 )
 
-                infos["traceback"] = r"{}".format(infos["traceback"])
+                infos["traceback"] = r'"{}"'.format(infos["traceback"])
 
+                # The evaluation is considered a total failure only if
+                # None of the anchors returned scored.
                 if (
                     len(infos["score_values"]) > 0
                     and len(infos["score_values"][-1]) > 0
@@ -319,6 +322,9 @@ def run(
                     objective = infos["score_values"][-1][1][0]
                 else:
                     objective = "F"
+
+                    if isinstance(exception, SearchTerminationError):
+                        objective = "F_timeout_on_fit"
 
                 return {"objective": objective, "metadata": infos}
 

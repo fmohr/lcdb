@@ -13,7 +13,7 @@ from sklearn.svm import LinearSVC
 from .._preprocessing_workflow import PreprocessedWorkflow
 
 CONFIG_SPACE = ConfigurationSpace(
-    name="sklearn._liblinear",
+    name="sklearn.LibLinearWorkflow",
     space={
         "dual": Categorical("dual", [False, True], default=True),
         "C": Float("C", bounds=(1e-12, 1e12), default=1, log=True),
@@ -61,7 +61,9 @@ class LibLinearWorkflow(PreprocessedWorkflow):
     # Static Attribute
     _config_space = CONFIG_SPACE
     _config_space.add_configuration_space(
-        prefix="", delimiter="", configuration_space=PreprocessedWorkflow.config_space()
+        prefix="pp",
+        delimiter="@",
+        configuration_space=PreprocessedWorkflow.config_space(),
     )
 
     def __init__(
@@ -79,7 +81,10 @@ class LibLinearWorkflow(PreprocessedWorkflow):
         random_state=None,
         **kwargs,
     ):
-        super().__init__(**kwargs)
+        preprocessing_kwargs = {
+            k[3:]: v for k, v in kwargs.items() if k.startswith("pp@")
+        }
+        super().__init__(**preprocessing_kwargs)
 
         learner_kwargs = dict(
             dual=dual,

@@ -12,6 +12,10 @@ From this directory
 pip install -e "."
 ```
 
+To install DeepHyper (develop) version:
+
+pip install "deephyper @ git+https://github.com/deephyper/deephyper@develop"
+
 ## Experiments
 
 ### Example
