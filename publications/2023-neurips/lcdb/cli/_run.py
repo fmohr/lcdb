@@ -323,6 +323,7 @@ def run(
                 else:
                     objective = "F"
 
+                    # TODO: add out of memory exception
                     if isinstance(exception, SearchTerminationError):
                         objective = "F_timeout_on_fit"
 
@@ -342,6 +343,7 @@ def run(
                 y_pred = workflow.predict(X_)
 
             if i == 0:
+                # TODO: Also collect times from other folds
                 time_predict = workflow.infos["predict_time"]
 
             accuracy = round(accuracy_score(y_true, y_pred), ndigits=5)
