@@ -1,4 +1,5 @@
 """Command line to run experiments."""
+import copy
 import functools
 import json
 import logging
@@ -9,7 +10,6 @@ import warnings
 
 import numpy as np
 import pandas as pd
-from deephyper.core.utils._timeout import terminate_on_timeout
 from deephyper.core.exceptions import SearchTerminationError
 from deephyper.evaluator import Evaluator, RunningJob, profile
 from deephyper.evaluator.callback import TqdmCallback
@@ -17,7 +17,11 @@ from deephyper.problem import HpProblem
 from deephyper.search.hps import CBO
 from lcdb.data import load_task
 from lcdb.data.split import train_valid_test_split
-from lcdb.utils import import_attr_from_module
+from lcdb.utils import (
+    import_attr_from_module,
+    terminate_on_timeout,
+    FunctionCallTimeoutError,
+)
 from sklearn.metrics import accuracy_score, zero_one_loss
 from sklearn.preprocessing import FunctionTransformer, OneHotEncoder
 
@@ -148,7 +152,7 @@ def add_subparser(subparsers):
         "--evaluator",
         default="ray",
         type=str,
-        help="The evaluator to use. It can be 'thread', 'process', 'ray' or 'mpicomm'.",
+        help="The evaluator to use. It can be 'serial', 'thread', 'process', 'ray' or 'mpicomm'.",
     )
     subparser.add_argument(
         "--num-workers",
@@ -277,7 +281,7 @@ def run(
 
         # Create and fit the workflow
         logging.info("Creating and fitting the workflow...")
-        workflow_kwargs = job.parameters
+        workflow_kwargs = copy.deepcopy(job.parameters)
         workflow_kwargs["random_state"] = workflow_seed
         workflow = WorkflowClass(**workflow_kwargs)
 
@@ -335,9 +339,10 @@ def run(
                 else:
                     objective = "F"
 
-                    # TODO: add out of memory exception
-                    if isinstance(exception, SearchTerminationError):
-                        objective = "F_timeout_on_fit"
+                    if isinstance(exception, FunctionCallTimeoutError):
+                        objective += "_function_call_timeout_error"
+                    elif isinstance(exception, MemoryError):
+                        objective += "_memory_error"
 
                 return {"objective": objective, "metadata": infos}
 
@@ -408,9 +413,8 @@ def main(
     evaluator,
     num_workers,
 ):
-    """
-    :meta private:
-    """
+    """Entry point for the command line interface."""
+
     pathlib.Path(log_dir).mkdir(parents=True, exist_ok=True)
 
     logging.basicConfig(
@@ -495,7 +499,7 @@ def main(
             )
 
             # Execute the search
-            results = search.search(max_evals, timeout=timeout)
+            results = search.search(max_evals, timeout=timeout, max_evals_strict=True)
 
 
 def test_default_config():
@@ -550,55 +554,6 @@ def test_default_config():
     import pprint
 
     pprint.pprint(output)
-
-
-def test_random_sampling():
-    from deephyper.evaluator import Evaluator
-    from deephyper.evaluator.callback import TqdmCallback
-    from deephyper.problem import HpProblem
-    from deephyper.search.hps import CBO
-
-    # Experiment Parameters
-    openml_id = 3
-    workflow_class = "lcdb.workflow.sklearn.LibLinearWorkflow"
-
-    # Load the workflow to get its config space
-    WorkflowClass = import_attr_from_module(workflow_class)
-    config_space = WorkflowClass.config_space()
-    config_default = config_space.get_default_configuration().get_dictionary()
-
-    # Set the search space
-    problem = HpProblem(config_space)
-
-    with Evaluator.create(
-        run,
-        method="ray",  # TODO: allow to use `mpicomm`
-        method_kwargs={
-            "address": "auto",
-            # "num_cpus": 10,
-            "num_cpus_per_task": 1,
-            "run_function_kwargs": {
-                "openml_id": openml_id,
-                "workflow_class": workflow_class,
-            },
-            "callbacks": [TqdmCallback()],
-        },
-    ) as evaluator:
-        # Required for MPI just the root rank will execute the search
-        # other ranks will be considered as workers
-        if evaluator is not None:
-            # Set the search algorithm
-            search = CBO(
-                problem,
-                evaluator,
-                log_dir="test-dh",
-                initial_points=[config_default],
-                surrogate_model="DUMMY",
-                verbose=1,
-            )
-
-            # Execute the search
-            results = search.search(100)
 
 
 if __name__ == "__main__":
