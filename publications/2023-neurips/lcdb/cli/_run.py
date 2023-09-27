@@ -143,7 +143,19 @@ def add_subparser(subparsers):
         required=False,
         help="Boolean to activate or not the verbose mode.",
     )
-
+    subparser.add_argument(
+        "-e",
+        "--evaluator",
+        default="ray",
+        type=str,
+        help="The evaluator to use. It can be 'thread', 'process', 'ray' or 'mpicomm'.",
+    )
+    subparser.add_argument(
+        "--num-workers",
+        default=-1,
+        type=int,
+        help="The number of workers to use with the evaluator. Defaults to -1 for all available workers.",
+    )
     subparser.set_defaults(func=function_to_call)
 
 
@@ -393,6 +405,8 @@ def main(
     timeout,
     initial_configs,
     verbose,
+    evaluator,
+    num_workers,
 ):
     """
     :meta private:
@@ -424,40 +438,64 @@ def main(
     else:
         initial_points.append(config_default)
 
-    evaluator = Evaluator.create(
+    run_function_kwargs = {
+        "openml_id": openml_id,
+        "workflow_class": workflow_class,
+        "monotonic": monotonic,
+        "valid_seed": valid_seed,
+        "test_seed": test_seed,
+        "workflow_seed": workflow_seed,
+        "valid_prop": valid_prop,
+        "test_prop": test_prop,
+        "timeout_on_fit": timeout_on_fit,
+    }
+
+    if evaluator in ["thread", "process", "ray"]:
+        if num_workers < 0:
+            if hasattr(os, "sched_getaffinity"):
+                # Number of CPUs the current process can use
+                num_workers = len(os.sched_getaffinity(0))
+            else:
+                num_workers = os.cpu_count()
+
+        if evaluator == "ray":
+            method_kwargs = {
+                "address": os.environ.get("RAY_ADDRESS", None),
+                "num_cpus": num_workers,
+                "num_cpus_per_task": 1,
+            }
+        else:
+            method_kwargs = {"num_workers": num_workers}
+    else:  # mpicomm
+        method_kwargs = {}
+        if num_workers > 0:
+            method_kwargs["num_workers"] = num_workers
+
+    method_kwargs["run_function_kwargs"] = run_function_kwargs
+    method_kwargs["callbacks"] = [TqdmCallback()] if verbose else []
+
+    with Evaluator.create(
         run,
-        method="ray",
-        method_kwargs={
-            "address": "auto",
-            # "num_cpus": 10,
-            "num_cpus_per_task": 1,
-            "run_function_kwargs": {
-                "openml_id": openml_id,
-                "workflow_class": workflow_class,
-                "monotonic": monotonic,
-                "valid_seed": valid_seed,
-                "test_seed": test_seed,
-                "workflow_seed": workflow_seed,
-                "valid_prop": valid_prop,
-                "test_prop": test_prop,
-                "timeout_on_fit": timeout_on_fit,
-            },
-            "callbacks": [TqdmCallback()] if verbose else [],
-        },
-    )
+        method=evaluator,
+        method_kwargs=method_kwargs,
+    ) as evaluator:
+        # Required for MPI just the root rank will execute the search
+        # other ranks will be considered as workers
+        if evaluator is not None:
+            # Set the search algorithm
 
-    # Set the search algorithm
-    search = CBO(
-        problem,
-        evaluator,
-        log_dir=log_dir,
-        initial_points=initial_points,
-        surrogate_model="DUMMY",
-        verbose=verbose,
-    )
+            # Set the search algorithm
+            search = CBO(
+                problem,
+                evaluator,
+                log_dir=log_dir,
+                initial_points=initial_points,
+                surrogate_model="DUMMY",
+                verbose=verbose,
+            )
 
-    # Execute the search
-    results = search.search(max_evals, timeout=timeout)
+            # Execute the search
+            results = search.search(max_evals, timeout=timeout)
 
 
 def test_default_config():
@@ -532,9 +570,9 @@ def test_random_sampling():
     # Set the search space
     problem = HpProblem(config_space)
 
-    evaluator = Evaluator.create(
+    with Evaluator.create(
         run,
-        method="ray",
+        method="ray",  # TODO: allow to use `mpicomm`
         method_kwargs={
             "address": "auto",
             # "num_cpus": 10,
@@ -545,20 +583,22 @@ def test_random_sampling():
             },
             "callbacks": [TqdmCallback()],
         },
-    )
+    ) as evaluator:
+        # Required for MPI just the root rank will execute the search
+        # other ranks will be considered as workers
+        if evaluator is not None:
+            # Set the search algorithm
+            search = CBO(
+                problem,
+                evaluator,
+                log_dir="test-dh",
+                initial_points=[config_default],
+                surrogate_model="DUMMY",
+                verbose=1,
+            )
 
-    # Set the search algorithm
-    search = CBO(
-        problem,
-        evaluator,
-        log_dir="test-dh",
-        initial_points=[config_default],
-        surrogate_model="DUMMY",
-        verbose=1,
-    )
-
-    # Execute the search
-    results = search.search(100)
+            # Execute the search
+            results = search.search(100)
 
 
 if __name__ == "__main__":
