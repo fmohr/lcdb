@@ -58,6 +58,7 @@ CONFIG_SPACE = ConfigurationSpace(
             default=1,
             log=True,
         ),
+        # FIXME: drop this again once everything works
         "early_stopping": Categorical(
             "early_stopping",
             items=[True, False],
