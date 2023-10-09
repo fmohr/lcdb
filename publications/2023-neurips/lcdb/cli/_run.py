@@ -351,6 +351,7 @@ def run(
         # Predict and Score
         logging.info("Predicting and scoring...")
         scores = []
+        times = [time_fit]
         for i, (X_, y_true) in enumerate(
             [(X_train, y_train), (X_valid, y_valid), (X_test, y_test)]
         ):
@@ -359,9 +360,7 @@ def run(
 
                 y_pred = workflow.predict(X_)
 
-            if i == 0:
-                # TODO: Also collect times from other folds
-                time_predict = workflow.infos["predict_time"]
+            times.append(workflow.infos["predict_time"])
 
             accuracy = round(accuracy_score(y_true, y_pred), ndigits=5)
             loss = round(zero_one_loss(y_true, y_pred), ndigits=5)
@@ -370,7 +369,7 @@ def run(
         # Collect Infos
         infos["fidelity_values"].append(anchor)
         infos["score_values"].append(scores)
-        infos["time_values"].append([time_fit, time_predict])
+        infos["time_values"].append(times)
 
         # Collect child fidelities (e.g., iteration learning curves with epochs) if available
         if hasattr(workflow, "fidelities"):
