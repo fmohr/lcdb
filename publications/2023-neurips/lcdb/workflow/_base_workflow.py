@@ -24,6 +24,9 @@ class BaseWorkflow(abc.ABC):
         # Indicates if the workflow requires validation data to be fitted
         self.requires_valid_to_fit = False
 
+        # Indicates if the workflow requires test data to be fitted (to be able to predict on test data on child fidelities)
+        self.requires_test_to_fit = False
+
     def fit(self, X, y, metadata, *args, **kwargs) -> "BaseWorkflow":
         """Fit the workflow to the data."""
         timestamp_start = time.time()

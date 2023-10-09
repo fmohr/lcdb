@@ -295,15 +295,35 @@ def run(
 
             try:
                 if workflow.requires_valid_to_fit:
-                    workflow.fit(
-                        X_train,
-                        y_train,
-                        X_valid=X_valid,
-                        y_valid=y_valid,
-                        metadata=dataset_metadata,
-                    )
+                    if workflow.requires_test_to_fit:
+                        workflow.fit(
+                            X_train,
+                            y_train,
+                            X_valid=X_valid,
+                            y_valid=y_valid,
+                            X_test=X_test,
+                            y_test=y_test,
+                            metadata=dataset_metadata,
+                        )
+                    else:
+                        workflow.fit(
+                            X_train,
+                            y_train,
+                            X_valid=X_valid,
+                            y_valid=y_valid,
+                            metadata=dataset_metadata,
+                        )
                 else:
-                    workflow.fit(X_train, y_train, metadata=dataset_metadata)
+                    if workflow.requires_test_to_fit:
+                        workflow.fit(
+                            X_train,
+                            y_train,
+                            X_test=X_test,
+                            y_test=y_test,
+                            metadata=dataset_metadata,
+                        )
+                    else:
+                        workflow.fit(X_train, y_train, metadata=dataset_metadata)
             except Exception as exception:
                 if raise_errors:
                     raise
