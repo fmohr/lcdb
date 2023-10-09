@@ -22,7 +22,7 @@ from lcdb.utils import (
     terminate_on_timeout,
     FunctionCallTimeoutError,
 )
-from sklearn.metrics import accuracy_score, zero_one_loss
+from sklearn.metrics import confusion_matrix, roc_auc_score, log_loss, brier_score_loss
 from sklearn.preprocessing import FunctionTransformer, OneHotEncoder
 
 # Avoid Tensorflow Warnings
@@ -324,6 +324,7 @@ def run(
                         )
                     else:
                         workflow.fit(X_train, y_train, metadata=dataset_metadata)
+
             except Exception as exception:
                 if raise_errors:
                     raise
@@ -372,19 +373,26 @@ def run(
         logging.info("Predicting and scoring...")
         scores = []
         times = [time_fit]
+        labels = workflow.infos["classes_"]
         for i, (X_, y_true) in enumerate(
             [(X_train, y_train), (X_valid, y_valid), (X_test, y_test)]
         ):
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
-
                 y_pred = workflow.predict(X_)
+                y_pred_proba = workflow.predict_proba(X_)
 
             times.append(workflow.infos["predict_time"])
+            times.append(workflow.infos["predict_proba_time"])
 
-            accuracy = round(accuracy_score(y_true, y_pred), ndigits=5)
-            loss = round(zero_one_loss(y_true, y_pred), ndigits=5)
-            scores.append([accuracy, loss])
+            cm = np.round(confusion_matrix(y_true, y_pred, labels=labels), 5)
+            if len(labels) == 2:
+                auc = np.round(roc_auc_score(y_true, y_pred_proba), 5)
+                ll = np.round(log_loss(y_true, y_pred_proba), 5)
+                bl = np.round(brier_score_loss(y_true, y_pred_proba), 5)
+            else:
+                auc = ll = bl = np.nan
+            scores.append([cm, auc, ll, bl])
 
         # Collect Infos
         infos["fidelity_values"].append(anchor)
@@ -522,7 +530,7 @@ def main(
 
 
 def test_default_config():
-    workflow_class = "lcdb.workflow.sklearn.LibLinearWorkflow"
+    workflow_class = "lcdb.workflow.sklearn.KNNWorkflow"
     # workflow_class = "lcdb.workflow.keras.DenseNNWorkflow"
     WorkflowClass = import_attr_from_module(workflow_class)
     config_space = WorkflowClass.config_space()
@@ -531,6 +539,12 @@ def test_default_config():
     # config_default["transform_cat"] = "ordinal"
     # config_default["optimizer"] = "Ftrl"
     config_default = {
+    	
+    	# KNN
+    	"p:n_neighbors": 3,
+    	"p:weights": "distance",
+    	"p:p": 1,
+    	
         "p:C": 6.165666572362732,
         "p:class_weight": "balanced",
         "p:dual": False,
@@ -566,7 +580,7 @@ def test_default_config():
     # id 3, 6 are good tests
     output = run(
         RunningJob(id=0, parameters=config_default),
-        openml_id=3,
+        openml_id=61,
         workflow_class=workflow_class,
         raise_errors=True,
     )

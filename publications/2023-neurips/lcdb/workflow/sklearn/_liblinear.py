@@ -112,6 +112,7 @@ class LibLinearWorkflow(PreprocessedWorkflow):
 
         self.learner.fit(X, y)
 
+        self.infos["classes_"] = list(self.learner.classes_)
         if type(self.learner) is LinearSVC:
             self.infos["n_iter_"] = self.learner.n_iter_
         else:
@@ -123,3 +124,7 @@ class LibLinearWorkflow(PreprocessedWorkflow):
     def _predict(self, X):
         X = self.pp_pipeline.transform(X)
         return self.learner.predict(X)
+
+    def _predict_proba(self, X):
+        X = self.pp_pipeline.transform(X)
+        return self.learner.predict_proba(X)

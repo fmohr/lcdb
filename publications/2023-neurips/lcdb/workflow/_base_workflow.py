@@ -49,8 +49,23 @@ class BaseWorkflow(abc.ABC):
         self.infos["predict_time"] = timestamp_end - timestamp_start
         return y_pred
 
+    def predict_proba(self, *args, **kwargs) -> NP_ARRAY:
+        """Predict from the data."""
+        timestamp_start = time.time()
+        y_pred = self._predict_proba(*args, **kwargs)
+        timestamp_end = time.time()
+        self.infos["predict_proba_time"] = timestamp_end - timestamp_start
+        return y_pred
+
     @abc.abstractmethod
     def _predict(
+        self, *args, **kwargs
+    ) -> Any:  # TODO: not sure what the return type should be
+        """Predict from the data."""
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def _predict_proba(
         self, *args, **kwargs
     ) -> Any:  # TODO: not sure what the return type should be
         """Predict from the data."""
