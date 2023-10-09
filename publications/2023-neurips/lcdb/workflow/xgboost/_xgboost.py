@@ -1,19 +1,19 @@
 from xgboost import XGBClassifier, DMatrix
 from xgboost.callback import TrainingCallback
-from ConfigSpace import ConfigurationSpace, Integer, Float, Uniform
+from ConfigSpace import ConfigurationSpace, Integer, Float, Uniform, Categorical
 #from lcdb.utils import filter_keys_with_prefix
 #from lcdb.workflow._preprocessing_workflow import PreprocessedWorkflow
 from ...utils import filter_keys_with_prefix
 from .._preprocessing_workflow import PreprocessedWorkflow
+from sklearn.metrics import accuracy_score, zero_one_loss
 from sklearn.preprocessing import LabelEncoder
 import time
 import numpy as np
 
+
 CONFIG_SPACE = ConfigurationSpace(
     name="xgboost",
     space={
-        # FIMXE: once we integrate the EvalCallBack and/or do early stopping we can simply set n_estimators to a high value
-        #"n_estimators": Integer("n_estimators", bounds=(1, 2**12), distribution=Uniform(), default=100, log=True),
         "learning_rate": Float(
             "learning_rate",
             bounds=(10**-6, 1),
@@ -58,78 +58,105 @@ CONFIG_SPACE = ConfigurationSpace(
             default=1,
             log=True,
         ),
+        # FIXME: drop this again once everything works
+        "early_stopping": Categorical(
+            "early_stopping",
+            items=[True, False],
+            default=False,
+        )
     },
 )
 
 
-class ExtendedLabelEncoder(LabelEncoder):
-    def fit(self, y):
-        super(ExtendedLabelEncoder, self).fit(y)
-        self.classes_ = np.append(self.classes_, "UNKNOWN")
-        return self
-
-    def transform(self, y):
-        new_y = np.array([label if label in self.classes_ else "UNKNOWN" for label in y])
-        return super(ExtendedLabelEncoder, self).transform(new_y)
-
-
-# FIXME: reiterate
-class TimingCallback(TrainingCallback):
-    def __init__(self):
-        self.start_time = None
-        self.times = []
-
-    def before_iteration(self, model, epoch, evals_log):
-        self.start_time = time.time()
-
-    def after_iteration(self, model, epoch, evals_log):
-        end_time = time.time()
-        iteration_time = end_time - self.start_time
-        # FIXME: this measures the time for the whole iteration, not just the training
-        # also this is the time for the single interation not the overall time
-        self.times.append(iteration_time)
-
-
-# FIXME: reiterate
+# FIXME: reiterate to perform early stopping based on a metric and early stopping rounds in this callback
 class EvalCallBack(TrainingCallback):
-    #def __init__(self, data_train, data_valid, data_test, learner):
-    def __init__(self, data_train, data_valid, learner):
+    def __init__(self, data_train, data_valid, data_test, encoder, early_stopping, early_stopping_rounds, early_stopping_metric):
+        self.encoder = encoder
+        self.early_stopping = early_stopping
+        self.early_stopping_rounds = early_stopping_rounds
+        self.early_stopping_metric = early_stopping_metric
+        self.early_stopping_counter = 0
         self.DM_train = DMatrix(data_train[0], label=data_train[1])
         self.y_train = data_train[1]
-        self.DM_valid = DMatrix(data_valid[0], label=data_valid[1])
+        self.DM_valid = DMatrix(data_valid[0])
         self.y_valid = data_valid[1]
-        #self.DM_test = DMatrix(data_test[0], label=data_test[1])
-        #self.y_test = data_test[1]
+        self.DM_test = DMatrix(data_test[0])
+        self.y_test = data_test[1]
         self.n_classes = len(np.unique(self.y_train))
         self.metrics_train = []
         self.metrics_valid = []
-        #self.metrics_test = []
-        self.metric_ids = ["accuracy"]
+        self.metrics_test = []
+        self.metric_ids = ["accuracy", "loss"]
+        self.iterations = []
+        self.time_before_iterations = []
+        self.time_after_iterations = []
+        self.time_train = []
+        self.time_predict_train = []
+        self.time_predict_valid = []
+        self.time_predict_test = []
+        self.time_overhead = []
+
+    def before_iteration(self, model, epoch, evals_log):
+        # calculate the time
+        self.time_before_iterations.append(time.time())
+        return False
 
     def after_iteration(self, model, epoch, evals_log):
-        # predict on train, valid, test
+        # update the iteration
+        self.iterations.append(epoch + 1)  # epoch starts at 0
+
+        # calculate the time
+        self.time_train.append(time.time() - self.time_before_iterations[-1])
+
+        # FIXME: measure predict time after labels are created vs before labels are created
+        #        also include time for metric calculation and storage?
+        # predict on train, valid, test and calculate the metrics and store them
+        # FIXME: accuracy, 0-1 loss, ...
+        # FIXME: we should track the time needed to calculate each metric separately to simulate HPO
+        time_before_predict_train = time.time()
         probs_pred_train = model.predict(self.DM_train, strict_shape=True)
         probs_pred_train = self.create_full_probs(probs_pred_train, n_classes=self.n_classes)
         y_pred_train = self.create_labels_from_probs(probs_pred_train)
+        acc_train = accuracy_score(self.encoder.inverse_transform(self.y_train), self.encoder.inverse_transform(y_pred_train))
+        loss_train = zero_one_loss(self.encoder.inverse_transform(self.y_train), self.encoder.inverse_transform(y_pred_train))
+        self.metrics_train.append([acc_train, loss_train])
+        self.time_predict_train.append(time.time() - time_before_predict_train)
 
+        time_before_predict_valid = time.time()
         probs_pred_valid = model.predict(self.DM_valid, strict_shape=True)
         probs_pred_valid = self.create_full_probs(probs_pred_valid, n_classes=self.n_classes)
         y_pred_valid = self.create_labels_from_probs(probs_pred_valid)
+        acc_valid = accuracy_score(self.y_valid, self.encoder.inverse_transform(y_pred_valid))
+        loss_valid = zero_one_loss(self.y_valid, self.encoder.inverse_transform(y_pred_valid))
+        self.metrics_valid.append([acc_valid, loss_valid])
+        self.time_predict_valid.append(time.time() - time_before_predict_valid)
 
-        #probs_pred_test = model.predict(self.DM_test, strict_shape=True)
-        #probs_pred_test = self.create_full_probs(probs_pred_test, n_classes=self.n_classes)
-        #y_pred_test = self.create_labels_from_probs(probs_pred_test)
+        time_before_predict_test = time.time()
+        probs_pred_test = model.predict(self.DM_test, strict_shape=True)
+        probs_pred_test = self.create_full_probs(probs_pred_test, n_classes=self.n_classes)
+        y_pred_test = self.create_labels_from_probs(probs_pred_test)
+        acc_test = accuracy_score(self.y_test, self.encoder.inverse_transform(y_pred_test))
+        loss_test = zero_one_loss(self.y_test, self.encoder.inverse_transform(y_pred_test))
+        self.metrics_test.append([acc_test, loss_test])
+        self.time_predict_test.append(time.time() - time_before_predict_test)
 
-        # calculate the metrics
-        # FIXME: accuracy, ...
-        acc_train = np.mean(y_pred_train == self.y_train)
-        acc_valid = np.mean(y_pred_valid == self.y_valid)
-        #acc_test = np.mean(y_pred_test == self.y_test)
+        self.time_after_iterations.append(time.time())
 
-        # store the metrics
-        self.metrics_train.append({epoch: [acc_train]})
-        self.metrics_valid.append({epoch: [acc_valid]})
-        #self.metrics_test.append({epoch: [acc_test]})
+        # check if early stopping is necessary
+        if self.early_stopping:
+            if self.iterations[-1] == 1:
+                return False
+            if self.early_stopping_metric == "accuracy":
+                # increment the counter if the validation accuracy has not improved otherwise set it to 0
+                if self.metrics_valid[-1][0] <= self.metrics_valid[-2][0]:
+                    self.early_stopping_counter += 1
+                else:
+                    self.early_stopping_counter = 0
+                # stop if the counter is greater than the early stopping rounds
+                if self.early_stopping_counter > self.early_stopping_rounds:
+                    return True
+            else:
+                raise NotImplementedError
         return False
 
     def create_full_probs(self, probs_pred, n_classes):
@@ -138,9 +165,12 @@ class EvalCallBack(TrainingCallback):
             probs_pred = np.concatenate((1 - probs_pred, probs_pred), axis=1)
         return probs_pred
 
-    def create_labels_from_probs(self, probs_pred):
+    def create_labels_from_probs(self, probs_pred, invert: bool = False):
         # get the index of the highest probability
         y_pred = np.argmax(probs_pred, axis=1)
+        # invert the label encoding index if necessary
+        if invert:
+            y_pred = self.encoder.inverse_transform(y_pred)
         return y_pred
 
 
@@ -153,22 +183,25 @@ class XGBoostWorkflow(PreprocessedWorkflow):
         configuration_space=PreprocessedWorkflow.config_space(),
     )
 
-    def __init__(self, n_estimators=100, learning_rate=0.3, gamma=10**-6, min_child_weight=0, max_depth=6, subsample=1, colsample_bytree=1, reg_alpha=10**-6, reg_lambda=1, random_state=None, **kwargs):
+    # FIXME: increase the number of iterations to something like 1000-5000
+    # FIXME: random_state
+    # FIXME: trycatch
+    def __init__(self, n_estimators=100, learning_rate=0.3, gamma=10**-6, min_child_weight=0, max_depth=6, subsample=1, colsample_bytree=1, reg_alpha=10**-6, reg_lambda=1, early_stopping=True, early_stopping_rounds=10, early_stopping_metric="accuracy", random_state=None, **kwargs):
 
         super().__init__(**filter_keys_with_prefix(kwargs, prefix="pp@"))
 
         self.requires_valid_to_fit = True
-        self._transformer_label = ExtendedLabelEncoder()
-        # FIXME: early stopping is not supported yet but we could do this
-        # either based on the passed validation data or letting XGBoost take its own slice from the training data
-        # probably we want to try out both
+        self.requires_test_to_fit = True
+        self.early_stopping = early_stopping
+        self.early_stopping_rounds = early_stopping_rounds
+        self.early_stopping_metric = early_stopping_metric
 
         self.fidelities = {
             "fidelity_unit": "iterations",
             "fidelity_values": [],
-            "score_types": ["accuracy"],
+            "score_types": ["accuracy", "loss"],
             "score_values": [],
-            "time_types": ["iteration"],
+            "time_types": ["train_seconds_iteration", "predict_seconds_iteration"],
             "time_values": [],
         }
 
@@ -184,48 +217,96 @@ class XGBoostWorkflow(PreprocessedWorkflow):
             reg_lambda=reg_lambda,
             random_state=random_state,
         )
+
         self.learner = XGBClassifier(**learner_kwargs)
+
+        self.encoder = LabelEncoder()
 
     @classmethod
     def config_space(cls):
         return cls._config_space
 
-    def _fit(self, X, y, X_valid, y_valid, metadata):
-        # FIXME: what we actually want to do is use the custom EvalCallBack from above to log metrics over the boosting iterations for all splits
-        # however, we then require X_valid, y_valid, AND X_test, y_test to be passed to the fit method which is currently not supported
-        # Also: this has some effect on the time we measure and we need to think about how to handle this
+    def _fit(self, X, y, X_valid, y_valid, X_test, y_test, metadata):
+        start_time = time.time()
         self.metadata = metadata
+        y = self.encoder.fit_transform(y)
+        time_before_transform = time.time()
         X = self.transform(X, y, metadata)
-        y = self._transformer_label.fit_transform(y)
+        time_transform_train = time.time() - time_before_transform
         X_valid = self.transform(X_valid, y_valid, metadata)
-        y_valid = self._transformer_label.transform(y_valid)
-        eval_callback = EvalCallBack((X, y), data_valid=(X_valid, y_valid), learner=self.learner)
-        timing_callback = TimingCallback()
+        time_transform_valid = time.time() - time_before_transform - time_transform_train
+        X_test = self.transform(X_test, y_test, metadata)
+        time_transform_test = time.time() - time_before_transform - time_transform_train - time_transform_valid
 
-        self.learner.fit(X, y, callbacks=[eval_callback, timing_callback])
+        eval_callback = EvalCallBack((X, y), data_valid=(X_valid, y_valid), data_test=(X_test, y_test), encoder=self.encoder, early_stopping=self.early_stopping, early_stopping_rounds=self.early_stopping_rounds, early_stopping_metric="accuracy")
+        self.learner.set_params(callbacks=[eval_callback])
+
+        print("Prepare and Transform overhead:")
+        print(time.time() - start_time)
+
+        time_before_fit = time.time()
+        self.learner.fit(X, y)
+        time_after_fit = time.time()
+
+        print("Actual fit time:")
+        print(time_after_fit - time_before_fit)
 
         # Collect metrics
-        # FIXME:
         # fidelity_unit: a string, describing the unit of the fidelity (e.g., samples, epochs, batches, resolution, etc.).
         # fidelity_values: a 1-D array of reals, giving the fidelity value at which the score_values and time_values are collected.
         # score_types: a 1-D array of strings, describing the name(s) of the scoring function(s) collected (e.g., loss, accuracy, balanced_accuracy, etc.).
         # score_values: a 3-D array of reals, where axis=0 corresponds to fidelity_values and has the same length, where axis=1 corresponds to data splits ["train", "valid", "test"] (the 3 are not always present) with a length from 1 to 3, where axis=2 corresponds to score_types and has the same length.
         # time_types: a 1-D array of strings, where each value describes a type of timing (e.g., fit, predict, epoch).
         # times_values: a 3-D array of reals, where axis=0 corresponds to fidelity_values and has the same length, where axis=1 corresponds to data splits ["train", "valid", "test"] (the 3 are not always present) with a length from 1 to 3, where axis=2 corresponds to time_types and has the same length. REFINE
+        self.fidelities["fidelity_values"] = eval_callback.iterations
+        self.fidelities["score_values"] = [[list(eval_callback.metrics_train[i]), list(eval_callback.metrics_valid[i]), list(eval_callback.metrics_test[i])] for i in range(self.fidelities["fidelity_values"][-1])]
+        self.fidelities["time_values"] = [[[eval_callback.time_train[i], eval_callback.time_predict_train[i]], ["NaN", eval_callback.time_predict_valid[i]], ["NaN", eval_callback.time_predict_test[i]]] for i in range(self.fidelities["fidelity_values"][-1])]
 
-        # FIXME: check if score_types and callback metric_ids are the same
-        self.fidelities["fidelity_values"] = [i for i in range(1, len(timing_callback.times) + 1)]
-        self.fidelities["score_values"] = [[list(eval_callback.metrics_train[i][i]), list(eval_callback.metrics_valid[i][i])] for i in range(self.fidelities["fidelity_values"][-1])]
-        self.fidelities["time_values"] = timing_callback.times
+        # FIXME: we should store the transform time in the fidelities
+        # train_transform_train is time_transform_train + time_transform_valid if early stopping is used otherwise time_transform_train
+        # train_transform_predict is time_transform_train
+        # valid_transform_train is "Nan"
+        # valid_transform_predict is time_transform_valid
+        # test_transform_train is "Nan"
+        # test_transform_predict is time_transform_test
+
+        # inner time between iterations
+        inner_time = [eval_callback.time_after_iterations[i - 1] - eval_callback.time_before_iterations[i - 1] for i in eval_callback.iterations]
+        print("Inner time:")
+        print(sum(inner_time))
+
+        # training time for all iterations
+        # FIXME: if early stopping is used training time should also include the time to predict on the validation data and calculate the metric(s)
+        inner_train_time = sum(eval_callback.time_train)
+        print("Inner train time:")
+        print(inner_train_time)
+
+        # predict time (predict and metric calculation and storage) for all iterations
+        inner_predict_train_time = sum(eval_callback.time_predict_train)
+        inner_predict_valid_time = sum(eval_callback.time_predict_valid)
+        inner_predict_test_time = sum(eval_callback.time_predict_test)
+        print("Inner predict time:")
+        print(inner_predict_train_time + inner_predict_valid_time + inner_predict_test_time)
+
+        # overall overhead time (due to prepare and transform and all the calculated timings up until now)
+        outer_overhead = time.time() - (time_after_fit - time_before_fit) - start_time
+        print("Outer overall overhead:")
+        print(outer_overhead)
+
+        # overall fit time (including the overhead)
+        fit_time = time.time() - start_time
+        print("Overall fit time:")
+        print(fit_time)
 
     def _predict(self, X):
         X_pred = self.pp_pipeline.transform(X)
         y_pred = self.learner.predict(X_pred)
-        return self._transformer_label.inverse_transform(y_pred)
+        return self.encoder.inverse_transform(y_pred)
 
 #if __name__ == "__main__":
 #    # Just for quick testing
 #    import numpy as np
+#    import time
 #    from lcdb.data import load_task
 #    from lcdb.data.split import train_valid_test_split
 #    from sklearn.preprocessing import OneHotEncoder
@@ -255,6 +336,11 @@ class XGBoostWorkflow(PreprocessedWorkflow):
 #            dataset_metadata["categories"]["values"] = values_categories
 #    X_train, X_valid, X_test, y_train, y_valid, y_test = train_valid_test_split(X, y, test_seed, valid_seed, test_prop, valid_prop, stratify=True)
 #    workflow = XGBoostWorkflow()
-#    workflow.fit(X=X_train, y=y_train, X_valid=X_valid, y_valid=y_valid, metadata=dataset_metadata)
+#    start_time = time.time()
+#    workflow.fit(X=X_train, y=y_train, X_valid=X_valid, y_valid=y_valid, X_test=X_test, y_test=y_test, metadata=dataset_metadata)
+#    stop_time = time.time() - start_time
+#    print("Time:")
+#    print(stop_time)
 #    y_pred = workflow.predict(X_test)
-#    print(np.mean(y_pred == y_test))
+#    print("Accuracy:")
+#    print(accuracy_score(y_test, y_pred))
