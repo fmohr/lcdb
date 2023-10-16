@@ -11,7 +11,6 @@ from sklearn.neighbors import KNeighborsClassifier
 
 from .._base_workflow import BaseWorkflow
 from .._preprocessing_workflow import PreprocessedWorkflow
-from ._knn_configspace import get_configspace
 from ...utils import filter_keys_with_prefix
 
 

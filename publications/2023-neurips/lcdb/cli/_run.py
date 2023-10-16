@@ -386,13 +386,14 @@ def run(
             times.append(workflow.infos["predict_proba_time"])
 
             cm = np.round(confusion_matrix(y_true, y_pred, labels=labels), 5)
+            accuracy = np.round(np.sum(np.diag(cm)) / np.sum(cm), 5)
             if len(labels) == 2:
-                auc = np.round(roc_auc_score(y_true, y_pred_proba), 5)
-                ll = np.round(log_loss(y_true, y_pred_proba), 5)
-                bl = np.round(brier_score_loss(y_true, y_pred_proba), 5)
+                auc = np.round(roc_auc_score(y_true, y_pred_proba[:, 1], labels=labels), 5)
+                ll = np.round(log_loss(y_true, y_pred_proba[:, 1], labels=labels), 5)
+                bl = np.round(brier_score_loss(y_true, y_pred_proba[:, 1], pos_label=labels[1]), 5)
             else:
                 auc = ll = bl = np.nan
-            scores.append([cm, auc, ll, bl])
+            scores.append([accuracy, cm, auc, ll, bl])
 
         # Collect Infos
         infos["fidelity_values"].append(anchor)
@@ -530,57 +531,17 @@ def main(
 
 
 def test_default_config():
-    workflow_class = "lcdb.workflow.sklearn.KNNWorkflow"
-    # workflow_class = "lcdb.workflow.keras.DenseNNWorkflow"
+    workflow_class = "lcdb.workflow.xgboost.XGBoostWorkflow"
+    #workflow_class = "lcdb.workflow.sklearn.KNNWorkflow"
+    #workflow_class = "lcdb.workflow.keras.DenseNNWorkflow"
     WorkflowClass = import_attr_from_module(workflow_class)
     config_space = WorkflowClass.config_space()
     config_default = config_space.get_default_configuration().get_dictionary()
 
-    # config_default["transform_cat"] = "ordinal"
-    # config_default["optimizer"] = "Ftrl"
-    config_default = {
-    	
-    	# KNN
-    	"p:n_neighbors": 3,
-    	"p:weights": "distance",
-    	"p:p": 1,
-    	
-        "p:C": 6.165666572362732,
-        "p:class_weight": "balanced",
-        "p:dual": False,
-        "p:fit_intercept": False,
-        "p:intercept_scaling": 33.513181992610626,
-        "p:loss": "squared_hinge",
-        "p:max_iter": 4536,
-        "p:multiclass": "ovo-scikit",
-        "p:penalty": "l2",
-        #! ERROR
-        # "p:pp_cat_encoder": "ordinal",
-        # "p:pp_decomposition": "lda",
-        # "p:pp_featuregen": "none",
-        # "p:pp_featureselector": "select50",
-        # "p:pp_scaler": "std",
-        #!
-        "p:pp_cat_encoder": "ordinal",
-        "p:pp_decomposition": "none",
-        "p:pp_featuregen": "poly2",
-        "p:pp_featureselector": "generic",
-        "p:pp_scaler": "minmax",
-        "p:tol": 0.0013005105948736,
-        "objective": "F",
-        "job_id": 6,
-        "m:timestamp_submit": 1.7238471508026123,
-        "m:timestamp_gather": 6.4399919509887695,
-        "m:timestamp_start": 1694424265.106677,
-        "m:timestamp_end": 1694424266.134169,
-        "m:memory": 10653821,
-    }
-    config_default = {k[2:]: v for k, v in config_default.items() if k.startswith("p:")}
-
     # id 3, 6 are good tests
     output = run(
         RunningJob(id=0, parameters=config_default),
-        openml_id=61,
+        openml_id=3,
         workflow_class=workflow_class,
         raise_errors=True,
     )
