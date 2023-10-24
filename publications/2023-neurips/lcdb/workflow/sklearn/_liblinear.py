@@ -130,4 +130,9 @@ class LibLinearWorkflow(PreprocessedWorkflow):
     def _predict_proba(self, X):
         X = self.pp_pipeline.transform(X)
         decision_fun_vals = self.learner.decision_function(X)
-        return softmax(decision_fun_vals, axis=1)
+        sigmoid = lambda z: 1/(1 + np.exp(-z))
+        if len(decision_fun_vals.shape) == 2:
+            return softmax(decision_fun_vals, axis=1)
+        else:
+            a = sigmoid(decision_fun_vals)
+            return np.column_stack([a, 1 - a])

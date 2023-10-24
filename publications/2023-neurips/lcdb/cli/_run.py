@@ -187,7 +187,7 @@ def run(
         raise_errors (bool, optional): If `True`, then errors are risen to the outside. Otherwise, just a log message is generated. Defaults to False.
 
     Returns:
-        dict: a dictionnary with 2 keys (objective, metadata) where objective is the objective maximized by deephyper (if used) and metadata is a JSON serializable sub-dictionnary which are complementary information about the workflow.
+        dict: a dictionary with 2 keys (objective, metadata) where objective is the objective maximized by deephyper (if used) and metadata is a JSON serializable sub-dictionnary which are complementary information about the workflow.
     """
 
     infos = {
@@ -205,7 +205,7 @@ def run(
     workflow_kwargs["random_state"] = workflow_seed
     workflow = WorkflowClass(**workflow_kwargs)
 
-    # create handle for dataset
+    # create controller
     controller = LCController(
         workflow=workflow,
         X=X,
@@ -354,7 +354,7 @@ def test_default_config():
     # id 3, 6 are good tests
     output = run(
         RunningJob(id=0, parameters=config_default),
-        openml_id=60,
+        openml_id=6,
         workflow_class=workflow_class,
         raise_errors=True,
     )

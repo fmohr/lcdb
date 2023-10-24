@@ -129,7 +129,7 @@ class LCController:
             logging.info(
                 f"Running anchor {anchor} which is {anchor / self.X_train_at_anchor.shape[0] * 100:.2f}% of the dataset."
             )
-            self.fit_workflow()
+            self.fit_workflow_on_current_anchor()
 
             # Predict and Score
             logging.info("Predicting and scoring...")
@@ -144,7 +144,7 @@ class LCController:
             if hasattr(self.workflow, "fidelities"):
                 self.report["child_fidelities"].append(self.workflow.fidelities)
 
-    def fit_workflow(self):
+    def fit_workflow_on_current_anchor(self):
         if self.timeout_on_fit > 0:
             self.workflow.fit = functools.partial(
                 self.terminate_on_timeout, self.timeout_on_fit, self.workflow.fit
@@ -255,6 +255,13 @@ class LCController:
         ]:
 
             relevant_labels = list(self.labels_as_used_by_workflow.copy())
+            labels_in_true_data_not_used_by_workflow = list(set(y_true).difference(relevant_labels))
+            if len(labels_in_true_data_not_used_by_workflow) > 0:
+                expansion_matrix = np.zeros((len(y_true), len(labels_in_true_data_not_used_by_workflow)))
+                relevant_labels.extend(labels_in_true_data_not_used_by_workflow)
+                y_pred_proba = np.column_stack([y_pred_proba, expansion_matrix])
+                y_pred_proba = np.column_stack([y_pred_proba[:, i] for i in np.argsort(relevant_labels)])
+                relevant_labels = sorted(relevant_labels)
 
             self.timer.enter(postfix)
             for target in ["cm", "accuracy", "auc", "ll", "bl"]:
