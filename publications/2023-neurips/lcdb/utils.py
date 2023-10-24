@@ -1,6 +1,9 @@
 import importlib
 import multiprocessing
 import multiprocessing.pool
+import time
+import numpy as np
+
 
 
 def import_attr_from_module(path: str):
@@ -67,3 +70,19 @@ def terminate_on_timeout(timeout, func, *args, **kwargs):
         raise FunctionCallTimeoutError(f"Search timeout expired after: {timeout}")
     finally:
         pool.terminate()
+
+
+def get_anchor_schedule(n):
+    """Get a schedule of anchors for a given size `n`."""
+    anchors = []
+    k = 1
+    while True:
+        exponent = (7 + k) / 2
+        sample_size = int(np.round(2**exponent))
+        if sample_size > n:
+            break
+        anchors.append(sample_size)
+        k += 1
+    if anchors[-1] < n:
+        anchors.append(n)
+    return anchors

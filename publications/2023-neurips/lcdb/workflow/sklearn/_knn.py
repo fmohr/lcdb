@@ -2,20 +2,16 @@ import ConfigSpace
 from ConfigSpace import (
     Categorical,
     ConfigurationSpace,
-    Float,
-    ForbiddenAndConjunction,
-    ForbiddenEqualsClause,
     Integer,
 )
 from sklearn.neighbors import KNeighborsClassifier
 
-from .._base_workflow import BaseWorkflow
 from .._preprocessing_workflow import PreprocessedWorkflow
 from ...utils import filter_keys_with_prefix
 
 
 CONFIG_SPACE = ConfigurationSpace(
-    name="sklearn.LibLinearWorkflow",
+    name="sklearn.KNNWorkflow",
     space={
         "n_neighbors": Integer("n_neighbors", (1, 100), default=5, log=True),
         "weights": Categorical("weights", ["uniform", "distance"], default="uniform"),
@@ -52,12 +48,15 @@ class KNNWorkflow(PreprocessedWorkflow):
         return cls._config_space
 
     def _fit(self, X, y, metadata):
-        self.learner.fit(X, y)
+        X_trans = self.transform(X, y, metadata)
+        self.learner.fit(X_trans, y)
         self.infos["classes_"] = self.learner.classes_
         return self
 
     def _predict_proba(self, X):
-        return self.learner.predict_proba(X)
+        X_trans = self.pp_pipeline.transform(X)
+        return self.learner.predict_proba(X_trans)
 
     def _predict(self, X):
-        return self.learner.predict(X)
+        X_trans = self.pp_pipeline.transform(X)
+        return self.learner.predict(X_trans)

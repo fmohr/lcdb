@@ -8,6 +8,8 @@ from ConfigSpace import (
 )
 from sklearn.multiclass import OneVsOneClassifier
 from sklearn.svm import LinearSVC
+import numpy as np
+from scipy.special import softmax
 
 from ...utils import filter_keys_with_prefix
 from .._preprocessing_workflow import PreprocessedWorkflow
@@ -127,4 +129,5 @@ class LibLinearWorkflow(PreprocessedWorkflow):
 
     def _predict_proba(self, X):
         X = self.pp_pipeline.transform(X)
-        return self.learner.predict_proba(X)
+        decision_fun_vals = self.learner.decision_function(X)
+        return softmax(decision_fun_vals, axis=1)

@@ -1,12 +1,8 @@
 """Command line to run experiments."""
 import copy
-import functools
-import json
 import logging
 import os
 import pathlib
-import traceback
-import warnings
 
 import numpy as np
 import pandas as pd
@@ -16,14 +12,10 @@ from deephyper.evaluator.callback import TqdmCallback
 from deephyper.problem import HpProblem
 from deephyper.search.hps import CBO
 from lcdb.data import load_task
-from lcdb.data.split import train_valid_test_split
+from lcdb.LCController import LCController
 from lcdb.utils import (
-    import_attr_from_module,
-    terminate_on_timeout,
-    FunctionCallTimeoutError,
+    import_attr_from_module
 )
-from sklearn.metrics import confusion_matrix, roc_auc_score, log_loss, brier_score_loss
-from sklearn.preprocessing import FunctionTransformer, OneHotEncoder
 
 # Avoid Tensorflow Warnings
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = str(3)
@@ -163,22 +155,6 @@ def add_subparser(subparsers):
     subparser.set_defaults(func=function_to_call)
 
 
-def get_anchor_schedule(n):
-    """Get a schedule of anchors for a given size `n`."""
-    anchors = []
-    k = 1
-    while True:
-        exponent = (7 + k) / 2
-        sample_size = int(np.round(2**exponent))
-        if sample_size > n:
-            break
-        anchors.append(sample_size)
-        k += 1
-    if anchors[-1] < n:
-        anchors.append(n)
-    return anchors
-
-
 @profile(memory=True)
 def run(
     job: RunningJob,
@@ -192,7 +168,7 @@ def run(
     test_prop: float = 0.1,
     timeout_on_fit=-1,
     known_categories: bool = True,
-    raise_errors: bool = False,
+    raise_errors: bool = False
 ):
     """This function trains the workflow on a dataset and returns performance metrics.
 
@@ -213,211 +189,47 @@ def run(
     Returns:
         dict: a dictionnary with 2 keys (objective, metadata) where objective is the objective maximized by deephyper (if used) and metadata is a JSON serializable sub-dictionnary which are complementary information about the workflow.
     """
-    # Load the workflow
-    WorkflowClass = import_attr_from_module(workflow_class)
+
+    infos = {
+        "openmlid": openml_id,
+        "workflow_seed": workflow_seed
+    }
 
     # Load the raw dataset
     (X, y), dataset_metadata = load_task(f"openml.{openml_id}")
-    num_instances = X.shape[0]
 
-    # Transform categorical features
-    columns_categories = np.asarray(dataset_metadata["categories"], dtype=bool)
-    values_categories = None
+    # Create and fit the workflow
+    logging.info("Creating the workflow...")
+    WorkflowClass = import_attr_from_module(workflow_class)
+    workflow_kwargs = copy.deepcopy(job.parameters)
+    workflow_kwargs["random_state"] = workflow_seed
+    workflow = WorkflowClass(**workflow_kwargs)
 
-    dataset_metadata["categories"] = {"columns": columns_categories}
-    if not (np.any(columns_categories)):
-        one_hot_encoder = FunctionTransformer(func=lambda x: x, validate=False)
-    else:
-        dataset_metadata["categories"]["values"] = None
-        one_hot_encoder = OneHotEncoder(
-            drop="first", sparse_output=False
-        )  # TODO: drop "first" could be an hyperparameter
-        one_hot_encoder.fit(X[:, columns_categories])
-        if known_categories:
-            values_categories = one_hot_encoder.categories_
-            values_categories = [v.tolist() for v in values_categories]
-            dataset_metadata["categories"]["values"] = values_categories
+    # create handle for dataset
+    controller = LCController(
+        workflow=workflow,
+        X=X,
+        y=y,
+        dataset_metadata=dataset_metadata,
+        test_seed=test_seed,
+        valid_seed=valid_seed,
+        monotonic=monotonic,
+        test_prop=test_prop,
+        valid_prop=valid_prop,
+        timeout_on_fit=timeout_on_fit,
+        known_categories=known_categories,
+        stratify=True,
+        raise_errors=raise_errors
+    )
 
-    anchors = get_anchor_schedule(int(num_instances * (1 - test_prop - valid_prop)))
+    # build the curves
+    controller.build_curves()
 
-    # Infos to be collected
-    # Trying to normalize the format
-    infos = {
-        "fidelity_unit": "samples",
-        "fidelity_values": [],
-        "score_types": ["accuracy", "loss"],
-        "score_values": [],
-        "time_types": ["fit", "predict"],
-        "time_values": [],
-        "child_fidelities": [],
-    }
+    # update infos based on report
+    infos.update(controller.report)
 
-    # Build sample-wise learning curve
-    for i, anchor in enumerate(anchors):
-        # Split the dataset
-        X_train, X_valid, X_test, y_train, y_valid, y_test = train_valid_test_split(
-            X, y, test_seed, valid_seed, test_prop, valid_prop, stratify=True
-        )
-
-        logging.info(
-            f"Running anchor {anchor} which is {anchor/X_train.shape[0]*100:.2f}% of the dataset."
-        )
-
-        train_idx = np.arange(X_train.shape[0])
-        # If not monotonic, the training set should be shuffled differently for each anchor
-        # so that the training sets of different anchors do not contain eachother
-        if not monotonic:
-            random_seed_train_shuffle = np.random.RandomState(valid_seed).randint(
-                0, 2**32 - 1, size=len(anchors)
-            )[i]
-            rs = np.random.RandomState(random_seed_train_shuffle)
-            rs.shuffle(train_idx)
-
-            X_train = X_train[train_idx]
-            y_train = y_train[train_idx]
-
-        X_train = X_train[:anchor]
-        y_train = y_train[:anchor]
-
-        # Create and fit the workflow
-        logging.info("Creating and fitting the workflow...")
-        workflow_kwargs = copy.deepcopy(job.parameters)
-        workflow_kwargs["random_state"] = workflow_seed
-        workflow = WorkflowClass(**workflow_kwargs)
-
-        if timeout_on_fit > 0:
-            workflow.fit = functools.partial(
-                terminate_on_timeout, timeout_on_fit, workflow.fit
-            )
-
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-
-            try:
-                if workflow.requires_valid_to_fit:
-                    if workflow.requires_test_to_fit:
-                        workflow.fit(
-                            X_train,
-                            y_train,
-                            X_valid=X_valid,
-                            y_valid=y_valid,
-                            X_test=X_test,
-                            y_test=y_test,
-                            metadata=dataset_metadata,
-                        )
-                    else:
-                        workflow.fit(
-                            X_train,
-                            y_train,
-                            X_valid=X_valid,
-                            y_valid=y_valid,
-                            metadata=dataset_metadata,
-                        )
-                else:
-                    if workflow.requires_test_to_fit:
-                        workflow.fit(
-                            X_train,
-                            y_train,
-                            X_test=X_test,
-                            y_test=y_test,
-                            metadata=dataset_metadata,
-                        )
-                    else:
-                        workflow.fit(X_train, y_train, metadata=dataset_metadata)
-
-            except Exception as exception:
-                if raise_errors:
-                    raise
-
-                # Collect child fidelities (e.g., iteration learning curves with epochs) if available
-                if hasattr(workflow, "fidelities"):
-                    infos["child_fidelities"].append(workflow.fidelities)
-
-                infos["dataset_id"] = openml_id
-                infos["workflow"] = workflow_class
-                infos["valid_prop"] = valid_prop
-                infos["test_prop"] = valid_prop
-                infos["monotonic"] = monotonic
-                infos["valid_seed"] = valid_seed
-                infos["test_seed"] = test_seed
-                infos["workflow_seed"] = workflow_seed
-                infos["traceback"] = traceback.format_exc()
-
-                logging.error(
-                    f"Error while fitting the workflow: \n{infos['traceback']}"
-                )
-
-                infos["traceback"] = r'"{}"'.format(infos["traceback"])
-
-                # The evaluation is considered a total failure only if
-                # None of the anchors returned scored.
-                if (
-                    len(infos["score_values"]) > 0
-                    and len(infos["score_values"][-1]) > 0
-                ):
-                    # -1: last fidelity, 1: validation set, 0: accuracy
-                    objective = infos["score_values"][-1][1][0]
-                else:
-                    objective = "F"
-
-                    if isinstance(exception, FunctionCallTimeoutError):
-                        objective += "_function_call_timeout_error"
-                    elif isinstance(exception, MemoryError):
-                        objective += "_memory_error"
-
-                return {"objective": objective, "metadata": infos}
-
-        time_fit = workflow.infos["fit_time"]
-
-        # Predict and Score
-        logging.info("Predicting and scoring...")
-        scores = []
-        times = [time_fit]
-        labels = workflow.infos["classes_"]
-        for i, (X_, y_true) in enumerate(
-            [(X_train, y_train), (X_valid, y_valid), (X_test, y_test)]
-        ):
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore")
-                y_pred = workflow.predict(X_)
-                y_pred_proba = workflow.predict_proba(X_)
-
-            times.append(workflow.infos["predict_time"])
-            times.append(workflow.infos["predict_proba_time"])
-
-            cm = np.round(confusion_matrix(y_true, y_pred, labels=labels), 5)
-            accuracy = np.round(np.sum(np.diag(cm)) / np.sum(cm), 5)
-            if len(labels) == 2:
-                auc = np.round(roc_auc_score(y_true, y_pred_proba[:, 1], labels=labels), 5)
-                ll = np.round(log_loss(y_true, y_pred_proba[:, 1], labels=labels), 5)
-                bl = np.round(brier_score_loss(y_true, y_pred_proba[:, 1], pos_label=labels[1]), 5)
-            else:
-                auc = ll = bl = np.nan
-            scores.append([accuracy, cm, auc, ll, bl])
-
-        # Collect Infos
-        infos["fidelity_values"].append(anchor)
-        infos["score_values"].append(scores)
-        infos["time_values"].append(times)
-
-        # Collect child fidelities (e.g., iteration learning curves with epochs) if available
-        if hasattr(workflow, "fidelities"):
-            infos["child_fidelities"].append(workflow.fidelities)
-
-    # Other infos
-    infos["dataset_id"] = openml_id
-    infos["workflow"] = workflow_class
-    infos["valid_prop"] = valid_prop
-    infos["test_prop"] = valid_prop
-    infos["monotonic"] = monotonic
-    infos["valid_seed"] = valid_seed
-    infos["test_seed"] = test_seed
-    infos["workflow_seed"] = workflow_seed
-    infos["traceback"] = ""
-
-    # Meaning of indexes
-    # -1: last fidelity, 1: validation set, 0: accuracy
-    valid_accuracy = infos["score_values"][-1][1][0]
+    # get validation accuracy score on last anchor
+    valid_accuracy = infos["scores"][-1]["accuracy_val"]
     results = {"objective": valid_accuracy, "metadata": infos}
 
     return results
@@ -531,8 +343,9 @@ def main(
 
 
 def test_default_config():
-    workflow_class = "lcdb.workflow.xgboost.XGBoostWorkflow"
+    #workflow_class = "lcdb.workflow.xgboost.XGBoostWorkflow"
     #workflow_class = "lcdb.workflow.sklearn.KNNWorkflow"
+    workflow_class = "lcdb.workflow.sklearn.LibLinearWorkflow"
     #workflow_class = "lcdb.workflow.keras.DenseNNWorkflow"
     WorkflowClass = import_attr_from_module(workflow_class)
     config_space = WorkflowClass.config_space()
@@ -541,7 +354,7 @@ def test_default_config():
     # id 3, 6 are good tests
     output = run(
         RunningJob(id=0, parameters=config_default),
-        openml_id=3,
+        openml_id=60,
         workflow_class=workflow_class,
         raise_errors=True,
     )

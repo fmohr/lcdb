@@ -1,7 +1,7 @@
 import abc
-import time
 
 from typing import Any, Tuple, Dict
+from lcdb.timer import Timer
 import ConfigSpace
 
 import numpy as np
@@ -10,12 +10,10 @@ NP_ARRAY = np.ndarray
 
 
 class BaseWorkflow(abc.ABC):
-    def __init__(self, **kwargs) -> None:
+    def __init__(self, timer=None, **kwargs) -> None:
         super().__init__()
-        self.infos = {
-            "fit_time": None,
-            "predict_time": None,
-        }
+        self.timer = Timer() if timer is None else timer
+        self.infos = {}
 
         # Attributes which indicates if the .transform(...) method was called
         self.transform_fitted = False
@@ -29,10 +27,9 @@ class BaseWorkflow(abc.ABC):
 
     def fit(self, X, y, metadata, *args, **kwargs) -> "BaseWorkflow":
         """Fit the workflow to the data."""
-        timestamp_start = time.time()
+        self.timer.start("fit")
         self._fit(X=X, y=y, metadata=metadata, *args, **kwargs)
-        timestamp_end = time.time()
-        self.infos["fit_time"] = timestamp_end - timestamp_start
+        self.timer.stop("fit")
         self.workflow_fitted = True
         return self
 
@@ -43,18 +40,16 @@ class BaseWorkflow(abc.ABC):
 
     def predict(self, *args, **kwargs) -> NP_ARRAY:
         """Predict from the data."""
-        timestamp_start = time.time()
+        self.timer.start("predict")
         y_pred = self._predict(*args, **kwargs)
-        timestamp_end = time.time()
-        self.infos["predict_time"] = timestamp_end - timestamp_start
+        self.timer.stop("predict")
         return y_pred
 
     def predict_proba(self, *args, **kwargs) -> NP_ARRAY:
         """Predict from the data."""
-        timestamp_start = time.time()
+        self.timer.start("predict_proba")
         y_pred = self._predict_proba(*args, **kwargs)
-        timestamp_end = time.time()
-        self.infos["predict_proba_time"] = timestamp_end - timestamp_start
+        self.timer.stop("predict_proba")
         return y_pred
 
     @abc.abstractmethod
@@ -73,10 +68,9 @@ class BaseWorkflow(abc.ABC):
 
     def transform(self, X, y, metadata) -> NP_ARRAY:
         """Transform the data."""
-        timestamp_start = time.time()
+        self.timer.start("transform")
         X = self._transform(X, y, metadata)
-        timestamp_end = time.time()
-        self.infos["transform_time"] = timestamp_end - timestamp_start
+        self.timer.stop("transform")
         self.transform_fitted = True
         return X
 
