@@ -4,7 +4,7 @@ import logging
 import os
 import pathlib
 
-import numpy as np
+import json
 import pandas as pd
 from deephyper.core.exceptions import SearchTerminationError
 from deephyper.evaluator import Evaluator, RunningJob, profile
@@ -229,7 +229,7 @@ def run(
     infos.update(controller.report)
 
     # get validation accuracy score on last anchor
-    valid_accuracy = infos["scores"][-1]["accuracy_val"]
+    valid_accuracy = 9#infos["scores"][-1]["accuracy_val"]
     results = {"objective": valid_accuracy, "metadata": infos}
 
     return results
@@ -345,7 +345,8 @@ def main(
 def test_default_config():
     #workflow_class = "lcdb.workflow.xgboost.XGBoostWorkflow"
     #workflow_class = "lcdb.workflow.sklearn.KNNWorkflow"
-    workflow_class = "lcdb.workflow.sklearn.LibLinearWorkflow"
+#    workflow_class = "lcdb.workflow.sklearn.LibLinearWorkflow"
+    workflow_class = "lcdb.workflow.sklearn.LibSVMWorkflow"
     #workflow_class = "lcdb.workflow.keras.DenseNNWorkflow"
     WorkflowClass = import_attr_from_module(workflow_class)
     config_space = WorkflowClass.config_space()
@@ -354,10 +355,15 @@ def test_default_config():
     # id 3, 6 are good tests
     output = run(
         RunningJob(id=0, parameters=config_default),
-        openml_id=6,
+        openml_id=3,
         workflow_class=workflow_class,
         raise_errors=True,
     )
+
+
+    # check that the output can indeed be compiled into a string using JSON
+    json.dumps(output)
+
     import pprint
 
     pprint.pprint(output)

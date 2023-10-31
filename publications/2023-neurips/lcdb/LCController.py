@@ -7,6 +7,8 @@ from sklearn.preprocessing import FunctionTransformer, OneHotEncoder
 from lcdb.data.split import train_valid_test_split
 import warnings
 from lcdb.timer import Timer
+from lcdb.Curve import Curve
+from lcdb.CurveDB import CurveDB
 from lcdb.utils import (
     terminate_on_timeout,
     FunctionCallTimeoutError,
@@ -16,7 +18,7 @@ from lcdb.utils import (
 import numpy as np
 from sklearn.metrics import brier_score_loss, roc_auc_score, confusion_matrix, log_loss, accuracy_score
 import warnings
-import itertools as it
+import pandas as pd
 
 
 class LCController:
@@ -55,13 +57,16 @@ class LCController:
         self.timeout_on_fit = timeout_on_fit
         self.raise_errors = raise_errors
         self.anchors = get_anchor_schedule(int(self.num_instances * (1 - test_prop - valid_prop)))
+        self.timer = Timer(precision=6)
+        self.workflow.timer = self.timer  # overwrite timer of workflow
 
         # state variables
         self.cur_anchor = None
         self.X_train_at_anchor = None
         self.y_train_at_anchor = None
         self.labels_as_used_by_workflow = None  # list of labels, this order is defined by the workflow
-        self.timer = None  # we use a different timer for each anchor
+        self.curves = None
+        self.additional_data_per_anchor = None
 
         # Transform categorical features
         columns_categories = np.asarray(dataset_metadata["categories"], dtype=bool)
@@ -88,12 +93,7 @@ class LCController:
             "test_prop": valid_prop,
             "monotonic": monotonic,
             "valid_seed": valid_seed,
-            "test_seed": test_seed,
-            "fidelity_unit": "samples",
-            "fidelity_values": [],
-            "scores": [],
-            "times": [],
-            "child_fidelities": []
+            "test_seed": test_seed
         }
 
     def set_anchor(self, anchor):
@@ -121,28 +121,38 @@ class LCController:
     def build_curves(self):
 
         # Build sample-wise learning curve
+        self.curves = {
+            "train": Curve(workflow=self.workflow, timer=self.timer),
+            "val": Curve(workflow=self.workflow, timer=self.timer),
+            "test": Curve(workflow=self.workflow, timer=self.timer)
+        }
+        self.additional_data_per_anchor = {}
+
         for anchor in self.anchors:
 
             self.set_anchor(anchor)
-            self.timer = Timer()
-            self.workflow.timer = self.timer
+            self.timer.enter(anchor)
             logging.info(
                 f"Running anchor {anchor} which is {anchor / self.X_train_at_anchor.shape[0] * 100:.2f}% of the dataset."
             )
             self.fit_workflow_on_current_anchor()
 
+            # Collect the fit report (e.g., with iteration learning curves with epochs) if available
+            if hasattr(self.workflow, "fit_report"):
+                self.additional_data_per_anchor[anchor].update(self.workflow.fit_report)
+
             # Predict and Score
             logging.info("Predicting and scoring...")
-            scores = self.compute_metrics_for_workflow()
+            self.compute_metrics_for_workflow()
+            self.timer.leave()
 
-            # Collect Infos
-            self.report["fidelity_values"].append(anchor)
-            self.report["scores"].append(scores)
-            self.report["times"].append(self.timer.runtimes)
-
-            # Collect child fidelities (e.g., iteration learning curves with epochs) if available
-            if hasattr(self.workflow, "fidelities"):
-                self.report["child_fidelities"].append(self.workflow.fidelities)
+        self.report["curve_db"] = CurveDB(
+            self.curves["train"],
+            self.curves["val"],
+            self.curves["test"],
+            self.timer.runtimes,
+            self.additional_data_per_anchor
+        ).dump_to_dict()
 
     def fit_workflow_on_current_anchor(self):
         if self.timeout_on_fit > 0:
@@ -219,7 +229,7 @@ class LCController:
 
     def get_predictions(self, fitted_workflow):
         keys = {}
-        labels = fitted_workflow.infos["classes_"]
+        labels = fitted_workflow.infos["classes"]
 
         for X_, y_true, postfix in [
             (self.X_train_at_anchor, self.y_train_at_anchor, "train"),
@@ -237,72 +247,22 @@ class LCController:
     def compute_metrics_for_workflow(self):
         predictions, labels = self.get_predictions(self.workflow)
         self.labels_as_used_by_workflow = labels
-        return self.compute_metrics_from_predictions(**predictions)
+        return self.extend_curves_based_on_predictions(**predictions)
 
-    def compute_metrics_from_predictions(self,
-            y_pred_train,
-            y_pred_proba_train,
-            y_pred_val,
-            y_pred_proba_val,
-            y_pred_test,
-            y_pred_proba_test):
-        scores = {}
+    def extend_curves_based_on_predictions(self,
+                                           y_pred_train,
+                                           y_pred_proba_train,
+                                           y_pred_val,
+                                           y_pred_proba_val,
+                                           y_pred_test,
+                                           y_pred_proba_test):
 
         for y_true, y_pred, y_pred_proba, postfix in [
             (self.y_train_at_anchor, y_pred_train, y_pred_proba_train, "train"),
             (self.y_valid, y_pred_val, y_pred_proba_val, "val"),
             (self.y_test, y_pred_test, y_pred_proba_test, "test")
         ]:
-
-            relevant_labels = list(self.labels_as_used_by_workflow.copy())
-            labels_in_true_data_not_used_by_workflow = list(set(y_true).difference(relevant_labels))
-            if len(labels_in_true_data_not_used_by_workflow) > 0:
-                expansion_matrix = np.zeros((len(y_true), len(labels_in_true_data_not_used_by_workflow)))
-                relevant_labels.extend(labels_in_true_data_not_used_by_workflow)
-                y_pred_proba = np.column_stack([y_pred_proba, expansion_matrix])
-                y_pred_proba = np.column_stack([y_pred_proba[:, i] for i in np.argsort(relevant_labels)])
-                relevant_labels = sorted(relevant_labels)
-
             self.timer.enter(postfix)
-            for target in ["cm", "accuracy", "auc", "ll", "bl"]:
-
-                self.timer.start(f"metric_{target}")
-                if target == "cm":
-                    score = np.round(confusion_matrix(y_true, y_pred, labels=relevant_labels), 5)
-                elif target == "accuracy":
-                    score = np.round(accuracy_score(y_true, y_pred), 5)
-                elif target == "auc":
-                    if self.is_binary:
-                        score = np.round(roc_auc_score(y_true, y_pred_proba[:, 1], labels=relevant_labels), 5)
-                    else:
-                        score = {}
-                        for multi_class, average in it.product(["ovr", "ovo"], ["micro", "macro", "weighted", None]):
-                            if average in [None, "micro"] and multi_class != "ovr":
-                                continue
-                            auc = np.round(
-                                roc_auc_score(
-                                    y_true,
-                                    y_pred_proba,
-                                    labels=relevant_labels,
-                                    multi_class=multi_class,
-                                    average=average
-                                ), 5)
-                            score[f"{multi_class}_{average}"] = auc
-                elif target == "ll":
-                    y_base = y_pred_proba[:, 1] if self.is_binary else y_pred_proba
-                    score = np.round(log_loss(y_true, y_base, labels=relevant_labels), 5)
-                elif target == "bl":
-                    if self.is_binary:
-                        score = np.round(brier_score_loss(y_true, y_pred_proba[:, 1], pos_label=relevant_labels[1]), 5)
-                    else:
-                        y_true_binarized = np.zeros((len(y_true), len(relevant_labels)))
-                        for j, label in enumerate(relevant_labels):
-                            mask = y_true == label
-                            y_true_binarized[mask, j] = 1
-                        score = np.round(((y_true_binarized - y_pred_proba) ** 2).sum(axis=1).mean(), 5)
-
-                # store results and time
-                self.timer.stop(f"metric_{target}")
-                scores[f"{target}_{postfix}"] = score
-
-        return scores
+            curve = self.curves[postfix]
+            curve.compute_metrics(self.cur_anchor, y_true, y_pred, y_pred_proba)
+            self.timer.leave()

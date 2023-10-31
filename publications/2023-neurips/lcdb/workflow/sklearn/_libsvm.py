@@ -11,11 +11,13 @@ from sklearn.svm import SVC
 
 from ...utils import filter_keys_with_prefix
 from .._preprocessing_workflow import PreprocessedWorkflow
+import numpy as np
+from scipy.special import softmax
 
 CONFIG_SPACE = ConfigurationSpace(
     name="libsvm",
     space={
-        "C": Float("C", bounds=(1e-12, 1e12), default=1, log=True),
+        "C": Float("C", bounds=(1e-12, 1e12), default=10**4, log=True),
         "shrinking": Categorical("shrinking", [True, False], default=True),
         "tol": Float("tol", bounds=(4.5e-5, 2), default=1e-3, log=True),
         "cap_max_iter": Categorical("cap_max_iter", [True, False], default=False),
@@ -101,8 +103,19 @@ class LibSVMWorkflow(PreprocessedWorkflow):
 
         self.learner.fit(X, y)
 
+        self.infos["classes"] = list(self.learner.classes_)
         self.infos["n_iter_"] = self.learner.n_iter_
 
     def _predict(self, X):
         X = self.pp_pipeline.transform(X)
         return self.learner.predict(X)
+
+    def _predict_proba(self, X):
+        X = self.pp_pipeline.transform(X)
+        decision_fun_vals = self.learner.decision_function(X)
+        sigmoid = lambda z: 1/(1 + np.exp(-z))
+        if len(decision_fun_vals.shape) == 2:
+            return softmax(decision_fun_vals, axis=1)
+        else:
+            a = sigmoid(decision_fun_vals)
+            return np.column_stack([a, 1 - a])

@@ -114,7 +114,7 @@ class LibLinearWorkflow(PreprocessedWorkflow):
 
         self.learner.fit(X, y)
 
-        self.infos["classes_"] = list(self.learner.classes_)
+        self.infos["classes"] = list(self.learner.classes_)
         if type(self.learner) is LinearSVC:
             self.infos["n_iter_"] = self.learner.n_iter_
         else:

@@ -50,7 +50,7 @@ class KNNWorkflow(PreprocessedWorkflow):
     def _fit(self, X, y, metadata):
         X_trans = self.transform(X, y, metadata)
         self.learner.fit(X_trans, y)
-        self.infos["classes_"] = self.learner.classes_
+        self.infos["classes"] = list(self.learner.classes_)
         return self
 
     def _predict_proba(self, X):
