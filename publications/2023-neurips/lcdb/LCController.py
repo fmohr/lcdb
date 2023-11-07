@@ -145,7 +145,8 @@ class LCController:
 
             # Collect the fit report (e.g., with iteration learning curves with epochs) if available
             if hasattr(self.workflow, "fit_report"):
-                self.additional_data_per_anchor[anchor].update(self.workflow.fit_report)
+                #self.additional_data_per_anchor[anchor].update(self.workflow.fit_report)
+                self.additional_data_per_anchor[anchor] = self.workflow.fit_report
 
             # Predict and Score
             if error_code == 0:
