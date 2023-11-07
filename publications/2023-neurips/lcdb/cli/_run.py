@@ -343,10 +343,10 @@ def main(
 
 
 def test_default_config():
-    #workflow_class = "lcdb.workflow.xgboost.XGBoostWorkflow"
+    workflow_class = "lcdb.workflow.xgboost.XGBoostWorkflow"
     #workflow_class = "lcdb.workflow.sklearn.KNNWorkflow"
-#    workflow_class = "lcdb.workflow.sklearn.LibLinearWorkflow"
-    workflow_class = "lcdb.workflow.sklearn.LibSVMWorkflow"
+    #workflow_class = "lcdb.workflow.sklearn.LibLinearWorkflow"
+    #workflow_class = "lcdb.workflow.sklearn.LibSVMWorkflow"
     #workflow_class = "lcdb.workflow.keras.DenseNNWorkflow"
     WorkflowClass = import_attr_from_module(workflow_class)
     config_space = WorkflowClass.config_space()
