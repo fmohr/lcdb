@@ -117,7 +117,7 @@ class Curve:
                     )
 
             # store results and time
-            self.timer.stop(f"metric_{target}")
+            self.timer.stop()
             if type(score) == dict:
                 self.curve_data[anchor].update(score)
             else:

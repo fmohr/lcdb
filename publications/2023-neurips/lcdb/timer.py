@@ -1,72 +1,106 @@
 from time import time
 import numpy as np
-import pandas as pd
+import pprint
 
 
 class Timer:
 
-    def __init__(self, aggregate: bool = True, precision=6):
+    def __init__(self, precision=6):
         """
 
         :param aggregate: bool, if `True`, then times are aggregated for identical time names.
         Otherwise they are maintained in a list.
         :param precision: int. Number of digits recorded in measurement
         """
-        self.ns_stack = []
-        self.runtimes = {}
-        self.cur_runtimes = self.runtimes  # this is a pointer to the dictionary within `runtimes` currently accessed through the namespace stack
-        self.start_timestamps = {}
-        self.aggregate = aggregate
+        self.root = None
+        self.stack = []
         self.precision = precision
 
-    def update_cur_runtimes_(self):
-        self.cur_runtimes = self.runtimes
-        for ns in self.ns_stack:
-            self.cur_runtimes = self.cur_runtimes[ns]
-
-    def enter(self, ns):
-        ns = str(ns)
-        self.ns_stack.append(ns)
-        if ns not in self.cur_runtimes:
-            self.cur_runtimes[ns] = {}
-        self.update_cur_runtimes_()
-
-    def leave(self):
-        if not self.ns_stack:
-            raise ValueError("The time is in no namespace ...")
-        self.ns_stack.pop(-1)
-        self.update_cur_runtimes_()
-
-    def start(self, name):
-        name = str(name)
-        full_name = f"{self.ns_stack}_{name}" if self.ns_stack else name
-        if full_name in self.start_timestamps:
-            raise ValueError(f"Timer for {full_name} already started.")
-        self.start_timestamps[full_name] = time()
-
-    def stop(self, name):
-        name = str(name)
-        full_name = f"{self.ns_stack}_{name}" if self.ns_stack else name
-        if full_name not in self.start_timestamps:
-            raise ValueError(f"No timer started for {full_name}.")
-        runtime = time() - self.start_timestamps[full_name]
-        del self.start_timestamps[full_name]
-
-        if self.aggregate:
-            if name not in self.cur_runtimes:
-                self.cur_runtimes[name] = 0
-            self.cur_runtimes[name] = np.round(self.cur_runtimes[name] + runtime, self.precision)
+    def start(self, name, metadata=None):
+        node = {
+            "name": name,
+            "start": np.round(time(), self.precision)
+        }
+        if isinstance(metadata, dict) and len(metadata) > 0:
+            node["metadata"] = metadata
+        if self.stack:
+            parent = self.stack[-1]
+            if "children" not in parent:
+                parent["children"] = []
+            parent["children"].append(node)
         else:
-            if name not in self.cur_runtimes:
-                self.runtimes[name] = []
-            self.cur_runtimes[name].append(np.round(runtime, self.precision))
+            self.root = node
+        self.stack.append(node)
 
-    def get_runtime(self, name):
+    def stop(self):
+        """
+        stops the current timer and steps back to the parent node
 
+        :return: None
+        """
+        if not self.stack:
+            raise ValueError("No timer currently active!")
+        self.stack[-1]["stop"] = np.round(time(), self.precision)
+        self.stack.pop(-1)
+
+    def get_simplified_dict(self, multiple_occurrences="raise"):
+        """
+        Tries to use the names of the nods as keys in order to simplify the tree representation.
+        This only works if the names of the children are unique
+
+        :return: dict
         """
 
-        :param name: name of the time to be extracted
-        :return: returns the accumulated or listed runtime of the given tag *within* the current namespace
-        """
-        self.cur_runtimes[name]
+        def simplify_sub_tree(t):
+            d = {
+                    "start": t["start"],
+                    "stop": t["stop"]
+                }
+            if "children" not in t:
+                return d
+            d["children"] = {}  # now a dictionary instead of a list
+            for child in t["children"]:
+                name = child["name"]
+                if name in d["children"]:
+                    if multiple_occurrences == "raise":
+                        pprint.pprint(d)
+                        raise ValueError(f"Duplicate entry for name {name} in node {t['name']}")
+                    elif multiple_occurrences == "merge_and_drop":
+                        additional_data = simplify_sub_tree(child)
+                        if "children" in additional_data:
+                            if "children" in d["children"][name]:
+                                d["children"][name]["children"].update(additional_data["children"])
+                            else:
+                                d["children"][name]["children"] = additional_data["children"]
 
+                        if "start" in d["children"][name]:
+                            del d["children"][name]["start"]
+                            del d["children"][name]["stop"]
+                else:
+                    d["children"][name] = simplify_sub_tree(child)
+            return d
+
+        return simplify_sub_tree(self.root)
+
+    def get_simplified_stack(self):
+        """
+        Tries to use the names of the nods as keys in order to simplify the tree representation.
+        This only works if the names of the children are unique
+
+        :return: dict
+        """
+
+        def simplify_entry(queue):
+            t = queue[0]
+            d = {
+                    "start": t["start"]
+                }
+            if "stop" in t:
+                d["stop"] = t["stop"]
+            if len(queue) > 1:
+                queue.pop(0)
+                name_of_next = queue[0]["name"]
+                d[name_of_next] = simplify_entry(queue)
+            return d
+
+        return {self.stack[0]["name"]: simplify_entry(self.stack)}

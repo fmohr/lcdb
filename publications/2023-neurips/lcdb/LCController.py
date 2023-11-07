@@ -60,8 +60,7 @@ class LCController:
         self.anchors = get_anchor_schedule(
             int(self.num_instances * (1 - test_prop - valid_prop))
         )
-        self.timer = Timer(precision=6)
-        self.workflow.timer = self.timer  # overwrite timer of workflow
+        self.workflow.timer = Timer(precision=6)  # overwrite timer of workflow
 
         # state variables
         self.cur_anchor = None
@@ -126,42 +125,55 @@ class LCController:
     def build_curves(self):
         # Build sample-wise learning curve
         self.curves = {
-            "train": Curve(workflow=self.workflow, timer=self.timer),
-            "val": Curve(workflow=self.workflow, timer=self.timer),
-            "test": Curve(workflow=self.workflow, timer=self.timer),
+            "train": Curve(workflow=self.workflow, timer=self.workflow.timer),
+            "val": Curve(workflow=self.workflow, timer=self.workflow.timer),
+            "test": Curve(workflow=self.workflow, timer=self.workflow.timer),
         }
         self.additional_data_per_anchor = {}
 
+        self.workflow.timer.start("curvecomputations")
         for anchor in self.anchors:
             self.set_anchor(anchor)
-            self.timer.enter(anchor)
+            self.workflow.timer.start(anchor)
+            timer_stack_size = len(self.workflow.timer.stack)
             logging.info(
                 f"Running anchor {anchor} which is {anchor / self.X_train_at_anchor.shape[0] * 100:.2f}% of the dataset."
             )
             error_code = self.fit_workflow_on_current_anchor()
+            assert len(self.workflow.timer.stack) == timer_stack_size, (
+                f"The timer stack has more elements than expected. You forgot to stop a started timer. "
+                f"Active timers: {self.workflow.timer.get_simplified_stack()}"
+            )
 
             # Collect the fit report (e.g., with iteration learning curves with epochs) if available
             if hasattr(self.workflow, "fit_report"):
-                # self.additional_data_per_anchor[anchor].update(self.workflow.fit_report)
                 self.additional_data_per_anchor[anchor] = self.workflow.fit_report
 
             # Predict and Score
             if error_code == 0:
                 logging.info("Predicting and scoring...")
-                self.compute_metrics_for_workflow()
-            self.timer.leave()
+                error_code = self.compute_metrics_for_workflow()
 
-            # Set objective
-            if error_code == 0:
-                self.objective = self.curves["val"][self.curves["val"].anchors[-1]][
-                    "accuracy"
-                ]
+                # Set objective
+                if error_code == 0:
+                    self.objective = self.curves["val"][self.curves["val"].anchors[-1]][
+                        "accuracy"
+                    ]
 
+            # stop timer for activities at this anchor
+            self.workflow.timer.stop()
+
+        self.workflow.timer.stop()  # outmost level
+        assert (
+            len(self.workflow.timer.stack) == 0
+        ), "The timer stack is not empty. You forgot to stop a started timer."
         self.report["curve_db"] = CurveDB(
             self.curves["train"],
             self.curves["val"],
             self.curves["test"],
-            self.timer.runtimes,
+            self.workflow.timer.get_simplified_dict(
+                multiple_occurrences="merge_and_drop"
+            )["children"],
             self.additional_data_per_anchor,
         ).dump_to_dict()
 
@@ -219,6 +231,15 @@ class LCController:
                         )
 
             except Exception as exception:
+                # make sure that nothing related to fit is on the timer stack anymore
+                fit_is_on_timer_stack = np.any(
+                    [e["name"] == "fit" for e in self.workflow.timer.stack]
+                )
+                if fit_is_on_timer_stack:
+                    while self.workflow.timer.stack[-1]["name"] != "fit":
+                        self.workflow.timer.stop()
+                    self.workflow.timer.stop()
+
                 if self.raise_errors:
                     raise
 
@@ -255,19 +276,31 @@ class LCController:
         ]:
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
-                fitted_workflow.timer.enter(postfix)
-
-                # TODO: this should be replaced to avoid infering twice
-                keys[f"y_pred_{postfix}"] = fitted_workflow.predict(X_)
-                keys[f"y_pred_proba_{postfix}"] = fitted_workflow.predict_proba(X_)
-
-                fitted_workflow.timer.leave()
+                fitted_workflow.timer.start(postfix)
+                try:
+                    # TODO: this should be replaced to avoid infering twice
+                    keys[f"y_pred_{postfix}"] = fitted_workflow.predict(X_)
+                    keys[f"y_pred_proba_{postfix}"] = fitted_workflow.predict_proba(X_)
+                except KeyboardInterrupt:
+                    raise
+                except:
+                    while self.workflow.timer.stack[-1]["name"] != postfix:
+                        self.workflow.timer.stop()  # stop the timer for predictions
+                    self.workflow.timer.stop()  # stop the timer for train/val/test
+                    raise
+                fitted_workflow.timer.stop()
         return keys, labels
 
     def compute_metrics_for_workflow(self):
-        predictions, labels = self.get_predictions(self.workflow)
-        self.labels_as_used_by_workflow = labels
-        return self.extend_curves_based_on_predictions(**predictions)
+        try:
+            predictions, labels = self.get_predictions(self.workflow)
+            self.labels_as_used_by_workflow = labels
+            return self.extend_curves_based_on_predictions(**predictions)
+        except KeyboardInterrupt:
+            raise
+        except:
+            print("Failure in prediction making, not computing any metrics ...")
+            return 1
 
     def extend_curves_based_on_predictions(
         self,
@@ -283,7 +316,8 @@ class LCController:
             (self.y_valid, y_pred_val, y_pred_proba_val, "val"),
             (self.y_test, y_pred_test, y_pred_proba_test, "test"),
         ]:
-            self.timer.enter(postfix)
+            self.workflow.timer.start(postfix)
             curve = self.curves[postfix]
             curve.compute_metrics(self.cur_anchor, y_true, y_pred, y_pred_proba)
-            self.timer.leave()
+            self.workflow.timer.stop()
+        return 0  # no error occurred
