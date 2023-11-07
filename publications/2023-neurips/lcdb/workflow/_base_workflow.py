@@ -29,7 +29,7 @@ class BaseWorkflow(abc.ABC):
         """Fit the workflow to the data."""
         self.timer.start("fit")
         self._fit(X=X, y=y, metadata=metadata, *args, **kwargs)
-        self.timer.stop("fit")
+        self.timer.stop()
         self.workflow_fitted = True
         return self
 
@@ -42,14 +42,14 @@ class BaseWorkflow(abc.ABC):
         """Predict from the data."""
         self.timer.start("predict")
         y_pred = self._predict(*args, **kwargs)
-        self.timer.stop("predict")
+        self.timer.stop()
         return y_pred
 
     def predict_proba(self, *args, **kwargs) -> NP_ARRAY:
         """Predict from the data."""
         self.timer.start("predict_proba")
         y_pred = self._predict_proba(*args, **kwargs)
-        self.timer.stop("predict_proba")
+        self.timer.stop()
         return y_pred
 
     @abc.abstractmethod
@@ -70,7 +70,7 @@ class BaseWorkflow(abc.ABC):
         """Transform the data."""
         self.timer.start("transform")
         X = self._transform(X, y, metadata)
-        self.timer.stop("transform")
+        self.timer.stop()
         self.transform_fitted = True
         return X
 
