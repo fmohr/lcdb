@@ -1,14 +1,16 @@
-from lcdb.timer import Timer
-from sklearn.metrics import (
-    brier_score_loss,
-    roc_auc_score,
-    confusion_matrix,
-    log_loss,
-    accuracy_score,
-)
+import itertools as it
+from collections import OrderedDict
+
 import numpy as np
 import pandas as pd
-import itertools as it
+from lcdb.timer import Timer
+from sklearn.metrics import (
+    accuracy_score,
+    brier_score_loss,
+    confusion_matrix,
+    log_loss,
+    roc_auc_score,
+)
 
 
 class Curve:
@@ -19,7 +21,7 @@ class Curve:
     def __init__(self, workflow=None, timer=None):
         self.workflow = workflow
         self.timer = timer if timer is not None else Timer()
-        self.curve_data = {}
+        self.curve_data = OrderedDict()
 
     def __len__(self):
         """The number of anchors in the curve corresponds to the length of the curve."""
@@ -123,7 +125,8 @@ class Curve:
 
     @property
     def anchors(self):
-        return sorted(self.curve_data.keys())
+        # return sorted(self.curve_data.keys())
+        return list(self.curve_data.keys())
 
     def as_dataframe(self):
         """
