@@ -155,10 +155,11 @@ class LCController:
             # Predict and Score
             if error_code == 0:
                 logging.info("Predicting and scoring...")
-                self.compute_metrics_for_workflow()
+                error_code = self.compute_metrics_for_workflow()
 
                 # Set objective
-                self.objective = self.curves["val"][self.curves["val"].anchors[-1]]["accuracy"]
+                if error_code == 0:
+                    self.objective = self.curves["val"][self.curves["val"].anchors[-1]]["accuracy"]
 
             # stop timer for activities at this anchor
             self.workflow.timer.stop()
@@ -227,6 +228,14 @@ class LCController:
                         )
 
             except Exception as exception:
+
+                # make sure that nothing related to fit is on the timer stack anymore
+                fit_is_on_timer_stack = np.any([e["name"] == "fit" for e in self.workflow.timer.stack])
+                if fit_is_on_timer_stack:
+                    while self.workflow.timer.stack[-1]["name"] != "fit":
+                        self.workflow.timer.stop()
+                    self.workflow.timer.stop()
+
                 if self.raise_errors:
                     raise
 
@@ -264,15 +273,29 @@ class LCController:
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
                 fitted_workflow.timer.start(postfix)
-                keys[f"y_pred_{postfix}"] = fitted_workflow.predict(X_)
-                keys[f"y_pred_proba_{postfix}"] = fitted_workflow.predict_proba(X_)
+                try:
+                    keys[f"y_pred_{postfix}"] = fitted_workflow.predict(X_)
+                    keys[f"y_pred_proba_{postfix}"] = fitted_workflow.predict_proba(X_)
+                except KeyboardInterrupt:
+                    raise
+                except:
+                    while self.workflow.timer.stack[-1]["name"] != postfix:
+                        self.workflow.timer.stop()  # stop the timer for predictions
+                    self.workflow.timer.stop()  # stop the timer for train/val/test
+                    raise
                 fitted_workflow.timer.stop()
         return keys, labels
 
     def compute_metrics_for_workflow(self):
-        predictions, labels = self.get_predictions(self.workflow)
-        self.labels_as_used_by_workflow = labels
-        return self.extend_curves_based_on_predictions(**predictions)
+        try:
+            predictions, labels = self.get_predictions(self.workflow)
+            self.labels_as_used_by_workflow = labels
+            return self.extend_curves_based_on_predictions(**predictions)
+        except KeyboardInterrupt:
+            raise
+        except:
+            print("Failure in prediction making, not computing any metrics ...")
+            return 1
 
     def extend_curves_based_on_predictions(
         self,
@@ -292,3 +315,4 @@ class LCController:
             curve = self.curves[postfix]
             curve.compute_metrics(self.cur_anchor, y_true, y_pred, y_pred_proba)
             self.workflow.timer.stop()
+        return 0  # no error occurred
