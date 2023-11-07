@@ -3,14 +3,45 @@ from xgboost.callback import TrainingCallback
 from ConfigSpace import ConfigurationSpace, Integer, Float, Uniform
 from lcdb.utils import filter_keys_with_prefix
 from lcdb.workflow._preprocessing_workflow import PreprocessedWorkflow
-# from ...utils import filter_keys_with_prefix
-# from .._preprocessing_workflow import PreprocessedWorkflow
+#from ...utils import filter_keys_with_prefix
+#from .._preprocessing_workflow import PreprocessedWorkflow
 from sklearn.preprocessing import LabelEncoder
 import numpy as np
 from lcdb.timer import Timer
 from lcdb.Curve import Curve
 from lcdb.CurveDB import CurveDB
 import warnings
+
+
+class ExtendedLabelEncoder(LabelEncoder):
+    def __init__(self, handle_unknown="ignore"):
+        self.handle_unknown = handle_unknown
+        self.unknown_integer = None
+        LabelEncoder.__init__(self)
+
+    def fit(self, y):
+        # unknown integer is n if n is the number of seen classes
+        # because we map 0 to n-1 and n is the next unseen class
+        if self.handle_unknown == "ignore":
+            if "___UNKNOWN___" in y:
+                raise ValueError("___UNKNOWN___ is a reserved label")
+        self.unknown_integer = len(np.unique(y))
+        return super(ExtendedLabelEncoder, self).fit(y)
+
+    def transform(self, y):
+        if self.handle_unknown == "ignore":
+            return [super(ExtendedLabelEncoder, self).transform([label])[
+                        0] if label in self.classes_ else self.unknown_integer for label in y]
+        else:
+            return super(ExtendedLabelEncoder, self).transform(y)
+
+    def inverse_transform(self, y):
+        if self.handle_unknown == "ignore":
+            return [super(ExtendedLabelEncoder, self).inverse_transform([label])[0] if label != self.unknown_integer else "___UNKNOWN___" for label in y]
+        else:
+            return super(ExtendedLabelEncoder, self).inverse_transform(y)
+
+
 
 CONFIG_SPACE = ConfigurationSpace(
     name="xgboost",
@@ -108,6 +139,8 @@ class EvalCallBack(TrainingCallback):
 
     def create_labels_from_probs(self, probs_pred, invert: bool = False):
         # get the index of the highest probability
+        # this is the same procedure the official sklearn wrapper uses
+        # https://github.com/dmlc/xgboost/blob/6c0a190f6d12d2ba6a1cabd7741881ea1913d433/python-package/xgboost/sklearn.py#L1568
         y_pred = np.argmax(probs_pred, axis=1)
         # invert the label encoding index if necessary
         if invert:
@@ -177,7 +210,7 @@ class XGBoostWorkflow(PreprocessedWorkflow):
     # FIXME: increase the number of iterations to something like 1000-10000
     # FIXME: random_state?
     # FIXME: trycatch and logging?
-    def __init__(self, n_estimators=100, learning_rate=0.3, gamma=10 ** -6, min_child_weight=0, max_depth=6,
+    def __init__(self, n_estimators=5, learning_rate=0.3, gamma=10 ** -6, min_child_weight=0, max_depth=6,
                  subsample=1, colsample_bytree=1, reg_alpha=10 ** -6, reg_lambda=1, random_state=None, **kwargs):
         super().__init__(**filter_keys_with_prefix(kwargs, prefix="pp@"))
 
@@ -199,7 +232,7 @@ class XGBoostWorkflow(PreprocessedWorkflow):
 
         self.learner = XGBClassifier(**learner_kwargs)
 
-        self.encoder = LabelEncoder()
+        self.encoder = ExtendedLabelEncoder()
 
         self.fidelities_timer = None
         self.fidelities = None
@@ -225,8 +258,9 @@ class XGBoostWorkflow(PreprocessedWorkflow):
 
         # store the metadata and label encode y, y_valid and y_test
         self.metadata = metadata
-        y = self.encoder.fit_transform(y)
+        self.encoder.fit(y)
         self.infos["classes"] = list(self.encoder.classes_)
+        y = self.encoder.transform(y)
         y_valid = self.encoder.transform(y_valid)
         y_test = self.encoder.transform(y_test)
 
@@ -238,6 +272,14 @@ class XGBoostWorkflow(PreprocessedWorkflow):
         # construct callback that will handle the fidelity curves and the fit report and set it as callback
         eval_callback = EvalCallBack((X, y), data_valid=(X_valid, y_valid), data_test=(X_test, y_test), workflow=self)
         self.learner.set_params(callbacks=[eval_callback])
+
+        n_classes = len(self.infos["classes"])
+        multiclass = n_classes > 2
+
+        if multiclass:
+            self.learner.set_params(objective="multi:softprob")
+        else:
+            self.learner.set_params(objective="binary:logistic")
 
         # fit the learner
         self.learner.fit(X, y)

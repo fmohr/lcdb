@@ -350,7 +350,7 @@ def test_default_config():
     # id 3, 6 are good tests
     output = run(
         RunningJob(id=0, parameters=config_default),
-        openml_id=3,
+        openml_id=6,
         workflow_class=workflow_class,
         raise_errors=True,
     )
