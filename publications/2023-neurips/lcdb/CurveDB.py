@@ -52,11 +52,20 @@ class CurveDB:
             rows.append(row)
         times_as_dataframe = pd.DataFrame(rows, columns=["anchor"] + time_names)
 
-        out = {
-            "train_curve": self.train_curve.as_compact_dict(),
-            "val_curve": self.val_curve.as_compact_dict(),
-            "test_curve": self.test_curve.as_compact_dict(),
-            "times": times_as_dataframe.to_dict(orient="list"),
-            "additional_data": self.additional_data
-        }
+        if len(self.train_curve) > 0:
+            out = {
+                "train_curve": self.train_curve.as_compact_dict(),
+                "val_curve": self.val_curve.as_compact_dict(),
+                "test_curve": self.test_curve.as_compact_dict(),
+                "times": times_as_dataframe.to_dict(orient="list"),
+                "additional_data": self.additional_data
+            }
+        else:
+            out = {
+                "train_curve": None,
+                "val_curve": None,
+                "test_curve": None,
+                "times": times_as_dataframe.to_dict(orient="list"),
+                "additional_data": self.additional_data
+            }
         return out

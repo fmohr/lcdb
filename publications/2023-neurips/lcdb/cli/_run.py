@@ -13,9 +13,7 @@ from deephyper.problem import HpProblem
 from deephyper.search.hps import CBO
 from lcdb.data import load_task
 from lcdb.LCController import LCController
-from lcdb.utils import (
-    import_attr_from_module
-)
+from lcdb.utils import import_attr_from_module
 
 # Avoid Tensorflow Warnings
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = str(3)
@@ -168,7 +166,7 @@ def run(
     test_prop: float = 0.1,
     timeout_on_fit=-1,
     known_categories: bool = True,
-    raise_errors: bool = False
+    raise_errors: bool = False,
 ):
     """This function trains the workflow on a dataset and returns performance metrics.
 
@@ -190,10 +188,7 @@ def run(
         dict: a dictionary with 2 keys (objective, metadata) where objective is the objective maximized by deephyper (if used) and metadata is a JSON serializable sub-dictionnary which are complementary information about the workflow.
     """
 
-    infos = {
-        "openmlid": openml_id,
-        "workflow_seed": workflow_seed
-    }
+    infos = {"openmlid": openml_id, "workflow_seed": workflow_seed}
 
     # Load the raw dataset
     (X, y), dataset_metadata = load_task(f"openml.{openml_id}")
@@ -219,7 +214,7 @@ def run(
         timeout_on_fit=timeout_on_fit,
         known_categories=known_categories,
         stratify=True,
-        raise_errors=raise_errors
+        raise_errors=raise_errors,
     )
 
     # build the curves
@@ -228,8 +223,9 @@ def run(
     # update infos based on report
     infos.update(controller.report)
 
+    # TODO: to be replaced by the real score(s)
     # get validation accuracy score on last anchor
-    valid_accuracy = 9#infos["scores"][-1]["accuracy_val"]
+    valid_accuracy = controller.objective
     results = {"objective": valid_accuracy, "metadata": infos}
 
     return results
@@ -343,11 +339,11 @@ def main(
 
 
 def test_default_config():
-    #workflow_class = "lcdb.workflow.xgboost.XGBoostWorkflow"
-    #workflow_class = "lcdb.workflow.sklearn.KNNWorkflow"
-#    workflow_class = "lcdb.workflow.sklearn.LibLinearWorkflow"
+    # workflow_class = "lcdb.workflow.xgboost.XGBoostWorkflow"
+    # workflow_class = "lcdb.workflow.sklearn.KNNWorkflow"
+    #    workflow_class = "lcdb.workflow.sklearn.LibLinearWorkflow"
     workflow_class = "lcdb.workflow.sklearn.LibSVMWorkflow"
-    #workflow_class = "lcdb.workflow.keras.DenseNNWorkflow"
+    # workflow_class = "lcdb.workflow.keras.DenseNNWorkflow"
     WorkflowClass = import_attr_from_module(workflow_class)
     config_space = WorkflowClass.config_space()
     config_default = config_space.get_default_configuration().get_dictionary()
@@ -359,7 +355,6 @@ def test_default_config():
         workflow_class=workflow_class,
         raise_errors=True,
     )
-
 
     # check that the output can indeed be compiled into a string using JSON
     json.dumps(output)
