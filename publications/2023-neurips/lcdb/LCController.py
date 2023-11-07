@@ -1,22 +1,19 @@
 import functools
 import logging
 import traceback
-
-from sklearn.preprocessing import FunctionTransformer, OneHotEncoder
-
-from lcdb.data.split import train_valid_test_split
 import warnings
-from lcdb.timer import Timer
-from lcdb.Curve import Curve
-from lcdb.CurveDB import CurveDB
-from lcdb.utils import (
-    terminate_on_timeout,
-    FunctionCallTimeoutError,
-    get_anchor_schedule,
-)
 
 import numpy as np
-import warnings
+from lcdb.curve import Curve
+from lcdb.curvedb import CurveDB
+from lcdb.data.split import train_valid_test_split
+from lcdb.timer import Timer
+from lcdb.utils import (
+    FunctionCallTimeoutError,
+    get_anchor_schedule,
+    terminate_on_timeout,
+)
+from sklearn.preprocessing import FunctionTransformer, OneHotEncoder
 
 
 class LCController:
@@ -145,7 +142,7 @@ class LCController:
 
             # Collect the fit report (e.g., with iteration learning curves with epochs) if available
             if hasattr(self.workflow, "fit_report"):
-                #self.additional_data_per_anchor[anchor].update(self.workflow.fit_report)
+                # self.additional_data_per_anchor[anchor].update(self.workflow.fit_report)
                 self.additional_data_per_anchor[anchor] = self.workflow.fit_report
 
             # Predict and Score
@@ -156,8 +153,9 @@ class LCController:
 
             # Set objective
             if error_code == 0:
-                self.objective = self.curves["val"][self.curves["val"].anchors[-1]]["accuracy"]
-
+                self.objective = self.curves["val"][self.curves["val"].anchors[-1]][
+                    "accuracy"
+                ]
 
         self.report["curve_db"] = CurveDB(
             self.curves["train"],
@@ -241,9 +239,9 @@ class LCController:
                         self.objective += "_function_call_timeout_error"
                     elif isinstance(exception, MemoryError):
                         self.objective += "_memory_error"
-                
+
                 error_code = 1
-            
+
             return error_code
 
     def get_predictions(self, fitted_workflow):
@@ -258,8 +256,11 @@ class LCController:
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
                 fitted_workflow.timer.enter(postfix)
+
+                # TODO: this should be replaced to avoid infering twice
                 keys[f"y_pred_{postfix}"] = fitted_workflow.predict(X_)
                 keys[f"y_pred_proba_{postfix}"] = fitted_workflow.predict_proba(X_)
+
                 fitted_workflow.timer.leave()
         return keys, labels
 

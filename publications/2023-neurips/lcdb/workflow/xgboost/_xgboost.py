@@ -1,43 +1,44 @@
-from xgboost import XGBClassifier, DMatrix
-from xgboost.callback import TrainingCallback
-from ConfigSpace import ConfigurationSpace, Integer, Float, Uniform
+import warnings
+
+import numpy as np
+from ConfigSpace import ConfigurationSpace, Float, Integer, Uniform
+from lcdb.curve import Curve
+from lcdb.curvedb import CurveDB
+from lcdb.timer import Timer
 from lcdb.utils import filter_keys_with_prefix
 from lcdb.workflow._preprocessing_workflow import PreprocessedWorkflow
 # from ...utils import filter_keys_with_prefix
 # from .._preprocessing_workflow import PreprocessedWorkflow
 from sklearn.preprocessing import LabelEncoder
-import numpy as np
-from lcdb.timer import Timer
-from lcdb.Curve import Curve
-from lcdb.CurveDB import CurveDB
-import warnings
+from xgboost import DMatrix, XGBClassifier
+from xgboost.callback import TrainingCallback
 
 CONFIG_SPACE = ConfigurationSpace(
     name="xgboost",
     space={
         "learning_rate": Float(
             "learning_rate",
-            bounds=(10 ** -6, 1),
+            bounds=(10**-6, 1),
             distribution=Uniform(),
             default=0.3,
             log=True,
         ),
         "gamma": Float(
             "gamma",
-            bounds=(10 ** -6, 2 ** 6),
+            bounds=(10**-6, 2**6),
             distribution=Uniform(),
-            default=10 ** -6,
+            default=10**-6,
             log=True,
         ),  # normal default would be 0
         "min_child_weight": Float(
             "min_child_weight",
-            bounds=(10 ** -6, 2 ** 5),
+            bounds=(10**-6, 2**5),
             distribution=Uniform(),
             default=1,
             log=True,
         ),
         "max_depth": Integer(
-            "max_depth", bounds=(2, 2 ** 5), distribution=Uniform(), default=6, log=True
+            "max_depth", bounds=(2, 2**5), distribution=Uniform(), default=6, log=True
         ),
         "subsample": Float(
             "subsample", bounds=(0.5, 1), distribution=Uniform(), default=1
@@ -47,14 +48,14 @@ CONFIG_SPACE = ConfigurationSpace(
         ),
         "reg_alpha": Float(
             "reg_alpha",
-            bounds=(10 ** -6, 2),
+            bounds=(10**-6, 2),
             distribution=Uniform(),
-            default=10 ** -6,
+            default=10**-6,
             log=True,
         ),  # normal default would be 0
         "reg_lambda": Float(
             "reg_lambda",
-            bounds=(10 ** -6, 2),
+            bounds=(10**-6, 2),
             distribution=Uniform(),
             default=1,
             log=True,
@@ -124,7 +125,8 @@ class EvalCallBack(TrainingCallback):
         for X_, y_true, postfix in [
             (self.DM_train, self.y_train, "train"),
             (self.DM_valid, self.y_valid, "val"),
-            (self.DM_test, self.y_test, "test")]:
+            (self.DM_test, self.y_test, "test"),
+        ]:
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
                 self.timer.enter(postfix)
@@ -145,18 +147,19 @@ class EvalCallBack(TrainingCallback):
         self.labels_as_used_by_workflow = labels
         return self.extend_curves_based_on_predictions(**predictions)
 
-    def extend_curves_based_on_predictions(self,
-                                           y_pred_train,
-                                           y_pred_proba_train,
-                                           y_pred_val,
-                                           y_pred_proba_val,
-                                           y_pred_test,
-                                           y_pred_proba_test):
-
+    def extend_curves_based_on_predictions(
+        self,
+        y_pred_train,
+        y_pred_proba_train,
+        y_pred_val,
+        y_pred_proba_val,
+        y_pred_test,
+        y_pred_proba_test,
+    ):
         for y_true, y_pred, y_pred_proba, postfix in [
             (self.y_train, y_pred_train, y_pred_proba_train, "train"),
             (self.y_valid, y_pred_val, y_pred_proba_val, "val"),
-            (self.y_test, y_pred_test, y_pred_proba_test, "test")
+            (self.y_test, y_pred_test, y_pred_proba_test, "test"),
         ]:
             self.timer.enter(postfix)
             curve = self.curves[postfix]
@@ -177,8 +180,20 @@ class XGBoostWorkflow(PreprocessedWorkflow):
     # FIXME: increase the number of iterations to something like 1000-10000
     # FIXME: random_state?
     # FIXME: trycatch and logging?
-    def __init__(self, n_estimators=100, learning_rate=0.3, gamma=10 ** -6, min_child_weight=0, max_depth=6,
-                 subsample=1, colsample_bytree=1, reg_alpha=10 ** -6, reg_lambda=1, random_state=None, **kwargs):
+    def __init__(
+        self,
+        n_estimators=100,
+        learning_rate=0.3,
+        gamma=10**-6,
+        min_child_weight=0,
+        max_depth=6,
+        subsample=1,
+        colsample_bytree=1,
+        reg_alpha=10**-6,
+        reg_lambda=1,
+        random_state=None,
+        **kwargs,
+    ):
         super().__init__(**filter_keys_with_prefix(kwargs, prefix="pp@"))
 
         self.requires_valid_to_fit = True
@@ -219,7 +234,7 @@ class XGBoostWorkflow(PreprocessedWorkflow):
         self.fidelities = {
             "train": Curve(workflow=self, timer=self.fidelities_timer),
             "val": Curve(workflow=self, timer=self.fidelities_timer),
-            "test": Curve(workflow=self, timer=self.fidelities_timer)
+            "test": Curve(workflow=self, timer=self.fidelities_timer),
         }
         self.fit_report = {}
 
@@ -236,7 +251,12 @@ class XGBoostWorkflow(PreprocessedWorkflow):
         X_test = self.transform(X_test, y_test, metadata)
 
         # construct callback that will handle the fidelity curves and the fit report and set it as callback
-        eval_callback = EvalCallBack((X, y), data_valid=(X_valid, y_valid), data_test=(X_test, y_test), workflow=self)
+        eval_callback = EvalCallBack(
+            (X, y),
+            data_valid=(X_valid, y_valid),
+            data_test=(X_test, y_test),
+            workflow=self,
+        )
         self.learner.set_params(callbacks=[eval_callback])
 
         # fit the learner
@@ -248,7 +268,7 @@ class XGBoostWorkflow(PreprocessedWorkflow):
             self.fidelities["val"],
             self.fidelities["test"],
             self.fidelities_timer.runtimes,
-            None
+            None,
         ).dump_to_dict()
 
     def _predict(self, X):

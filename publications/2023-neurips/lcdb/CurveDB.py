@@ -1,8 +1,17 @@
 import pandas as pd
 
-class CurveDB:
+from lcdb.curve import Curve
 
-    def __init__(self, train_curve, val_curve, test_curve, times, additional_data):
+
+class CurveDB:
+    def __init__(
+        self,
+        train_curve: Curve,
+        val_curve: Curve,
+        test_curve: Curve,
+        times,
+        additional_data,
+    ):
         """
         :param train_curve: a Curve object (performances and prediction and metric time data) built with the train data
         :param val_curve: a Curve object (performances and prediction and metric time data) built with the validation data
@@ -19,7 +28,6 @@ class CurveDB:
         self.additional_data = additional_data
 
     def dump_to_dict(self):
-
         """
         Compiles the whole knowledge base into a single compact dictionary.
         This dictionary should not have redundant information
@@ -28,7 +36,7 @@ class CurveDB:
         :return: dict
         """
 
-        def flatten(dictionary, parent_key='', separator='::', from_depth=0):
+        def flatten(dictionary, parent_key="", separator="::", from_depth=0):
             items = []
             for key, value in dictionary.items():
                 if from_depth > 0:
@@ -36,7 +44,11 @@ class CurveDB:
                 else:
                     new_key = parent_key + separator + key if parent_key else key
                     if isinstance(value, dict):
-                        items.extend(flatten(value, new_key, separator=separator, from_depth=0).items())
+                        items.extend(
+                            flatten(
+                                value, new_key, separator=separator, from_depth=0
+                            ).items()
+                        )
                     else:
                         items.append((new_key, value))
             return dict(items)
@@ -58,7 +70,7 @@ class CurveDB:
                 "val_curve": self.val_curve.as_compact_dict(),
                 "test_curve": self.test_curve.as_compact_dict(),
                 "times": times_as_dataframe.to_dict(orient="list"),
-                "additional_data": self.additional_data
+                "additional_data": self.additional_data,
             }
         else:
             out = {
@@ -66,6 +78,6 @@ class CurveDB:
                 "val_curve": None,
                 "test_curve": None,
                 "times": times_as_dataframe.to_dict(orient="list"),
-                "additional_data": self.additional_data
+                "additional_data": self.additional_data,
             }
         return out

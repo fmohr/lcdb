@@ -1,17 +1,17 @@
 """Command line to run experiments."""
 import copy
+import json
 import logging
 import os
 import pathlib
 
-import json
 import pandas as pd
 from deephyper.evaluator import Evaluator, RunningJob, profile
 from deephyper.evaluator.callback import TqdmCallback
 from deephyper.problem import HpProblem
 from deephyper.search.hps import CBO
 from lcdb.data import load_task
-from lcdb.LCController import LCController
+from lcdb.lccontroller import LCController
 from lcdb.utils import import_attr_from_module
 
 # Avoid Tensorflow Warnings
@@ -338,11 +338,11 @@ def main(
 
 
 def test_default_config():
-    workflow_class = "lcdb.workflow.xgboost.XGBoostWorkflow"
-    #workflow_class = "lcdb.workflow.sklearn.KNNWorkflow"
-    #workflow_class = "lcdb.workflow.sklearn.LibLinearWorkflow"
-    #workflow_class = "lcdb.workflow.sklearn.LibSVMWorkflow"
-    #workflow_class = "lcdb.workflow.keras.DenseNNWorkflow"
+    # workflow_class = "lcdb.workflow.xgboost.XGBoostWorkflow"
+    # workflow_class = "lcdb.workflow.sklearn.KNNWorkflow"
+    # workflow_class = "lcdb.workflow.sklearn.LibLinearWorkflow"
+    # workflow_class = "lcdb.workflow.sklearn.LibSVMWorkflow"
+    workflow_class = "lcdb.workflow.keras.DenseNNWorkflow"
     WorkflowClass = import_attr_from_module(workflow_class)
     config_space = WorkflowClass.config_space()
     config_default = config_space.get_default_configuration().get_dictionary()
