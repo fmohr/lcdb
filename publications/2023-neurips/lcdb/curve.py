@@ -51,6 +51,7 @@ class Curve:
             y_pred_proba = np.column_stack(
                 [y_pred_proba[:, i] for i in np.argsort(relevant_labels)]
             )
+            print(f"{relevant_labels=}")
             relevant_labels = sorted(relevant_labels)
 
         is_binary = len(np.unique(y_true)) == 2

@@ -1,4 +1,3 @@
-import functools
 import logging
 
 import absl.logging
@@ -65,6 +64,10 @@ class IterationCurveCallback(tf.keras.callbacks.Callback):
         self.epoch = epoch
         self.timer.start(self.epoch)
 
+    def on_epoch_end(self, epoch, logs=None):
+        super().on_epoch_end(epoch, logs)
+        self.timer.stop()
+
     def on_train_begin(self, logs=None):
         self.timer.start("epoch_train")
 
@@ -76,10 +79,10 @@ class IterationCurveCallback(tf.keras.callbacks.Callback):
 
         self.timer.start("epoch_compute_metrics")
 
-        for label_split, data_split in self.data:
+        for label_split, data_split in self.data.items():
             self.timer.start(label_split)
 
-            y_pred, y_pred_proba = self.workflow.predict_with_proba(data_split["X"])
+            y_pred, y_pred_proba = self.workflow._predict_with_proba(data_split["X"])
             y_true = data_split["y"]
 
             self.curves[label_split].compute_metrics(
@@ -147,7 +150,6 @@ class DenseNNWorkflow(BaseWorkflow):
     def config_space(cls):
         return cls._config_space
 
-    @functools.cache
     def _transform(self, X, y, metadata):
         X_cat = X[:, metadata["categories"]["columns"]]
         X_real = X[:, ~metadata["categories"]["columns"]]
@@ -158,27 +160,20 @@ class DenseNNWorkflow(BaseWorkflow):
         if not (self.transform_fitted):
             # Categorical features
             if self.transform_cat == "onehot":
-                self._transformer_cat = OneHotEncoder(drop="first", sparse_output=False)
+                self._transformer_cat = OneHotEncoder(
+                    drop="first", sparse_output=False, handle_unknown="ignore"
+                )
             elif self.transform_cat == "ordinal":
-                self._transformer_cat = OrdinalEncoder()
+                self._transformer_cat = OrdinalEncoder(
+                    handle_unknown="use_encoded_value", unknown_value=-1
+                )
             else:
                 raise ValueError(
                     f"Unknown categorical transformation {self.transform_cat}"
                 )
 
-            if metadata["categories"]["values"] is not None:
-                max_categories = max(len(x) for x in metadata["categories"]["values"])
-                values = np.array(
-                    [
-                        c_val + [c_val[-1]] * (max_categories - len(c_val))
-                        for c_val in metadata["categories"]["values"]
-                    ]
-                ).T
-            else:
-                values = X_cat
-
             if has_cat:
-                self._transformer_cat.fit(values)
+                self._transformer_cat.fit(X_cat)
 
             # Real features
             if self.transform_real == "minmax":
@@ -215,17 +210,16 @@ class DenseNNWorkflow(BaseWorkflow):
     def _fit(self, X, y, X_valid, y_valid, X_test, y_test, metadata):
         self.metadata = metadata
         X = self.transform(X, y, metadata).astype(np.float32)
-        y = self._transformer_label.fit_transform(y)
+        y_ = self._transformer_label.fit_transform(y)
 
         self.infos["classes"] = list(self._transformer_label.classes_)
 
         # TODO: adapt timings for validation and test data
         X_valid = self.transform(X_valid, y_valid, metadata).astype(np.float32)
-        y_valid = self._transformer_label.transform(y_valid)
+        y_valid_ = self._transformer_label.transform(y_valid)
 
         # TODO: adapt timings
         X_test = self.transform(X_test, y_test, metadata).astype(np.float32)
-        y_test = self._transformer_label.transform(y_test)
 
         self.learner = self.build_model(X.shape[1:], metadata["num_classes"])
 
@@ -250,11 +244,11 @@ class DenseNNWorkflow(BaseWorkflow):
 
         fit_history = self.learner.fit(
             X,
-            y,
+            y_,
             batch_size=min(len(X), self.batch_size),
             epochs=self.num_epochs,
             shuffle=self.shuffle_each_epoch,
-            validation_data=(X_valid, y_valid),
+            validation_data=(X_valid, y_valid_),
             callbacks=[
                 iteration_curve_callback,
                 tf.keras.callbacks.TerminateOnNaN(),
@@ -280,7 +274,7 @@ class DenseNNWorkflow(BaseWorkflow):
 
         # Collect iteration curves
         self.fit_report = {
-            label_split: label_curve
+            label_split: label_curve.as_compact_dict()
             for label_split, label_curve in iteration_curve_callback.curves.items()
         }
 
@@ -290,7 +284,7 @@ class DenseNNWorkflow(BaseWorkflow):
         return y_pred
 
     def _predict_proba(self, X):
-        X = self.transform(X, metadata=self.metadata).astype(np.float32)
+        X = self.transform(X, y=None, metadata=self.metadata).astype(np.float32)
         y_pred = self.learner.predict(
             X, batch_size=min(len(X), self.batch_size), verbose=self.verbose
         )

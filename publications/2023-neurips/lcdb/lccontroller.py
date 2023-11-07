@@ -1,5 +1,6 @@
 import functools
 import logging
+import pprint
 import traceback
 import warnings
 
@@ -142,7 +143,7 @@ class LCController:
             error_code = self.fit_workflow_on_current_anchor()
             assert len(self.workflow.timer.stack) == timer_stack_size, (
                 f"The timer stack has more elements than expected. You forgot to stop a started timer. "
-                f"Active timers: {self.workflow.timer.get_simplified_stack()}"
+                f"Active timers:\n {pprint.pformat(self.workflow.timer.get_simplified_stack(), indent=2)}"
             )
 
             # Collect the fit report (e.g., with iteration learning curves with epochs) if available

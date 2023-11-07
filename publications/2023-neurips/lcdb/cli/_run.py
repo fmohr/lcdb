@@ -345,7 +345,7 @@ def test_default_config():
     workflow_class = "lcdb.workflow.keras.DenseNNWorkflow"
     WorkflowClass = import_attr_from_module(workflow_class)
     config_space = WorkflowClass.config_space()
-    config_default = config_space.get_default_configuration().get_dictionary()
+    config_default = dict(config_space.get_default_configuration())
 
     # id 3, 6 are good tests
     output = run(
