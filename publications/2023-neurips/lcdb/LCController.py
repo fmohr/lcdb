@@ -57,8 +57,7 @@ class LCController:
         self.timeout_on_fit = timeout_on_fit
         self.raise_errors = raise_errors
         self.anchors = get_anchor_schedule(int(self.num_instances * (1 - test_prop - valid_prop)))
-        self.timer = Timer(precision=6)
-        self.workflow.timer = self.timer  # overwrite timer of workflow
+        self.workflow.timer = Timer(precision=6)  # overwrite timer of workflow
 
         # state variables
         self.cur_anchor = None
@@ -122,16 +121,16 @@ class LCController:
 
         # Build sample-wise learning curve
         self.curves = {
-            "train": Curve(workflow=self.workflow, timer=self.timer),
-            "val": Curve(workflow=self.workflow, timer=self.timer),
-            "test": Curve(workflow=self.workflow, timer=self.timer)
+            "train": Curve(workflow=self.workflow, timer=self.workflow.timer),
+            "val": Curve(workflow=self.workflow, timer=self.workflow.timer),
+            "test": Curve(workflow=self.workflow, timer=self.workflow.timer)
         }
         self.additional_data_per_anchor = {}
 
         for anchor in self.anchors:
 
             self.set_anchor(anchor)
-            self.timer.enter(anchor)
+            self.workflow.timer.start(anchor)
             logging.info(
                 f"Running anchor {anchor} which is {anchor / self.X_train_at_anchor.shape[0] * 100:.2f}% of the dataset."
             )
@@ -144,13 +143,13 @@ class LCController:
             # Predict and Score
             logging.info("Predicting and scoring...")
             self.compute_metrics_for_workflow()
-            self.timer.leave()
+            self.workflow.timer.stop()
 
         self.report["curve_db"] = CurveDB(
             self.curves["train"],
             self.curves["val"],
             self.curves["test"],
-            self.timer.runtimes,
+            self.timer.root,
             self.additional_data_per_anchor
         ).dump_to_dict()
 
@@ -238,10 +237,10 @@ class LCController:
 
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
-                fitted_workflow.timer.enter(postfix)
+                fitted_workflow.timer.start(postfix)
                 keys[f"y_pred_{postfix}"] = fitted_workflow.predict(X_)
                 keys[f"y_pred_proba_{postfix}"] = fitted_workflow.predict_proba(X_)
-                fitted_workflow.timer.leave()
+                fitted_workflow.timer.stop()
         return keys, labels
 
     def compute_metrics_for_workflow(self):
@@ -262,7 +261,7 @@ class LCController:
             (self.y_valid, y_pred_val, y_pred_proba_val, "val"),
             (self.y_test, y_pred_test, y_pred_proba_test, "test")
         ]:
-            self.timer.enter(postfix)
+            self.timer.start(postfix)
             curve = self.curves[postfix]
             curve.compute_metrics(self.cur_anchor, y_true, y_pred, y_pred_proba)
-            self.timer.leave()
+            self.timer.stop()
