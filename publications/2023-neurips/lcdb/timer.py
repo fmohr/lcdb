@@ -69,6 +69,9 @@ class TimerNode:
 
         return out
 
+    def __repr__(self) -> str:
+        return f"TimerNode(id={self.id}, tag={self.tag}, status={self.status})"
+
 
 class Timer:
     """Class representing a timing profiler.

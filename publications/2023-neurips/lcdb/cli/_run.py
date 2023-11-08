@@ -12,6 +12,7 @@ from deephyper.problem import HpProblem
 from deephyper.search.hps import CBO
 from lcdb.data import load_task
 from lcdb.lccontroller import LCController
+from lcdb.timer import Timer
 from lcdb.utils import import_attr_from_module
 
 # Avoid Tensorflow Warnings
@@ -186,22 +187,32 @@ def run(
     Returns:
         dict: a dictionary with 2 keys (objective, metadata) where objective is the objective maximized by deephyper (if used) and metadata is a JSON serializable sub-dictionnary which are complementary information about the workflow.
     """
-
-    infos = {"openmlid": openml_id, "workflow_seed": workflow_seed}
+    timer = Timer()
+    run_timer_id = timer.start("run")
 
     # Load the raw dataset
-    (X, y), dataset_metadata = load_task(f"openml.{openml_id}")
+    with timer.time("load_task"):
+        logging.info("Loading the dataset...")
+        (X, y), dataset_metadata = load_task(f"openml.{openml_id}")
 
     # Create and fit the workflow
-    logging.info("Creating the workflow...")
+    logging.info("Importing the workflow...")
     WorkflowClass = import_attr_from_module(workflow_class)
     workflow_kwargs = copy.deepcopy(job.parameters)
     workflow_kwargs["random_state"] = workflow_seed
-    workflow = WorkflowClass(**workflow_kwargs)
+    workflow_factory = lambda: WorkflowClass(timer=timer, **workflow_kwargs)
+
+    # Initialize information to be returned
+    infos = {
+        "openmlid": openml_id,
+        "workflow_seed": workflow_seed,
+        "workflow": workflow_class,
+    }
 
     # create controller
     controller = LCController(
-        workflow=workflow,
+        timer=timer,
+        workflow_factory=workflow_factory,
         X=X,
         y=y,
         dataset_metadata=dataset_metadata,
@@ -219,8 +230,14 @@ def run(
     # build the curves
     controller.build_curves()
 
+    assert timer.active_node.id == run_timer_id, f"Timer is not at the right place: {timer.active_node}"
+    timer.stop()
+
     # update infos based on report
     infos.update(controller.report)
+
+    infos["curve_db"].times = timer.as_dict()
+    infos["curve_db"] = infos["curve_db"].as_dict()
 
     # TODO: to be replaced by the real score(s)
     # get validation accuracy score on last anchor
@@ -340,9 +357,9 @@ def main(
 def test_default_config():
     # workflow_class = "lcdb.workflow.xgboost.XGBoostWorkflow"
     # workflow_class = "lcdb.workflow.sklearn.KNNWorkflow"
-    # workflow_class = "lcdb.workflow.sklearn.LibLinearWorkflow"
+    workflow_class = "lcdb.workflow.sklearn.LibLinearWorkflow"
     # workflow_class = "lcdb.workflow.sklearn.LibSVMWorkflow"
-    workflow_class = "lcdb.workflow.keras.DenseNNWorkflow"
+    # workflow_class = "lcdb.workflow.keras.DenseNNWorkflow"
     WorkflowClass = import_attr_from_module(workflow_class)
     config_space = WorkflowClass.config_space()
     config_default = dict(config_space.get_default_configuration())

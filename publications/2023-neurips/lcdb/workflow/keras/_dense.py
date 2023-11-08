@@ -106,6 +106,7 @@ class DenseNNWorkflow(BaseWorkflow):
 
     def __init__(
         self,
+        timer=None,
         num_units=32,
         activation="relu",
         optimizer="Adam",
@@ -118,7 +119,7 @@ class DenseNNWorkflow(BaseWorkflow):
         verbose=0,
         **kwargs,
     ):
-        super().__init__()
+        super().__init__(timer)
         self.requires_valid_to_fit = True
         self.requires_test_to_fit = True
 
@@ -135,16 +136,6 @@ class DenseNNWorkflow(BaseWorkflow):
         self._transformer_label = LabelEncoder()
 
         self.verbose = verbose
-
-        # TODO: remove
-        # self.fidelities = {
-        #     "fidelity_unit": "epochs",
-        #     "fidelity_values": [],
-        #     "score_types": ["loss", "accuracy"],
-        #     "score_values": [],
-        #     "time_types": ["epoch"],
-        #     "time_values": [],
-        # }
 
     @classmethod
     def config_space(cls):
@@ -257,20 +248,6 @@ class DenseNNWorkflow(BaseWorkflow):
             ],
             verbose=self.verbose,
         ).history
-
-        # # Collect metrics
-        # n = len(self.fidelities["score_types"])
-        # keys = self.fidelities["score_types"] + [
-        #     f"val_{k}" for k in self.fidelities["score_types"]
-        # ]
-        # self.fidelities["fidelity_values"] = (
-        #     np.arange(len(fit_history["loss"])) + 1
-        # ).tolist()
-        # self.fidelities["score_values"] = [
-        #     [list(scores[:n]), list(scores[n:])]
-        #     for scores in zip(*(fit_history[k] for k in keys))
-        # ]
-        # self.fidelities["time_values"] = timing_callback.times
 
         # Collect iteration curves
         self.fit_report = {

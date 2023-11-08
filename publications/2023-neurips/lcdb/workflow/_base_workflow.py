@@ -27,9 +27,8 @@ class BaseWorkflow(abc.ABC):
 
     def fit(self, X, y, metadata, *args, **kwargs) -> "BaseWorkflow":
         """Fit the workflow to the data."""
-        self.timer.start("fit")
-        self._fit(X=X, y=y, metadata=metadata, *args, **kwargs)
-        self.timer.stop()
+        with self.timer.time("fit"):
+            self._fit(X=X, y=y, metadata=metadata, *args, **kwargs)
         self.workflow_fitted = True
         return self
 
@@ -40,16 +39,8 @@ class BaseWorkflow(abc.ABC):
 
     def predict(self, *args, **kwargs) -> NP_ARRAY:
         """Predict from the data."""
-        self.timer.start("predict")
-        y_pred = self._predict(*args, **kwargs)
-        self.timer.stop()
-        return y_pred
-
-    def predict_proba(self, *args, **kwargs) -> NP_ARRAY:
-        """Predict from the data."""
-        self.timer.start("predict_proba")
-        y_pred = self._predict_proba(*args, **kwargs)
-        self.timer.stop()
+        with self.timer.time("predict"):
+            y_pred = self._predict(*args, **kwargs)
         return y_pred
 
     @abc.abstractmethod
@@ -58,6 +49,12 @@ class BaseWorkflow(abc.ABC):
     ) -> Any:  # TODO: not sure what the return type should be
         """Predict from the data."""
         raise NotImplementedError
+
+    def predict_proba(self, *args, **kwargs) -> NP_ARRAY:
+        """Predict from the data."""
+        with self.timer.time("predict_proba"):
+            y_pred = self._predict_proba(*args, **kwargs)
+        return y_pred
 
     @abc.abstractmethod
     def _predict_proba(
@@ -68,9 +65,8 @@ class BaseWorkflow(abc.ABC):
 
     def transform(self, X, y, metadata) -> NP_ARRAY:
         """Transform the data."""
-        self.timer.start("transform")
-        X = self._transform(X, y, metadata)
-        self.timer.stop()
+        with self.timer.time("transform"):
+            X = self._transform(X, y, metadata)
         self.transform_fitted = True
         return X
 

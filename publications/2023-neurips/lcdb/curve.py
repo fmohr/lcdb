@@ -142,7 +142,7 @@ class Curve:
             rows.append([anchor] + [self.curve_data[anchor][key] for key in keys])
         return pd.DataFrame(rows, columns=["anchor"] + keys)
 
-    def as_compact_dict(self):
+    def as_dict(self):
         me_as_dict = self.as_dataframe().to_dict(orient="list")
         for metric in list(me_as_dict.keys()):
             values = me_as_dict[metric]

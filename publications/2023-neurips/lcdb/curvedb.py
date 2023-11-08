@@ -27,7 +27,7 @@ class CurveDB:
         self.times = times
         self.additional_data = additional_data
 
-    def dump_to_dict(self):
+    def as_dict(self):
         """
         Compiles the whole knowledge base into a single compact dictionary.
         This dictionary should not have redundant information
@@ -40,9 +40,9 @@ class CurveDB:
 
         if len(self.train_curve) > 0:
             out = {
-                "train_curve": self.train_curve.as_compact_dict(),
-                "val_curve": self.val_curve.as_compact_dict(),
-                "test_curve": self.test_curve.as_compact_dict(),
+                "train_curve": self.train_curve.as_dict(),
+                "val_curve": self.val_curve.as_dict(),
+                "test_curve": self.test_curve.as_dict(),
                 "times": self.times,
                 "additional_data": self.additional_data,
             }

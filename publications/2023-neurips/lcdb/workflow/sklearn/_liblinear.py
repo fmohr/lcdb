@@ -70,6 +70,7 @@ class LibLinearWorkflow(PreprocessedWorkflow):
 
     def __init__(
         self,
+        timer=None,
         dual=True,
         C=1,
         multi_class="ovr",
@@ -83,7 +84,7 @@ class LibLinearWorkflow(PreprocessedWorkflow):
         random_state=None,
         **kwargs,
     ):
-        super().__init__(**filter_keys_with_prefix(kwargs, prefix="pp@"))
+        super().__init__(timer, **filter_keys_with_prefix(kwargs, prefix="pp@"))
 
         learner_kwargs = dict(
             dual=dual,

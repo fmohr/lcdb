@@ -20,7 +20,8 @@ from sklearn.preprocessing import FunctionTransformer, OneHotEncoder
 class LCController:
     def __init__(
         self,
-        workflow,
+        timer,
+        workflow_factory,
         X,
         y,
         dataset_metadata,
@@ -28,13 +29,15 @@ class LCController:
         valid_seed,
         valid_prop: float = 0.1,
         test_prop: float = 0.1,
-        stratify=True,  # TODO: remove if not used
+        stratify=True,
         monotonic=False,
         timeout_on_fit=-1,
         known_categories: bool = True,
         raise_errors: bool = False,
     ):
-        self.workflow = workflow
+        self.timer = timer
+        self.workflow_factory = workflow_factory
+        self.workflow = None
 
         self.num_instances = X.shape[0]
         self.dataset_metadata = dataset_metadata
@@ -51,7 +54,7 @@ class LCController:
             self.y_valid,
             self.y_test,
         ) = train_valid_test_split(
-            X, y, test_seed, valid_seed, test_prop, valid_prop, stratify=True
+            X, y, test_seed, valid_seed, test_prop, valid_prop, stratify=stratify
         )
         self.valid_seed = valid_seed
         self.test_seed = test_seed
@@ -61,7 +64,6 @@ class LCController:
         self.anchors = get_anchor_schedule(
             int(self.num_instances * (1 - test_prop - valid_prop))
         )
-        self.workflow.timer = Timer(precision=6)  # overwrite timer of workflow
 
         # state variables
         self.cur_anchor = None
@@ -93,7 +95,6 @@ class LCController:
 
         # create report
         self.report = {
-            "workflow": workflow.__class__.__name__,
             "valid_prop": valid_prop,
             "test_prop": valid_prop,
             "monotonic": monotonic,
@@ -126,57 +127,53 @@ class LCController:
     def build_curves(self):
         # Build sample-wise learning curve
         self.curves = {
-            "train": Curve(workflow=self.workflow, timer=self.workflow.timer),
-            "val": Curve(workflow=self.workflow, timer=self.workflow.timer),
-            "test": Curve(workflow=self.workflow, timer=self.workflow.timer),
+            "train": Curve(workflow=self.workflow, timer=self.timer),
+            "val": Curve(workflow=self.workflow, timer=self.timer),
+            "test": Curve(workflow=self.workflow, timer=self.timer),
         }
         self.additional_data_per_anchor = {}
 
-        self.workflow.timer.start("curvecomputations")
-        for anchor in self.anchors:
-            self.set_anchor(anchor)
-            self.workflow.timer.start(anchor)
-            timer_stack_size = len(self.workflow.timer.stack)
-            logging.info(
-                f"Running anchor {anchor} which is {anchor / self.X_train_at_anchor.shape[0] * 100:.2f}% of the dataset."
-            )
-            error_code = self.fit_workflow_on_current_anchor()
-            assert len(self.workflow.timer.stack) == timer_stack_size, (
-                f"The timer stack has more elements than expected. You forgot to stop a started timer. "
-                f"Active timers:\n {pprint.pformat(self.workflow.timer.get_simplified_stack(), indent=2)}"
-            )
+        # Build curves through anchors
+        with self.timer.time("build_curves"):
+            for anchor in self.anchors:
+                self.set_anchor(anchor)
 
-            # Collect the fit report (e.g., with iteration learning curves with epochs) if available
-            if hasattr(self.workflow, "fit_report"):
-                self.additional_data_per_anchor[anchor] = self.workflow.fit_report
+                with self.timer.time("anchor", {"size": anchor}) as anchor_timer:
+                    logging.info(
+                        f"Running anchor {anchor} which is {anchor / self.X_train_at_anchor.shape[0] * 100:.2f}% of the dataset."
+                    )
+                    # TODO: The worfklow should be recreated for each anchor!
+                    error_code = self.fit_workflow_on_current_anchor()
 
-            # Predict and Score
-            if error_code == 0:
-                logging.info("Predicting and scoring...")
-                error_code = self.compute_metrics_for_workflow()
+                    assert self.timer.active_node.id == anchor_timer.id, (
+                        f"The timer stack has more elements than expected. You forgot to stop a started timer. "
+                        f"Active timers:\n {pprint.pformat(self.workflow.timer.get_simplified_stack(), indent=2)}"
+                    )
 
-                # Set objective
-                if error_code == 0:
-                    self.objective = self.curves["val"][self.curves["val"].anchors[-1]][
-                        "accuracy"
-                    ]
+                    # Collect the fit report (e.g., with iteration learning curves with epochs) if available
+                    if hasattr(self.workflow, "fit_report"):
+                        self.additional_data_per_anchor[
+                            anchor
+                        ] = self.workflow.fit_report
 
-            # stop timer for activities at this anchor
-            self.workflow.timer.stop()
+                    # Predict and Score
+                    if error_code == 0:
+                        logging.info("Predicting and scoring...")
+                        error_code = self.compute_metrics_for_workflow()
 
-        self.workflow.timer.stop()  # outmost level
-        assert (
-            len(self.workflow.timer.stack) == 0
-        ), "The timer stack is not empty. You forgot to stop a started timer."
+                        # Set objective
+                        if error_code == 0:
+                            self.objective = self.curves["val"][
+                                self.curves["val"].anchors[-1]
+                            ]["accuracy"]
+
         self.report["curve_db"] = CurveDB(
             self.curves["train"],
             self.curves["val"],
             self.curves["test"],
-            self.workflow.timer.get_simplified_dict(
-                multiple_occurrences="merge_and_drop"
-            )["children"],
+            None,
             self.additional_data_per_anchor,
-        ).dump_to_dict()
+        )
 
     def fit_workflow_on_current_anchor(self) -> int:
         """Fit the workflow on the current anchor.
@@ -187,15 +184,22 @@ class LCController:
         # Represent success (0) or failure (1) while fitting the workflow
         error_code = 0
 
+        with self.timer.time("create_workflow"):
+            self.workflow = self.workflow_factory()
+
+            # TODO: to be changed...
+            for curve_split in self.curves.values():
+                curve_split.workflow = self.workflow
+
         if self.timeout_on_fit > 0:
             self.workflow.fit = functools.partial(
                 terminate_on_timeout, self.timeout_on_fit, self.workflow.fit
             )
 
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
+        try:
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
 
-            try:
                 if self.workflow.requires_valid_to_fit:
                     if self.workflow.requires_test_to_fit:
                         self.workflow.fit(
@@ -231,77 +235,54 @@ class LCController:
                             metadata=self.dataset_metadata,
                         )
 
-            except Exception as exception:
-                # make sure that nothing related to fit is on the timer stack anymore
-                fit_is_on_timer_stack = np.any(
-                    [e["name"] == "fit" for e in self.workflow.timer.stack]
-                )
-                if fit_is_on_timer_stack:
-                    while self.workflow.timer.stack[-1]["name"] != "fit":
-                        self.workflow.timer.stop()
-                    self.workflow.timer.stop()
+        except Exception as exception:
+            self.report["traceback"] = traceback.format_exc()
 
-                if self.raise_errors:
-                    raise
+            logging.error(
+                f"Error while fitting the workflow: \n{self.report['traceback']}"
+            )
 
-                self.report["traceback"] = traceback.format_exc()
+            self.report["traceback"] = r'"{}"'.format(self.report["traceback"])
 
-                logging.error(
-                    f"Error while fitting the workflow: \n{self.report['traceback']}"
-                )
+            # The evaluation is considered a total failure only if
+            # None of the anchors returned scored.
+            if len(self.curves["val"].anchors) == 0:
+                self.objective = "F"
 
-                self.report["traceback"] = r'"{}"'.format(self.report["traceback"])
+                if isinstance(exception, FunctionCallTimeoutError):
+                    self.objective += "_function_call_timeout_error"
+                elif isinstance(exception, MemoryError):
+                    self.objective += "_memory_error"
 
-                # The evaluation is considered a total failure only if
-                # None of the anchors returned scored.
-                if len(self.curves["val"].anchors) == 0:
-                    self.objective = "F"
+            error_code = 1
 
-                    if isinstance(exception, FunctionCallTimeoutError):
-                        self.objective += "_function_call_timeout_error"
-                    elif isinstance(exception, MemoryError):
-                        self.objective += "_memory_error"
-
-                error_code = 1
-
-            return error_code
-
-    def get_predictions(self, fitted_workflow):
-        keys = {}
-        labels = fitted_workflow.infos["classes"]
-
-        for X_, y_true, postfix in [
-            (self.X_train_at_anchor, self.y_train_at_anchor, "train"),
-            (self.X_valid, self.y_valid, "val"),
-            (self.X_test, self.y_test, "test"),
-        ]:
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore")
-                fitted_workflow.timer.start(postfix)
-                try:
-                    # TODO: this should be replaced to avoid infering twice
-                    keys[f"y_pred_{postfix}"] = fitted_workflow.predict(X_)
-                    keys[f"y_pred_proba_{postfix}"] = fitted_workflow.predict_proba(X_)
-                except KeyboardInterrupt:
-                    raise
-                except:
-                    while self.workflow.timer.stack[-1]["name"] != postfix:
-                        self.workflow.timer.stop()  # stop the timer for predictions
-                    self.workflow.timer.stop()  # stop the timer for train/val/test
-                    raise
-                fitted_workflow.timer.stop()
-        return keys, labels
+        return error_code
 
     def compute_metrics_for_workflow(self):
-        try:
-            predictions, labels = self.get_predictions(self.workflow)
-            self.labels_as_used_by_workflow = labels
-            return self.extend_curves_based_on_predictions(**predictions)
-        except KeyboardInterrupt:
-            raise
-        except:
-            print("Failure in prediction making, not computing any metrics ...")
-            return 1
+        predictions, labels = self.get_predictions()
+        self.labels_as_used_by_workflow = labels
+        return self.extend_curves_based_on_predictions(**predictions)
+
+    def get_predictions(self):
+        keys = {}
+        labels = self.workflow.infos["classes"]
+
+        with self.timer.time("get_predictions"):
+            for X_split, label_split in [
+                (self.X_train_at_anchor, "train"),
+                (self.X_valid, "val"),
+                (self.X_test, "test"),
+            ]:
+                with warnings.catch_warnings(), self.timer.time(label_split):
+                    warnings.simplefilter("ignore")
+
+                    # TODO: this should be replaced to avoid infering twice
+                    keys[f"y_pred_{label_split}"] = self.workflow.predict(X_split)
+                    keys[f"y_pred_proba_{label_split}"] = self.workflow.predict_proba(
+                        X_split
+                    )
+
+        return keys, labels
 
     def extend_curves_based_on_predictions(
         self,
@@ -312,13 +293,14 @@ class LCController:
         y_pred_test,
         y_pred_proba_test,
     ):
-        for y_true, y_pred, y_pred_proba, postfix in [
-            (self.y_train_at_anchor, y_pred_train, y_pred_proba_train, "train"),
-            (self.y_valid, y_pred_val, y_pred_proba_val, "val"),
-            (self.y_test, y_pred_test, y_pred_proba_test, "test"),
-        ]:
-            self.workflow.timer.start(postfix)
-            curve = self.curves[postfix]
-            curve.compute_metrics(self.cur_anchor, y_true, y_pred, y_pred_proba)
-            self.workflow.timer.stop()
+        with self.timer.time("extend_curves_based_on_predictions"):
+            for y_true, y_pred, y_pred_proba, label_split in [
+                (self.y_train_at_anchor, y_pred_train, y_pred_proba_train, "train"),
+                (self.y_valid, y_pred_val, y_pred_proba_val, "val"),
+                (self.y_test, y_pred_test, y_pred_proba_test, "test"),
+            ]:
+                with self.timer.time(label_split):
+                    curve = self.curves[label_split]
+                    curve.compute_metrics(self.cur_anchor, y_true, y_pred, y_pred_proba)
+
         return 0  # no error occurred
