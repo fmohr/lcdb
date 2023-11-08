@@ -299,7 +299,7 @@ class LCController:
                 (self.y_valid, y_pred_val, y_pred_proba_val, "val"),
                 (self.y_test, y_pred_test, y_pred_proba_test, "test"),
             ]:
-                with self.timer.time(label_split):
+                with self.timer.time(label_split) as split_timer:
                     curve = self.curves[label_split]
                     curve.compute_metrics(self.cur_anchor, y_true, y_pred, y_pred_proba)
 

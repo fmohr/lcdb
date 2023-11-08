@@ -51,7 +51,6 @@ class Curve:
             y_pred_proba = np.column_stack(
                 [y_pred_proba[:, i] for i in np.argsort(relevant_labels)]
             )
-            print(f"{relevant_labels=}")
             relevant_labels = sorted(relevant_labels)
 
         is_binary = len(np.unique(y_true)) == 2
@@ -61,68 +60,78 @@ class Curve:
             raise ValueError(f"Data for anchor {anchor} already available")
         self.curve_data[anchor] = {}
 
-        for target in ["cm", "accuracy", "auc", "log_loss", "brier_score"]:
-            self.timer.start(f"metric_{target}")
-            if target == "cm":
-                score = np.round(
-                    confusion_matrix(y_true, y_pred, labels=relevant_labels), 5
-                )
+        metric_names = [
+            "confusion_matrix",
+            "accuracy",
+            "auc",
+            "log_loss",
+            "brier_score",
+        ]
 
-            elif target == "accuracy":
-                # TODO: why not balanced accuracy?
-                score = np.round(accuracy_score(y_true, y_pred), 5)
-            elif target == "auc":
-                if is_binary:
+        for metric_name in metric_names:
+            with self.timer.time(metric_name) as metric_timer:
+                if metric_name == "confusion_matrix":
                     score = np.round(
-                        roc_auc_score(
-                            y_true, y_pred_proba[:, 1], labels=relevant_labels
-                        ),
-                        5,
+                        confusion_matrix(y_true, y_pred, labels=relevant_labels), 5
                     )
-                else:
-                    score = {}
-                    for multi_class, average in it.product(
-                        ["ovr", "ovo"], ["micro", "macro", "weighted", None]
-                    ):
-                        if average in [None, "micro"] and multi_class != "ovr":
-                            continue
-                        auc = np.round(
+
+                elif metric_name == "accuracy":
+                    # TODO: why not balanced accuracy?
+                    score = np.round(accuracy_score(y_true, y_pred), 5)
+                elif metric_name == "auc":
+                    if is_binary:
+                        score = np.round(
                             roc_auc_score(
-                                y_true,
-                                y_pred_proba,
-                                labels=relevant_labels,
-                                multi_class=multi_class,
-                                average=average,
+                                y_true, y_pred_proba[:, 1], labels=relevant_labels
                             ),
                             5,
                         )
-                        score[f"auc_{multi_class}_{average}"] = auc
-            elif target == "log_loss":
-                y_base = y_pred_proba[:, 1] if is_binary else y_pred_proba
-                score = np.round(log_loss(y_true, y_base, labels=relevant_labels), 5)
-            elif target == "brier":
-                if is_binary:
+                    else:
+                        score = {}
+                        for multi_class, average in it.product(
+                            ["ovr", "ovo"], ["micro", "macro", "weighted", None]
+                        ):
+                            if average in [None, "micro"] and multi_class != "ovr":
+                                continue
+                            auc = np.round(
+                                roc_auc_score(
+                                    y_true,
+                                    y_pred_proba,
+                                    labels=relevant_labels,
+                                    multi_class=multi_class,
+                                    average=average,
+                                ),
+                                5,
+                            )
+                            score[f"auc_{multi_class}_{average}"] = auc
+                elif metric_name == "log_loss":
+                    y_base = y_pred_proba[:, 1] if is_binary else y_pred_proba
                     score = np.round(
-                        brier_score_loss(
-                            y_true, y_pred_proba[:, 1], pos_label=relevant_labels[1]
-                        ),
-                        5,
+                        log_loss(y_true, y_base, labels=relevant_labels), 5
                     )
-                else:
-                    y_true_binarized = np.zeros((len(y_true), len(relevant_labels)))
-                    for j, label in enumerate(relevant_labels):
-                        mask = y_true == label
-                        y_true_binarized[mask, j] = 1
-                    score = np.round(
-                        ((y_true_binarized - y_pred_proba) ** 2).sum(axis=1).mean(), 5
-                    )
+                elif metric_name == "brier":
+                    if is_binary:
+                        score = np.round(
+                            brier_score_loss(
+                                y_true, y_pred_proba[:, 1], pos_label=relevant_labels[1]
+                            ),
+                            5,
+                        )
+                    else:
+                        y_true_binarized = np.zeros((len(y_true), len(relevant_labels)))
+                        for j, label in enumerate(relevant_labels):
+                            mask = y_true == label
+                            y_true_binarized[mask, j] = 1
+                        score = np.round(
+                            ((y_true_binarized - y_pred_proba) ** 2).sum(axis=1).mean(),
+                            5,
+                        )
 
-            # store results and time
-            self.timer.stop()
-            if type(score) == dict:
-                self.curve_data[anchor].update(score)
-            else:
-                self.curve_data[anchor][f"{target}"] = score
+                if type(score) == dict:
+                    self.curve_data[anchor].update(score)
+                else:
+                    self.curve_data[anchor][f"{metric_name}"] = score
+            
 
     @property
     def anchors(self):

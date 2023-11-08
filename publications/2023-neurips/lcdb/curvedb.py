@@ -40,17 +40,21 @@ class CurveDB:
 
         if len(self.train_curve) > 0:
             out = {
-                "train_curve": self.train_curve.as_dict(),
-                "val_curve": self.val_curve.as_dict(),
-                "test_curve": self.test_curve.as_dict(),
+                "curves": {
+                    "train": self.train_curve.as_dict(),
+                    "val": self.val_curve.as_dict(),
+                    "test": self.test_curve.as_dict(),
+                },
                 "times": self.times,
                 "additional_data": self.additional_data,
             }
         else:
             out = {
-                "train_curve": None,
-                "val_curve": None,
-                "test_curve": None,
+                "curves": {
+                    "train": None,
+                    "val": None,
+                    "test": None,
+                },
                 "times": self.times,
                 "additional_data": self.additional_data,
             }
