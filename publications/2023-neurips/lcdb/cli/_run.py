@@ -373,11 +373,8 @@ def test_default_config():
     )
 
     # check that the output can indeed be compiled into a string using JSON
-    json.dumps(output)
-
-    import pprint
-
-    pprint.pprint(output)
+    out = json.dumps(output, indent=2)
+    print(out)
 
 
 if __name__ == "__main__":
