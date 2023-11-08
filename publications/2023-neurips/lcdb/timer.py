@@ -1,9 +1,9 @@
 import pprint
 import time
+from contextlib import contextmanager
+from typing import Any, Hashable
 
 import numpy as np
-
-from typing import Hashable
 
 
 # !Private class to be used within the Timer class
@@ -43,6 +43,12 @@ class TimerNode:
     def cancel(self):
         self.timestamp_end = self.time()
         self.status = TimerNode.CANCELED
+
+    def __getitem__(self, key):
+        return self.metadata[key]
+
+    def __setitem__(self, key, value):
+        self.metadata[key] = value
 
     def as_dict(self) -> dict:
         out = dict(
@@ -155,6 +161,19 @@ class Timer:
     def as_dict(self):
         return self.root.as_dict()
 
+    @contextmanager
+    def time(self, tag: Hashable, metadata: dict = None, cancel_on_error=False):
+        node_id = self.start(tag, metadata)
+        try:
+            yield self.active_node
+        except:
+            if cancel_on_error:
+                self.cancel(node_id)
+            else:
+                raise
+        else:
+            self.stop()
+
     # def get_simplified_dict(self, multiple_occurrences="raise"):
     #     """
     #     Tries to use the names of the nods as keys in order to simplify the tree representation.
@@ -225,34 +244,36 @@ def test_timer():
     # Creating the timer
     timer = Timer()
 
+    # Timer can be used explicitly through the start/stop methods
     run_timer_id = timer.start("run")
 
-    fit_timer_id = timer.start("fit")
+    # Timer can be used through context manager (recommended)
+    with timer.time("load_data"):
+        delay()
 
-    # Simulation of a training loop
-    try:
+    # Timer can catch and cancel branch if error is raised
+    with timer.time("fit", cancel_on_error=True) as fit_timer:
+        # Simulation of a training loop
         for epoch_i in range(10):
-            timer.start("epoch", {"i": epoch_i})
-            delay()
-            if epoch_i > 2:
-                # Possible failure for whichever reason
-                raise RuntimeError
-            timer.stop()
-    except RuntimeError:
-        # Cancel the fit timer and its childs (still records timings!)
-        timer.cancel(fit_timer_id)
-    else:
-        # Stop if normally if nothing was wrong
-        timer.stop()
+            with timer.time("epoch", {"i": epoch_i}) as epoch_timer:
+                delay()
+
+                if epoch_i > 2:
+                    # Possible failure for whichever reason
+                    raise RuntimeError
+
+                # We can record information for the current node
+                # For the time to be accurate it must be done before at the end of the block
+                epoch_timer["accuracy"] = 0.5
 
     # Here the current active node should me the "run"
     assert timer.active_node.id == run_timer_id
 
-    timer.start("predict")
-    delay()
+    with timer.time("predict") as predict_timer:
+        delay()
 
-    # Here is how I can record my metrics through the timer
-    timer.stop({"train": {"accuracy": 1.0}})
+        # Here is how I can record my metrics through the timer
+        predict_timer["train"] = {"accuracy": 1.0}
 
     timer.stop()
 
@@ -274,7 +295,7 @@ def test_timer():
     )
     assert dict_tree["tag"] == "run"
     assert dict_tree["id"] == 0
-    assert len(dict_tree["children"]) == 2
+    assert len(dict_tree["children"]) == 3
 
     pprint.pprint(timer.as_dict(), indent=2)
 
