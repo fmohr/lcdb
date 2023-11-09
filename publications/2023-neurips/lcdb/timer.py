@@ -3,6 +3,7 @@ import time
 from contextlib import contextmanager
 from typing import Any, Hashable
 
+import lcdb.json
 import numpy as np
 
 
@@ -129,11 +130,12 @@ class Timer:
         node = self.stack.pop()
         node.stop(metadata)
 
-    def cancel(self, node_id: int):
+    def cancel(self, node_id: int, only_children: bool = False):
         """Cancels all child nodes up to the node corresponding to node_id (i.e., cancel all branches starting from `node_id`).
 
         Args:
             node_id (int): id of the node to cancel.
+            only_children (bool, optional): if True, only the children of the node are canceled. Defaults to ``False``.
         """
 
         # Node must be in current set of active nodes
@@ -149,6 +151,11 @@ class Timer:
         node = None
         while node is None or node.id != node_id:
             node = self.stack.pop()
+
+            if node.id == node_id and only_children:
+                self.stack.append(node)
+                break
+
             node.cancel()
 
         # Record source of cancellation at root of cancelled branch
@@ -163,6 +170,9 @@ class Timer:
 
     def as_dict(self):
         return self.root.as_dict()
+
+    def as_json(self):
+        return lcdb.json.loads(lcdb.json.dumps(self.as_dict()))
 
     @contextmanager
     def time(self, tag: Hashable, metadata: dict = None, cancel_on_error=False):

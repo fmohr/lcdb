@@ -1,12 +1,11 @@
 import functools
+import itertools as it
 import logging
 import pprint
 import traceback
 import warnings
 
 import numpy as np
-from lcdb.curve import Curve
-from lcdb.curvedb import CurveDB
 from lcdb.data.split import train_valid_test_split
 from lcdb.timer import Timer
 from lcdb.utils import (
@@ -14,13 +13,14 @@ from lcdb.utils import (
     get_anchor_schedule,
     terminate_on_timeout,
 )
+from lcdb.scorer import ClassificationScorer
 from sklearn.preprocessing import FunctionTransformer, OneHotEncoder
 
 
 class LCController:
     def __init__(
         self,
-        timer,
+        timer: Timer,
         workflow_factory,
         X,
         y,
@@ -103,6 +103,8 @@ class LCController:
             "traceback": None,
         }
 
+        self.objective = None
+
     def set_anchor(self, anchor):
         train_idx = np.arange(self.X_train.shape[0])
         # If not monotonic, the training set should be shuffled differently for each anchor
@@ -126,54 +128,31 @@ class LCController:
 
     def build_curves(self):
         # Build sample-wise learning curve
-        self.curves = {
-            "train": Curve(workflow=self.workflow, timer=self.timer),
-            "val": Curve(workflow=self.workflow, timer=self.timer),
-            "test": Curve(workflow=self.workflow, timer=self.timer),
-        }
-        self.additional_data_per_anchor = {}
 
-        # Build curves through anchors
         with self.timer.time("build_curves"):
             for anchor in self.anchors:
                 self.set_anchor(anchor)
 
-                with self.timer.time("anchor", {"size": anchor}) as anchor_timer:
+                with self.timer.time("anchor", {"value": anchor}) as anchor_timer:
                     logging.info(
                         f"Running anchor {anchor} which is {anchor / self.X_train_at_anchor.shape[0] * 100:.2f}% of the dataset."
                     )
                     # TODO: The worfklow should be recreated for each anchor!
                     error_code = self.fit_workflow_on_current_anchor()
 
-                    assert self.timer.active_node.id == anchor_timer.id, (
-                        f"The timer stack has more elements than expected. You forgot to stop a started timer. "
-                        f"Active timers:\n {pprint.pformat(self.workflow.timer.get_simplified_stack(), indent=2)}"
-                    )
+                    if error_code != 0:
+                        self.timer.cancel(anchor_timer.id, only_children=True)
 
-                    # Collect the fit report (e.g., with iteration learning curves with epochs) if available
-                    if hasattr(self.workflow, "fit_report"):
-                        self.additional_data_per_anchor[
-                            anchor
-                        ] = self.workflow.fit_report
+                    assert (
+                        self.timer.active_node.id == anchor_timer.id
+                    ), f"The active timer is not correct, it is {self.timer.active_node} when it should be {anchor_timer} "
 
                     # Predict and Score
                     if error_code == 0:
                         logging.info("Predicting and scoring...")
-                        error_code = self.compute_metrics_for_workflow()
-
-                        # Set objective
-                        if error_code == 0:
-                            self.objective = self.curves["val"][
-                                self.curves["val"].anchors[-1]
-                            ]["accuracy"]
-
-        self.report["curve_db"] = CurveDB(
-            self.curves["train"],
-            self.curves["val"],
-            self.curves["test"],
-            None,
-            self.additional_data_per_anchor,
-        )
+                        self.compute_metrics_for_workflow()
+                    else:
+                        break
 
     def fit_workflow_on_current_anchor(self) -> int:
         """Fit the workflow on the current anchor.
@@ -186,10 +165,6 @@ class LCController:
 
         with self.timer.time("create_workflow"):
             self.workflow = self.workflow_factory()
-
-            # TODO: to be changed...
-            for curve_split in self.curves.values():
-                curve_split.workflow = self.workflow
 
         if self.timeout_on_fit > 0:
             self.workflow.fit = functools.partial(
@@ -246,7 +221,7 @@ class LCController:
 
             # The evaluation is considered a total failure only if
             # None of the anchors returned scored.
-            if len(self.curves["val"].anchors) == 0:
+            if self.objective is None:
                 self.objective = "F"
 
                 if isinstance(exception, FunctionCallTimeoutError):
@@ -261,7 +236,7 @@ class LCController:
     def compute_metrics_for_workflow(self):
         predictions, labels = self.get_predictions()
         self.labels_as_used_by_workflow = labels
-        return self.extend_curves_based_on_predictions(**predictions)
+        return self.score_predictions(**predictions)
 
     def get_predictions(self):
         keys = {}
@@ -284,7 +259,7 @@ class LCController:
 
         return keys, labels
 
-    def extend_curves_based_on_predictions(
+    def score_predictions(
         self,
         y_pred_train,
         y_pred_proba_train,
@@ -293,14 +268,20 @@ class LCController:
         y_pred_test,
         y_pred_proba_test,
     ):
-        with self.timer.time("extend_curves_based_on_predictions"):
+        scorer = ClassificationScorer(
+            classes=self.workflow.infos["classes"], timer=self.timer
+        )
+
+        with self.timer.time("metrics"):
             for y_true, y_pred, y_pred_proba, label_split in [
                 (self.y_train_at_anchor, y_pred_train, y_pred_proba_train, "train"),
                 (self.y_valid, y_pred_val, y_pred_proba_val, "val"),
                 (self.y_test, y_pred_test, y_pred_proba_test, "test"),
             ]:
                 with self.timer.time(label_split) as split_timer:
-                    curve = self.curves[label_split]
-                    curve.compute_metrics(self.cur_anchor, y_true, y_pred, y_pred_proba)
+                    scores = scorer.score(y_true, y_pred, y_pred_proba)
+
+                    if label_split == "val":
+                        self.objective = scores["accuracy"]
 
         return 0  # no error occurred

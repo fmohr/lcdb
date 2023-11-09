@@ -5,6 +5,8 @@ import numpy as np
 import pandas as pd
 from deephyper.analysis.hpo import filter_failed_objectives
 
+import lcdb.json
+
 
 def deserialize_dataframe(df: pd.DataFrame) -> pd.DataFrame:
     """Prepare the dataframe for analysis. For example, load the arrays/list from json format."""
@@ -15,17 +17,17 @@ def deserialize_dataframe(df: pd.DataFrame) -> pd.DataFrame:
     str_to_json = (
         lambda x: x.replace("'", '"').replace("nan", "NaN").replace("inf", "Infinity")
     )
-    load_json = lambda x: json.loads(str_to_json(x))
+    load_json = lambda x: lcdb.json.loads(str_to_json(x))
     load_array = lambda x: np.array(load_json(x))
 
     # Load the arrays
-    columns = ["m:fidelity_values", "m:score_types", "m:score_values"]
+    columns = []
     for col in columns:
         if col in df.columns:
             df[col] = df[col].map(load_array)
 
     # Load the dicts
-    columns = ["m:child_fidelities"]
+    columns = ["m:json"]
     for col in columns:
         if col in df.columns:
             df[col] = df[col].map(load_json)

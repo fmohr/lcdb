@@ -1,10 +1,11 @@
 import logging
+import traceback
 
 import absl.logging
 import numpy as np
 import tensorflow as tf
 from ConfigSpace import Categorical, ConfigurationSpace, Float, Integer
-from lcdb.curve import Curve
+from lcdb.scorer import ClassificationScorer
 from lcdb.timer import Timer
 from lcdb.workflow._base_workflow import BaseWorkflow
 from lcdb.workflow.keras.utils import ACTIVATIONS, OPTIMIZERS
@@ -56,45 +57,51 @@ class IterationCurveCallback(tf.keras.callbacks.Callback):
         self.timer = timer
         self.workflow = workflow
         self.data = data
-        self.curves = {k: Curve(workflow=workflow, timer=timer) for k in data}
         self.epoch = None
+        self.scorer = ClassificationScorer(
+            classes=self.workflow.infos["classes"], timer=self.timer
+        )
+
+        # Safeguard to check timers
+        self.train_timer_id = None
+        self.test_timer_id = None
+        self.epoch_timer_id = None
 
     def on_epoch_begin(self, epoch, logs=None):
         super().on_epoch_begin(epoch, logs=logs)
         self.epoch = epoch
-        self.timer.start(self.epoch)
+        self.epoch_timer_id = self.timer.start("epoch", metadata={"value": self.epoch})
 
     def on_epoch_end(self, epoch, logs=None):
         super().on_epoch_end(epoch, logs)
+        assert self.timer.active_node.id == self.epoch_timer_id
         self.timer.stop()
 
     def on_train_begin(self, logs=None):
-        self.timer.start("epoch_train")
+        self.train_timer_id = self.timer.start("epoch_train")
 
     def on_train_end(self, logs=None):
+        assert self.timer.active_node.id == self.train_timer_id
         self.timer.stop()
 
     def on_test_begin(self, logs=None):
-        self.timer.start("epoch_test")
+        self.test_timer_id = self.timer.start("epoch_test")
 
-        self.timer.start("epoch_compute_metrics")
+        with self.timer.time("metrics"):
+            for label_split, data_split in self.data.items():
+                with self.timer.time(label_split):
+                    with self.timer.time("predict_with_proba"):
+                        y_pred, y_pred_proba = self.workflow._predict_with_proba(
+                            data_split["X"]
+                        )
 
-        for label_split, data_split in self.data.items():
-            self.timer.start(label_split)
+                    y_true = data_split["y"]
 
-            y_pred, y_pred_proba = self.workflow._predict_with_proba(data_split["X"])
-            y_true = data_split["y"]
-
-            self.curves[label_split].compute_metrics(
-                anchor=self.epoch,
-                y_true=y_true,
-                y_pred=y_pred,
-                y_pred_proba=y_pred_proba,
-            )
-
-            self.timer.stop()
-
-        self.timer.stop()
+                    self.scorer.score(
+                        y_true=y_true,
+                        y_pred=y_pred,
+                        y_pred_proba=y_pred_proba,
+                    )
 
     def on_test_end(self, logs=None):
         self.timer.stop()
@@ -248,12 +255,6 @@ class DenseNNWorkflow(BaseWorkflow):
             ],
             verbose=self.verbose,
         ).history
-
-        # Collect iteration curves
-        self.fit_report = {
-            label_split: label_curve.as_compact_dict()
-            for label_split, label_curve in iteration_curve_callback.curves.items()
-        }
 
     def _predict(self, X):
         y_pred = self._predict_proba(X).argmax(axis=1)

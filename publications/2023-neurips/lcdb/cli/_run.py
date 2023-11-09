@@ -1,17 +1,17 @@
 """Command line to run experiments."""
 import copy
-import json
 import logging
 import os
 import pathlib
 
+import lcdb.json
 import pandas as pd
 from deephyper.evaluator import Evaluator, RunningJob, profile
 from deephyper.evaluator.callback import TqdmCallback
 from deephyper.problem import HpProblem
 from deephyper.search.hps import CBO
+from lcdb.controller import LCController
 from lcdb.data import load_task
-from lcdb.lccontroller import LCController
 from lcdb.timer import Timer
 from lcdb.utils import import_attr_from_module
 
@@ -230,14 +230,15 @@ def run(
     # build the curves
     controller.build_curves()
 
-    assert timer.active_node.id == run_timer_id, f"Timer is not at the right place: {timer.active_node}"
+    assert (
+        timer.active_node.id == run_timer_id
+    ), f"Timer is not at the right place: {timer.active_node}"
     timer.stop()
 
     # update infos based on report
     infos.update(controller.report)
 
-    infos["curve_db"].times = timer.as_dict()
-    infos["curve_db"] = infos["curve_db"].as_dict()
+    infos["json"] = timer.as_json()
 
     # TODO: to be replaced by the real score(s)
     # get validation accuracy score on last anchor
@@ -357,9 +358,9 @@ def main(
 def test_default_config():
     # workflow_class = "lcdb.workflow.xgboost.XGBoostWorkflow"
     # workflow_class = "lcdb.workflow.sklearn.KNNWorkflow"
-    workflow_class = "lcdb.workflow.sklearn.LibLinearWorkflow"
+    # workflow_class = "lcdb.workflow.sklearn.LibLinearWorkflow"
     # workflow_class = "lcdb.workflow.sklearn.LibSVMWorkflow"
-    # workflow_class = "lcdb.workflow.keras.DenseNNWorkflow"
+    workflow_class = "lcdb.workflow.keras.DenseNNWorkflow"
     WorkflowClass = import_attr_from_module(workflow_class)
     config_space = WorkflowClass.config_space()
     config_default = dict(config_space.get_default_configuration())
@@ -373,8 +374,10 @@ def test_default_config():
     )
 
     # check that the output can indeed be compiled into a string using JSON
-    out = json.dumps(output, indent=2)
-    print(out)
+    out = lcdb.json.dumps(output, indent=2)
+    # print(out)
+
+    lcdb.json.loads(out)
 
 
 if __name__ == "__main__":

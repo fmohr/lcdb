@@ -1,8 +1,6 @@
 import itertools as it
-from collections import OrderedDict
 
 import numpy as np
-import pandas as pd
 from lcdb.timer import Timer
 from sklearn.metrics import (
     accuracy_score,
@@ -13,32 +11,16 @@ from sklearn.metrics import (
 )
 
 
-class Curve:
-    """
-    Entity class to compute and store information about performance (and time to compute the metrics)
-    """
+class ClassificationScorer:
+    def __init__(self, classes: list, timer: Timer = None) -> None:
+        if not isinstance(classes, list):
+            raise ValueError(f"'classes'] must be a list but is {type(classes)}")
+        self.classes = classes
+        self.timer = Timer() if timer is None else timer
 
-    def __init__(self, workflow=None, timer=None):
-        self.workflow = workflow
-        self.timer = timer if timer is not None else Timer()
-        self.curve_data = OrderedDict()
+    def score(self, y_true, y_pred, y_pred_proba):
+        relevant_labels = self.classes.copy()
 
-    def __len__(self):
-        """The number of anchors in the curve corresponds to the length of the curve."""
-        return len(self.curve_data)
-
-    def __getitem__(self, anchor):
-        """Get the data for a given anchor."""
-        return self.curve_data[anchor]
-
-    def compute_metrics(self, anchor, y_true, y_pred, y_pred_proba):
-        if self.workflow is None:
-            raise ValueError("This is a read-only curve. No workflow is given.")
-        relevant_labels = self.workflow.infos["classes"].copy()
-        if not isinstance(relevant_labels, list):
-            raise ValueError(
-                f"infos['classes'] must be a list but is {type(relevant_labels)}"
-            )
         labels_in_true_data_not_used_by_workflow = list(
             set(y_true).difference(relevant_labels)
         )
@@ -55,11 +37,6 @@ class Curve:
 
         is_binary = len(np.unique(y_true)) == 2
 
-        # sanity check: should not compute an anchor several times
-        if anchor in self.curve_data:
-            raise ValueError(f"Data for anchor {anchor} already available")
-        self.curve_data[anchor] = {}
-
         metric_names = [
             "confusion_matrix",
             "accuracy",
@@ -67,13 +44,15 @@ class Curve:
             "log_loss",
             "brier_score",
         ]
+        
+        scores = {}
 
         for metric_name in metric_names:
             with self.timer.time(metric_name) as metric_timer:
                 if metric_name == "confusion_matrix":
                     score = np.round(
                         confusion_matrix(y_true, y_pred, labels=relevant_labels), 5
-                    )
+                    ).tolist()
 
                 elif metric_name == "accuracy":
                     # TODO: why not balanced accuracy?
@@ -127,35 +106,8 @@ class Curve:
                             5,
                         )
 
-                if type(score) == dict:
-                    self.curve_data[anchor].update(score)
-                else:
-                    self.curve_data[anchor][f"{metric_name}"] = score
-            
+                metric_timer["value"] = score
+                
+                scores[metric_name] = score
 
-    @property
-    def anchors(self):
-        # return sorted(self.curve_data.keys())
-        return list(self.curve_data.keys())
-
-    def as_dataframe(self):
-        """
-        Formats the curve knowledge as a dataframe, with one row per anchor
-
-        :return: DataFrame
-        """
-        anchors = self.anchors
-        keys = list(self.curve_data[anchors[0]].keys())
-        rows = []
-        for anchor in anchors:
-            rows.append([anchor] + [self.curve_data[anchor][key] for key in keys])
-        return pd.DataFrame(rows, columns=["anchor"] + keys)
-
-    def as_dict(self):
-        me_as_dict = self.as_dataframe().to_dict(orient="list")
-        for metric in list(me_as_dict.keys()):
-            values = me_as_dict[metric]
-            has_array_vals = isinstance(values[0], np.ndarray)
-            if has_array_vals:
-                me_as_dict[metric] = [v.tolist() for v in values]
-        return me_as_dict
+        return scores 
