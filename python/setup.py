@@ -15,7 +15,8 @@ setup(
           'scipy',
           'tqdm',
           'matplotlib',
-          'func-timeout'
+          'func_timeout',
+          'openml'
       ],
   classifiers=[
     'Development Status :: 3 - Alpha',
