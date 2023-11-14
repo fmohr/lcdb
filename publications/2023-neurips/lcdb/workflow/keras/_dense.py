@@ -1,11 +1,14 @@
-import importlib
 import logging
-import time
+import traceback
 
 import absl.logging
 import numpy as np
 import tensorflow as tf
 from ConfigSpace import Categorical, ConfigurationSpace, Float, Integer
+from lcdb.scorer import ClassificationScorer
+from lcdb.timer import Timer
+from lcdb.workflow._base_workflow import BaseWorkflow
+from lcdb.workflow.keras.utils import ACTIVATIONS, OPTIMIZERS
 from sklearn.preprocessing import (
     FunctionTransformer,
     LabelEncoder,
@@ -14,9 +17,6 @@ from sklearn.preprocessing import (
     OrdinalEncoder,
     StandardScaler,
 )
-
-from .._base_workflow import BaseWorkflow
-from .utils import ACTIVATIONS, OPTIMIZERS
 
 logging.root.removeHandler(absl.logging._absl_handler)
 absl.logging._warn_preinit_stderr = False
@@ -51,22 +51,60 @@ CONFIG_SPACE = ConfigurationSpace(
 )
 
 
-class TimingCallback(tf.keras.callbacks.Callback):
-    def __init__(self):
+class IterationCurveCallback(tf.keras.callbacks.Callback):
+    def __init__(self, workflow: BaseWorkflow, timer: Timer, data: dict):
         super().__init__()
-        self.timestamp_on_train_begin = None
-        self.times = []
+        self.timer = timer
+        self.workflow = workflow
+        self.data = data
+        self.epoch = None
+        self.scorer = ClassificationScorer(
+            classes=self.workflow.infos["classes"], timer=self.timer
+        )
+
+        # Safeguard to check timers
+        self.train_timer_id = None
+        self.test_timer_id = None
+        self.epoch_timer_id = None
+
+    def on_epoch_begin(self, epoch, logs=None):
+        super().on_epoch_begin(epoch, logs=logs)
+        self.epoch = epoch
+        self.epoch_timer_id = self.timer.start("epoch", metadata={"value": self.epoch})
+
+    def on_epoch_end(self, epoch, logs=None):
+        super().on_epoch_end(epoch, logs)
+        assert self.timer.active_node.id == self.epoch_timer_id
+        self.timer.stop()
 
     def on_train_begin(self, logs=None):
-        self.timestamp_on_train_begin = time.time()
+        self.train_timer_id = self.timer.start("epoch_train")
 
     def on_train_end(self, logs=None):
-        times = np.asarray(self.times)
-        times -= self.timestamp_on_train_begin
-        self.times = times.tolist()
+        assert self.timer.active_node.id == self.train_timer_id
+        self.timer.stop()
+
+    def on_test_begin(self, logs=None):
+        self.test_timer_id = self.timer.start("epoch_test")
+
+        with self.timer.time("metrics"):
+            for label_split, data_split in self.data.items():
+                with self.timer.time(label_split):
+                    with self.timer.time("predict_with_proba"):
+                        y_pred, y_pred_proba = self.workflow._predict_with_proba(
+                            data_split["X"]
+                        )
+
+                    y_true = data_split["y"]
+
+                    self.scorer.score(
+                        y_true=y_true,
+                        y_pred=y_pred,
+                        y_pred_proba=y_pred_proba,
+                    )
 
     def on_test_end(self, logs=None):
-        self.times.append(time.time())
+        self.timer.stop()
 
 
 class DenseNNWorkflow(BaseWorkflow):
@@ -75,6 +113,7 @@ class DenseNNWorkflow(BaseWorkflow):
 
     def __init__(
         self,
+        timer=None,
         num_units=32,
         activation="relu",
         optimizer="Adam",
@@ -87,8 +126,9 @@ class DenseNNWorkflow(BaseWorkflow):
         verbose=0,
         **kwargs,
     ):
-        super().__init__()
+        super().__init__(timer)
         self.requires_valid_to_fit = True
+        self.requires_test_to_fit = True
 
         self.num_units = num_units
         self.activation = None if activation == "none" else activation
@@ -104,20 +144,11 @@ class DenseNNWorkflow(BaseWorkflow):
 
         self.verbose = verbose
 
-        self.fidelities = {
-            "fidelity_unit": "epochs",
-            "fidelity_values": [],
-            "score_types": ["loss", "accuracy"],
-            "score_values": [],
-            "time_types": ["epoch"],
-            "time_values": [],
-        }
-
     @classmethod
     def config_space(cls):
         return cls._config_space
 
-    def _transform(self, X, metadata):
+    def _transform(self, X, y, metadata):
         X_cat = X[:, metadata["categories"]["columns"]]
         X_real = X[:, ~metadata["categories"]["columns"]]
 
@@ -127,27 +158,20 @@ class DenseNNWorkflow(BaseWorkflow):
         if not (self.transform_fitted):
             # Categorical features
             if self.transform_cat == "onehot":
-                self._transformer_cat = OneHotEncoder(drop="first", sparse_output=False)
+                self._transformer_cat = OneHotEncoder(
+                    drop="first", sparse_output=False, handle_unknown="ignore"
+                )
             elif self.transform_cat == "ordinal":
-                self._transformer_cat = OrdinalEncoder()
+                self._transformer_cat = OrdinalEncoder(
+                    handle_unknown="use_encoded_value", unknown_value=-1
+                )
             else:
                 raise ValueError(
                     f"Unknown categorical transformation {self.transform_cat}"
                 )
 
-            if metadata["categories"]["values"] is not None:
-                max_categories = max(len(x) for x in metadata["categories"]["values"])
-                values = np.array(
-                    [
-                        c_val + [c_val[-1]] * (max_categories - len(c_val))
-                        for c_val in metadata["categories"]["values"]
-                    ]
-                ).T
-            else:
-                values = X_cat
-
             if has_cat:
-                self._transformer_cat.fit(values)
+                self._transformer_cat.fit(X_cat)
 
             # Real features
             if self.transform_real == "minmax":
@@ -181,13 +205,19 @@ class DenseNNWorkflow(BaseWorkflow):
         model.add(tf.keras.layers.Dense(num_classes, activation="softmax"))
         return model
 
-    def _fit(self, X, y, X_valid, y_valid, metadata):
+    def _fit(self, X, y, X_valid, y_valid, X_test, y_test, metadata):
         self.metadata = metadata
         X = self.transform(X, y, metadata).astype(np.float32)
-        y = self._transformer_label.fit_transform(y)
+        y_ = self._transformer_label.fit_transform(y)
 
+        self.infos["classes"] = list(self._transformer_label.classes_)
+
+        # TODO: adapt timings for validation and test data
         X_valid = self.transform(X_valid, y_valid, metadata).astype(np.float32)
-        y_valid = self._transformer_label.transform(y_valid)
+        y_valid_ = self._transformer_label.transform(y_valid)
+
+        # TODO: adapt timings
+        X_test = self.transform(X_test, y_test, metadata).astype(np.float32)
 
         self.learner = self.build_model(X.shape[1:], metadata["num_classes"])
 
@@ -197,20 +227,28 @@ class DenseNNWorkflow(BaseWorkflow):
         self.learner.compile(
             optimizer=optimizer,
             loss="sparse_categorical_crossentropy",
-            metrics=["accuracy"],
+            metrics=[],
         )
 
-        timing_callback = TimingCallback()
+        iteration_curve_callback = IterationCurveCallback(
+            workflow=self,
+            timer=self.timer,
+            data=dict(
+                train=dict(X=X, y=y),
+                valid=dict(X=X_valid, y=y_valid),
+                test=dict(X=X_test, y=y_test),
+            ),
+        )
 
         fit_history = self.learner.fit(
             X,
-            y,
+            y_,
             batch_size=min(len(X), self.batch_size),
             epochs=self.num_epochs,
             shuffle=self.shuffle_each_epoch,
-            validation_data=(X_valid, y_valid),
+            validation_data=(X_valid, y_valid_),
             callbacks=[
-                timing_callback,
+                iteration_curve_callback,
                 tf.keras.callbacks.TerminateOnNaN(),
                 tf.keras.callbacks.ReduceLROnPlateau(),
                 tf.keras.callbacks.EarlyStopping(patience=10),
@@ -218,24 +256,20 @@ class DenseNNWorkflow(BaseWorkflow):
             verbose=self.verbose,
         ).history
 
-        # Collect metrics
-        n = len(self.fidelities["score_types"])
-        keys = self.fidelities["score_types"] + [
-            f"val_{k}" for k in self.fidelities["score_types"]
-        ]
-        self.fidelities["fidelity_values"] = (
-            np.arange(len(fit_history["loss"])) + 1
-        ).tolist()
-        self.fidelities["score_values"] = [
-            [list(scores[:n]), list(scores[n:])]
-            for scores in zip(*(fit_history[k] for k in keys))
-        ]
-        self.fidelities["time_values"] = timing_callback.times
-
     def _predict(self, X):
-        X = self.transform(X, metadata=self.metadata).astype(np.float32)
-        y_pred = self.learner.predict(
-            X, batch_size=min(len(X), self.batch_size), verbose=self.verbose
-        ).argmax(axis=1)
+        y_pred = self._predict_proba(X).argmax(axis=1)
         y_pred = self._transformer_label.inverse_transform(y_pred)
         return y_pred
+
+    def _predict_proba(self, X):
+        X = self.transform(X, y=None, metadata=self.metadata).astype(np.float32)
+        y_pred = self.learner.predict(
+            X, batch_size=min(len(X), self.batch_size), verbose=self.verbose
+        )
+        return y_pred
+
+    def _predict_with_proba(self, X):
+        y_pred_proba = self._predict_proba(X)
+        y_pred = y_pred_proba.argmax(axis=1)
+        y_pred = self._transformer_label.inverse_transform(y_pred)
+        return y_pred, y_pred_proba

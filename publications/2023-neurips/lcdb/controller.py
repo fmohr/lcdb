@@ -1,28 +1,27 @@
 import functools
+import itertools as it
 import logging
+import pprint
 import traceback
-
-from sklearn.preprocessing import FunctionTransformer, OneHotEncoder
-
-from lcdb.data.split import train_valid_test_split
 import warnings
-from lcdb.timer import Timer
-from lcdb.Curve import Curve
-from lcdb.CurveDB import CurveDB
-from lcdb.utils import (
-    terminate_on_timeout,
-    FunctionCallTimeoutError,
-    get_anchor_schedule,
-)
 
 import numpy as np
-import warnings
+from lcdb.data.split import train_valid_test_split
+from lcdb.timer import Timer
+from lcdb.utils import (
+    FunctionCallTimeoutError,
+    get_anchor_schedule,
+    terminate_on_timeout,
+)
+from lcdb.scorer import ClassificationScorer
+from sklearn.preprocessing import FunctionTransformer, OneHotEncoder
 
 
 class LCController:
     def __init__(
         self,
-        workflow,
+        timer: Timer,
+        workflow_factory,
         X,
         y,
         dataset_metadata,
@@ -30,13 +29,15 @@ class LCController:
         valid_seed,
         valid_prop: float = 0.1,
         test_prop: float = 0.1,
-        stratify=True,  # TODO: remove if not used
+        stratify=True,
         monotonic=False,
         timeout_on_fit=-1,
         known_categories: bool = True,
         raise_errors: bool = False,
     ):
-        self.workflow = workflow
+        self.timer = timer
+        self.workflow_factory = workflow_factory
+        self.workflow = None
 
         self.num_instances = X.shape[0]
         self.dataset_metadata = dataset_metadata
@@ -53,7 +54,7 @@ class LCController:
             self.y_valid,
             self.y_test,
         ) = train_valid_test_split(
-            X, y, test_seed, valid_seed, test_prop, valid_prop, stratify=True
+            X, y, test_seed, valid_seed, test_prop, valid_prop, stratify=stratify
         )
         self.valid_seed = valid_seed
         self.test_seed = test_seed
@@ -63,8 +64,6 @@ class LCController:
         self.anchors = get_anchor_schedule(
             int(self.num_instances * (1 - test_prop - valid_prop))
         )
-        self.timer = Timer(precision=6)
-        self.workflow.timer = self.timer  # overwrite timer of workflow
 
         # state variables
         self.cur_anchor = None
@@ -96,7 +95,6 @@ class LCController:
 
         # create report
         self.report = {
-            "workflow": workflow.__class__.__name__,
             "valid_prop": valid_prop,
             "test_prop": valid_prop,
             "monotonic": monotonic,
@@ -104,6 +102,8 @@ class LCController:
             "test_seed": test_seed,
             "traceback": None,
         }
+
+        self.objective = None
 
     def set_anchor(self, anchor):
         train_idx = np.arange(self.X_train.shape[0])
@@ -128,44 +128,31 @@ class LCController:
 
     def build_curves(self):
         # Build sample-wise learning curve
-        self.curves = {
-            "train": Curve(workflow=self.workflow, timer=self.timer),
-            "val": Curve(workflow=self.workflow, timer=self.timer),
-            "test": Curve(workflow=self.workflow, timer=self.timer),
-        }
-        self.additional_data_per_anchor = {}
 
-        for anchor in self.anchors:
-            self.set_anchor(anchor)
-            self.timer.enter(anchor)
-            logging.info(
-                f"Running anchor {anchor} which is {anchor / self.X_train_at_anchor.shape[0] * 100:.2f}% of the dataset."
-            )
-            error_code = self.fit_workflow_on_current_anchor()
+        with self.timer.time("build_curves"):
+            for anchor in self.anchors:
+                self.set_anchor(anchor)
 
-            # Collect the fit report (e.g., with iteration learning curves with epochs) if available
-            if hasattr(self.workflow, "fit_report"):
-                #self.additional_data_per_anchor[anchor].update(self.workflow.fit_report)
-                self.additional_data_per_anchor[anchor] = self.workflow.fit_report
+                with self.timer.time("anchor", {"value": anchor}) as anchor_timer:
+                    logging.info(
+                        f"Running anchor {anchor} which is {anchor / self.X_train_at_anchor.shape[0] * 100:.2f}% of the dataset."
+                    )
+                    # TODO: The worfklow should be recreated for each anchor!
+                    error_code = self.fit_workflow_on_current_anchor()
 
-            # Predict and Score
-            if error_code == 0:
-                logging.info("Predicting and scoring...")
-                self.compute_metrics_for_workflow()
-            self.timer.leave()
+                    if error_code != 0:
+                        self.timer.cancel(anchor_timer.id, only_children=True)
 
-            # Set objective
-            if error_code == 0:
-                self.objective = self.curves["val"][self.curves["val"].anchors[-1]]["accuracy"]
+                    assert (
+                        self.timer.active_node.id == anchor_timer.id
+                    ), f"The active timer is not correct, it is {self.timer.active_node} when it should be {anchor_timer} "
 
-
-        self.report["curve_db"] = CurveDB(
-            self.curves["train"],
-            self.curves["val"],
-            self.curves["test"],
-            self.timer.runtimes,
-            self.additional_data_per_anchor,
-        ).dump_to_dict()
+                    # Predict and Score
+                    if error_code == 0:
+                        logging.info("Predicting and scoring...")
+                        self.compute_metrics_for_workflow()
+                    else:
+                        break
 
     def fit_workflow_on_current_anchor(self) -> int:
         """Fit the workflow on the current anchor.
@@ -176,15 +163,18 @@ class LCController:
         # Represent success (0) or failure (1) while fitting the workflow
         error_code = 0
 
+        with self.timer.time("create_workflow"):
+            self.workflow = self.workflow_factory()
+
         if self.timeout_on_fit > 0:
             self.workflow.fit = functools.partial(
                 terminate_on_timeout, self.timeout_on_fit, self.workflow.fit
             )
 
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
+        try:
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
 
-            try:
                 if self.workflow.requires_valid_to_fit:
                     if self.workflow.requires_test_to_fit:
                         self.workflow.fit(
@@ -220,55 +210,56 @@ class LCController:
                             metadata=self.dataset_metadata,
                         )
 
-            except Exception as exception:
-                if self.raise_errors:
-                    raise
+        except Exception as exception:
+            self.report["traceback"] = traceback.format_exc()
 
-                self.report["traceback"] = traceback.format_exc()
+            logging.error(
+                f"Error while fitting the workflow: \n{self.report['traceback']}"
+            )
 
-                logging.error(
-                    f"Error while fitting the workflow: \n{self.report['traceback']}"
-                )
+            self.report["traceback"] = r'"{}"'.format(self.report["traceback"])
 
-                self.report["traceback"] = r'"{}"'.format(self.report["traceback"])
+            # The evaluation is considered a total failure only if
+            # None of the anchors returned scored.
+            if self.objective is None:
+                self.objective = "F"
 
-                # The evaluation is considered a total failure only if
-                # None of the anchors returned scored.
-                if len(self.curves["val"].anchors) == 0:
-                    self.objective = "F"
+                if isinstance(exception, FunctionCallTimeoutError):
+                    self.objective += "_function_call_timeout_error"
+                elif isinstance(exception, MemoryError):
+                    self.objective += "_memory_error"
 
-                    if isinstance(exception, FunctionCallTimeoutError):
-                        self.objective += "_function_call_timeout_error"
-                    elif isinstance(exception, MemoryError):
-                        self.objective += "_memory_error"
-                
-                error_code = 1
-            
-            return error_code
+            error_code = 1
 
-    def get_predictions(self, fitted_workflow):
-        keys = {}
-        labels = fitted_workflow.infos["classes"]
-
-        for X_, y_true, postfix in [
-            (self.X_train_at_anchor, self.y_train_at_anchor, "train"),
-            (self.X_valid, self.y_valid, "val"),
-            (self.X_test, self.y_test, "test"),
-        ]:
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore")
-                fitted_workflow.timer.enter(postfix)
-                keys[f"y_pred_{postfix}"] = fitted_workflow.predict(X_)
-                keys[f"y_pred_proba_{postfix}"] = fitted_workflow.predict_proba(X_)
-                fitted_workflow.timer.leave()
-        return keys, labels
+        return error_code
 
     def compute_metrics_for_workflow(self):
-        predictions, labels = self.get_predictions(self.workflow)
+        predictions, labels = self.get_predictions()
         self.labels_as_used_by_workflow = labels
-        return self.extend_curves_based_on_predictions(**predictions)
+        return self.score_predictions(**predictions)
 
-    def extend_curves_based_on_predictions(
+    def get_predictions(self):
+        keys = {}
+        labels = self.workflow.infos["classes"]
+
+        with self.timer.time("get_predictions"):
+            for X_split, label_split in [
+                (self.X_train_at_anchor, "train"),
+                (self.X_valid, "val"),
+                (self.X_test, "test"),
+            ]:
+                with warnings.catch_warnings(), self.timer.time(label_split):
+                    warnings.simplefilter("ignore")
+
+                    # TODO: this should be replaced to avoid infering twice
+                    keys[f"y_pred_{label_split}"] = self.workflow.predict(X_split)
+                    keys[f"y_pred_proba_{label_split}"] = self.workflow.predict_proba(
+                        X_split
+                    )
+
+        return keys, labels
+
+    def score_predictions(
         self,
         y_pred_train,
         y_pred_proba_train,
@@ -277,12 +268,20 @@ class LCController:
         y_pred_test,
         y_pred_proba_test,
     ):
-        for y_true, y_pred, y_pred_proba, postfix in [
-            (self.y_train_at_anchor, y_pred_train, y_pred_proba_train, "train"),
-            (self.y_valid, y_pred_val, y_pred_proba_val, "val"),
-            (self.y_test, y_pred_test, y_pred_proba_test, "test"),
-        ]:
-            self.timer.enter(postfix)
-            curve = self.curves[postfix]
-            curve.compute_metrics(self.cur_anchor, y_true, y_pred, y_pred_proba)
-            self.timer.leave()
+        scorer = ClassificationScorer(
+            classes=self.workflow.infos["classes"], timer=self.timer
+        )
+
+        with self.timer.time("metrics"):
+            for y_true, y_pred, y_pred_proba, label_split in [
+                (self.y_train_at_anchor, y_pred_train, y_pred_proba_train, "train"),
+                (self.y_valid, y_pred_val, y_pred_proba_val, "val"),
+                (self.y_test, y_pred_test, y_pred_proba_test, "test"),
+            ]:
+                with self.timer.time(label_split) as split_timer:
+                    scores = scorer.score(y_true, y_pred, y_pred_proba)
+
+                    if label_split == "val":
+                        self.objective = scores["accuracy"]
+
+        return 0  # no error occurred

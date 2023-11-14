@@ -105,6 +105,7 @@ class PreprocessedWorkflow(BaseWorkflow):
 
     def __init__(
         self,
+        timer=None,
         kernel_pca_kernel="linear",
         kernel_pca_n_components=1.0,
         selectp_percentile=100,
@@ -112,7 +113,7 @@ class PreprocessedWorkflow(BaseWorkflow):
         std_with_std=True,
         **kwargs,
     ):
-        super().__init__()
+        super().__init__(timer)
 
         # extract preprocessing hyperparameters
         self.pp_kws = kwargs
