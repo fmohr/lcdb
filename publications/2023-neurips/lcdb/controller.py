@@ -282,6 +282,6 @@ class LCController:
                     scores = scorer.score(y_true, y_pred, y_pred_proba)
 
                     if label_split == "val":
-                        self.objective = scores["accuracy"]
+                        self.objective = -scores["log_loss"]
 
         return 0  # no error occurred

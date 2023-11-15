@@ -33,7 +33,8 @@ class TimerNode:
         self.children = []
 
     def time(self) -> float:
-        return np.round(time.time(), decimals=self.precision)
+        # return np.round(time.time(), decimals=self.precision)
+        return time.time()
 
     def stop(self, metadata=None):
         self.timestamp_end = self.time()
@@ -51,19 +52,28 @@ class TimerNode:
     def __setitem__(self, key, value):
         self.metadata[key] = value
 
-    def as_dict(self) -> dict:
+    def as_dict(self, timestamp_offset: float = 0) -> dict:
         out = dict(
-            id=self.id,
+            # id=self.id,
             tag=self.tag,
-            timestamp_start=self.timestamp_start,
-            timestamp_stop=self.timestamp_end,
-            duration=np.round(
-                self.timestamp_end - self.timestamp_start, self.precision
+            timestamp_start=np.round(
+                self.timestamp_start - timestamp_offset, self.precision
             ),
-            status=self.status,
-            metadata=self.metadata,
-            children=[c.as_dict() for c in self.children],
+            timestamp_stop=np.round(
+                self.timestamp_end - timestamp_offset, self.precision
+            ),
+            # TODO: remove because redundant with timestamp_start/end
+            # duration=np.round(
+            #     self.timestamp_end - self.timestamp_start, self.precision
+            # ),
+            # status=self.status,
         )
+
+        if len(self.metadata) > 0:
+            out["metadata"] = self.metadata
+
+        if len(self.children) > 0:
+            out["children"] = [c.as_dict(timestamp_offset) for c in self.children]
 
         if self.cancellation_source_id:
             out["cancellation_source_id"] = self.cancellation_source_id
@@ -169,7 +179,7 @@ class Timer:
         return self.stack[-1]
 
     def as_dict(self):
-        return self.root.as_dict()
+        return self.root.as_dict(timestamp_offset=self.root.timestamp_start)
 
     def as_json(self):
         return lcdb.json.loads(lcdb.json.dumps(self.as_dict()))

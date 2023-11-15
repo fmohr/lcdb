@@ -40,6 +40,9 @@ CONFIG_SPACE = ConfigurationSpace(
         "shuffle_each_epoch": Categorical(
             "shuffle_each_epoch", items=[True, False], default=True
         ),
+        # TODO: add regularization hyperparameters
+        # dropout
+        # batch_norm
         # TODO: refine preprocessing
         "transform_real": Categorical(
             "transform_real", ["minmax", "std", "none"], default="none"

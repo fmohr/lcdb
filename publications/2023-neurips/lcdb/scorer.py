@@ -39,7 +39,8 @@ class ClassificationScorer:
 
         metric_names = [
             "confusion_matrix",
-            "accuracy",
+            # TODO: Removed because redundant with confusion_matrix
+            # "accuracy",
             "auc",
             "log_loss",
             "brier_score",
