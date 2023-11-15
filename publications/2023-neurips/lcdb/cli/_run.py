@@ -187,7 +187,7 @@ def run(
     Returns:
         dict: a dictionary with 2 keys (objective, metadata) where objective is the objective maximized by deephyper (if used) and metadata is a JSON serializable sub-dictionnary which are complementary information about the workflow.
     """
-    timer = Timer()
+    timer = Timer(precision=4)
     run_timer_id = timer.start("run")
 
     # Load the raw dataset
@@ -375,7 +375,7 @@ def test_default_config():
 
     # check that the output can indeed be compiled into a string using JSON
     out = lcdb.json.dumps(output, indent=2)
-    # print(out)
+    print(out)
 
     lcdb.json.loads(out)
 
