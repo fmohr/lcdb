@@ -9,7 +9,7 @@ from lcdb.scorer import ClassificationScorer
 from lcdb.timer import Timer
 from lcdb.utils import get_iteration_schedule
 from lcdb.workflow._base_workflow import BaseWorkflow
-from lcdb.workflow.keras.utils import ACTIVATIONS, OPTIMIZERS
+from lcdb.workflow.keras.utils import ACTIVATIONS, OPTIMIZERS, REGULARIZERS
 from sklearn.preprocessing import (
     FunctionTransformer,
     LabelEncoder,
@@ -28,8 +28,11 @@ tf.autograph.set_verbosity(2)
 CONFIG_SPACE = ConfigurationSpace(
     name="keras._dense",
     space={
+        "num_layers": Integer("num_layers", bounds=(1, 20), default=5),
         "num_units": Integer("num_units", bounds=(1, 200), log=True, default=32),
         "activation": Categorical("activation", items=ACTIVATIONS, default="relu"),
+        "dropout_rate": Float("dropout_rate", bounds=(0.0, 0.9), default=0.1),
+        "skip_co": Categorical("skip_co", items=[True, False], default=True),
         "optimizer": Categorical(
             "optimizer", items=list(OPTIMIZERS.keys()), default="Adam"
         ),
@@ -42,8 +45,18 @@ CONFIG_SPACE = ConfigurationSpace(
             "shuffle_each_epoch", items=[True, False], default=True
         ),
         # TODO: add regularization hyperparameters
-        # dropout
-        # batch_norm
+        "kernel_regularizer": Categorical(
+            "kernel_regularizer", list(REGULARIZERS.keys()), default="none"
+        ),
+        "bias_regularizer": Categorical(
+            "bias_regularizer", list(REGULARIZERS.keys()), default="none"
+        ),
+        "activity_regularizer": Categorical(
+            "activity_regularizer", list(REGULARIZERS.keys()), default="none"
+        ),
+        "regularizer_factor": Float(
+            "regularizer_factor", bounds=(0.0, 1.0), default=0.01
+        ),
         # TODO: refine preprocessing
         "transform_real": Categorical(
             "transform_real", ["minmax", "std", "none"], default="none"
@@ -121,12 +134,19 @@ class DenseNNWorkflow(BaseWorkflow):
     def __init__(
         self,
         timer=None,
+        num_layers=5,
         num_units=32,
         activation="relu",
+        dropout_rate=0.1,
+        skip_co=True,
         optimizer="Adam",
         learning_rate=0.001,
         batch_size=32,
         num_epochs=10,
+        kernel_regularizer="none",
+        bias_regularizer="none",
+        activity_regularizer="none",
+        regularizer_factor=0.01,
         shuffle_each_epoch=True,
         transform_real="none",
         transform_cat="onehot",
@@ -137,19 +157,28 @@ class DenseNNWorkflow(BaseWorkflow):
         self.requires_valid_to_fit = True
         self.requires_test_to_fit = True
 
+        self.num_layers = num_layers
         self.num_units = num_units
         self.activation = None if activation == "none" else activation
+        self.dropout_rate = dropout_rate
+        self.skip_co = skip_co
         self.optimizer = optimizer
         self.learning_rate = learning_rate
         self.batch_size = batch_size
         self.num_epochs = num_epochs
         self.shuffle_each_epoch = shuffle_each_epoch
+        self.kernel_regularizer = kernel_regularizer
+        self.bias_regularizer = bias_regularizer
+        self.activity_regularizer = activity_regularizer
+        self.regularizer_factor = regularizer_factor
 
         self.transform_real = transform_real
         self.transform_cat = transform_cat
         self._transformer_label = LabelEncoder()
 
         self.verbose = verbose
+
+        tf.keras.backend.clear_session()
 
     @classmethod
     def config_space(cls):
@@ -202,14 +231,36 @@ class DenseNNWorkflow(BaseWorkflow):
         return X
 
     def build_model(self, input_shape, num_classes):
-        model = tf.keras.Sequential()
-        model.add(
-            tf.keras.layers.Dense(
-                self.num_units, input_shape=input_shape, activation=self.activation
-            )
+        inputs = out = tf.keras.Input(shape=input_shape)
+
+        prev = None
+
+        # Model layers
+        for layer_i in range(self.num_layers):
+            out = tf.keras.layers.Dense(
+                self.num_units,
+                activation=self.activation,
+                activity_regularizer=REGULARIZERS[self.activity_regularizer](self.regularizer_factor),
+                kernel_regularizer=REGULARIZERS[self.kernel_regularizer](self.regularizer_factor),
+                bias_regularizer=REGULARIZERS[self.bias_regularizer](self.regularizer_factor),
+            )(out)
+            out = tf.keras.layers.Dropout(self.dropout_rate)(out)
+
+            if self.skip_co and prev is not None:
+                out = out + prev
+            prev = out
+
+        # Model output
+        layer_logits = tf.keras.layers.Dense(
+            self.num_units, activation=self.activation
+        )(out)
+        layer_proba = tf.keras.layers.Dense(num_classes, activation="softmax")(
+            layer_logits
         )
-        model.add(tf.keras.layers.Dense(self.num_units, activation=self.activation))
-        model.add(tf.keras.layers.Dense(num_classes, activation="softmax"))
+
+        model = tf.keras.Model(inputs=inputs, outputs=layer_proba)
+        print(model.summary())
+
         return model
 
     def _fit(self, X, y, X_valid, y_valid, X_test, y_test, metadata):

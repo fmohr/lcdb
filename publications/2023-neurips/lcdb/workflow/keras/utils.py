@@ -44,3 +44,10 @@ ACTIVATIONS = [
     "elu",
     "exponential",
 ]
+
+REGULARIZERS = {
+    "none": lambda x: None,
+    "L1": lambda x: tf.keras.regularizers.L1(l1=x),
+    "L2": lambda x: tf.keras.regularizers.L2(l2=x),
+    "L1L2": lambda x: tf.keras.regularizers.L1L2(l1=x, l2=x),
+}
