@@ -1,7 +1,6 @@
 import numpy as np
 from ConfigSpace import ConfigurationSpace, Float, Integer, Uniform
 from lcdb.scorer import ClassificationScorer
-from lcdb.timer import Timer
 #from lcdb.utils import filter_keys_with_prefix
 #from lcdb.workflow._preprocessing_workflow import PreprocessedWorkflow
 from ...utils import filter_keys_with_prefix
@@ -38,7 +37,6 @@ class ExtendedLabelEncoder(LabelEncoder):
             return [super(ExtendedLabelEncoder, self).inverse_transform([label])[0] if label != self.unknown_integer else "___UNKNOWN___" for label in y]
         else:
             return super(ExtendedLabelEncoder, self).inverse_transform(y)
-
 
 
 CONFIG_SPACE = ConfigurationSpace(
@@ -115,19 +113,11 @@ class EvalCallBack(TrainingCallback):
         # start tracking time for the current anchor (epoch)
         self.epoch = epoch
         self.epoch_timer_id = self.timer.start("epoch", metadata={"value": self.epoch})
+        # start tracking time for the training
+        self.train_timer_id = self.timer.start("epoch_train")
         return False
 
     def after_iteration(self, model, epoch, evals_log):
-        assert self.timer.active_node.id == self.epoch_timer_id
-        self.timer.stop()
-        return False
-
-    def before_training(self, model):
-        # start tracking time for the training
-        self.train_timer_id = self.timer.start("epoch_train")
-        return model
-
-    def after_training(self, model):
         assert self.timer.active_node.id == self.train_timer_id
         self.timer.stop()
         self.test_timer_id = self.timer.start("epoch_test")
@@ -147,8 +137,39 @@ class EvalCallBack(TrainingCallback):
                         y_pred=y_pred,
                         y_pred_proba=y_pred_proba,
                     )
+        assert self.timer.active_node.id == self.test_timer_id
         self.timer.stop()
-        return model
+        assert self.timer.active_node.id == self.epoch_timer_id
+        self.timer.stop()
+        return False
+
+    #def before_training(self, model):
+    #    # start tracking time for the training
+    #    self.train_timer_id = self.timer.start("epoch_train")
+    #    return model
+
+    #def after_training(self, model):
+    #    assert self.timer.active_node.id == self.train_timer_id
+    #    self.timer.stop()
+    #    self.test_timer_id = self.timer.start("epoch_test")
+    #    with self.timer.time("metrics"):
+    #        for label_split, data_split in self.data.items():
+    #            with self.timer.time(label_split):
+    #                with self.timer.time("predict_with_proba"):
+    #                    y_pred_proba = model.predict(data_split["X"], strict_shape=True)
+
+    #                y_pred_proba = self.create_full_probs(y_pred_proba)
+    #                y_pred = self.create_labels_from_probs(y_pred_proba, invert=True)
+
+    #                y_true = data_split["y"]
+
+    #                self.scorer.score(
+    #                    y_true=y_true,
+    #                    y_pred=y_pred,
+    #                    y_pred_proba=y_pred_proba,
+    #                )
+    #    self.timer.stop()
+    #    return model
 
     def create_full_probs(self, probs_pred):
         if self.n_classes == 2:
@@ -216,7 +237,6 @@ class XGBoostWorkflow(PreprocessedWorkflow):
         self.learner = XGBClassifier(**learner_kwargs)
 
         self.encoder = ExtendedLabelEncoder()
-
 
     @classmethod
     def config_space(cls):
