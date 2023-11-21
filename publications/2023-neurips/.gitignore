@@ -1,3 +1,10 @@
 .ipynb_checkpoints
 __pycache__
 .idea
+*.json
+*.tar
+*.gz
+*.csv
+*.png
+*.yaml
+*.zip

@@ -5,7 +5,6 @@ import time
 import numpy as np
 
 
-
 def import_attr_from_module(path: str):
     """Import an attribute from a module given its path.
 
@@ -72,12 +71,12 @@ def terminate_on_timeout(timeout, func, *args, **kwargs):
         pool.terminate()
 
 
-def get_anchor_schedule(n):
+def get_anchor_schedule(n, delay=7):
     """Get a schedule of anchors for a given size `n`."""
     anchors = []
     k = 1
     while True:
-        exponent = (7 + k) / 2
+        exponent = (delay + k) / 2
         sample_size = int(np.round(2**exponent))
         if sample_size > n:
             break
@@ -86,3 +85,8 @@ def get_anchor_schedule(n):
     if anchors[-1] < n:
         anchors.append(n)
     return anchors
+
+
+def get_iteration_schedule(n):
+    """Get a schedule of iterations for a given size `n`."""
+    return get_anchor_schedule(n, delay=0)
