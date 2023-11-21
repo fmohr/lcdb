@@ -7,6 +7,7 @@ import tensorflow as tf
 from ConfigSpace import Categorical, ConfigurationSpace, Float, Integer
 from lcdb.scorer import ClassificationScorer
 from lcdb.timer import Timer
+from lcdb.utils import get_iteration_schedule
 from lcdb.workflow._base_workflow import BaseWorkflow
 from lcdb.workflow.keras.utils import ACTIVATIONS, OPTIMIZERS
 from sklearn.preprocessing import (
@@ -64,6 +65,7 @@ class IterationCurveCallback(tf.keras.callbacks.Callback):
         self.scorer = ClassificationScorer(
             classes=self.workflow.infos["classes"], timer=self.timer
         )
+        self.schedule = get_iteration_schedule(self.workflow.num_epochs)[::-1]
 
         # Safeguard to check timers
         self.train_timer_id = None
@@ -88,26 +90,28 @@ class IterationCurveCallback(tf.keras.callbacks.Callback):
         self.timer.stop()
 
     def on_test_begin(self, logs=None):
-        self.test_timer_id = self.timer.start("epoch_test")
+        # Manage the schedule
+        epoch_schedule = self.schedule[-1]
+        if self.epoch + 1 != epoch_schedule:
+            return
+        self.schedule.pop()
 
-        with self.timer.time("metrics"):
-            for label_split, data_split in self.data.items():
-                with self.timer.time(label_split):
-                    with self.timer.time("predict_with_proba"):
-                        y_pred, y_pred_proba = self.workflow._predict_with_proba(
-                            data_split["X"]
+        with self.timer.time("epoch_test"):
+            with self.timer.time("metrics"):
+                for label_split, data_split in self.data.items():
+                    with self.timer.time(label_split):
+                        with self.timer.time("predict_with_proba"):
+                            y_pred, y_pred_proba = self.workflow._predict_with_proba(
+                                data_split["X"]
+                            )
+
+                        y_true = data_split["y"]
+
+                        self.scorer.score(
+                            y_true=y_true,
+                            y_pred=y_pred,
+                            y_pred_proba=y_pred_proba,
                         )
-
-                    y_true = data_split["y"]
-
-                    self.scorer.score(
-                        y_true=y_true,
-                        y_pred=y_pred,
-                        y_pred_proba=y_pred_proba,
-                    )
-
-    def on_test_end(self, logs=None):
-        self.timer.stop()
 
 
 class DenseNNWorkflow(BaseWorkflow):
