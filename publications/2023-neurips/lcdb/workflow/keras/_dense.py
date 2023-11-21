@@ -9,7 +9,12 @@ from lcdb.scorer import ClassificationScorer
 from lcdb.timer import Timer
 from lcdb.utils import get_iteration_schedule
 from lcdb.workflow._base_workflow import BaseWorkflow
-from lcdb.workflow.keras.utils import ACTIVATIONS, OPTIMIZERS, REGULARIZERS
+from lcdb.workflow.keras.utils import (
+    ACTIVATIONS,
+    OPTIMIZERS,
+    REGULARIZERS,
+    INITIALIZERS,
+)
 from sklearn.preprocessing import (
     FunctionTransformer,
     LabelEncoder,
@@ -33,6 +38,7 @@ CONFIG_SPACE = ConfigurationSpace(
         "activation": Categorical("activation", items=ACTIVATIONS, default="relu"),
         "dropout_rate": Float("dropout_rate", bounds=(0.0, 0.9), default=0.1),
         "skip_co": Categorical("skip_co", items=[True, False], default=True),
+        "batch_norm": Categorical("batch_norm", items=[True, False], default=False),
         "optimizer": Categorical(
             "optimizer", items=list(OPTIMIZERS.keys()), default="Adam"
         ),
@@ -40,7 +46,7 @@ CONFIG_SPACE = ConfigurationSpace(
             "learning_rate", bounds=(1e-5, 10.0), log=True, default=1e-3
         ),
         "batch_size": Integer("batch_size", bounds=(1, 512), log=True, default=32),
-        "num_epochs": Integer("num_epochs", bounds=(1, 100), log=True, default=10),
+        # "num_epochs": Integer("num_epochs", bounds=(1, 100), log=True, default=10),
         "shuffle_each_epoch": Categorical(
             "shuffle_each_epoch", items=[True, False], default=True
         ),
@@ -56,6 +62,9 @@ CONFIG_SPACE = ConfigurationSpace(
         ),
         "regularizer_factor": Float(
             "regularizer_factor", bounds=(0.0, 1.0), default=0.01
+        ),
+        "kernel_initializer": Categorical(
+            "kernel_initializer", INITIALIZERS, default="glorot_uniform"
         ),
         # TODO: refine preprocessing
         "transform_real": Categorical(
@@ -139,14 +148,16 @@ class DenseNNWorkflow(BaseWorkflow):
         activation="relu",
         dropout_rate=0.1,
         skip_co=True,
+        batch_norm=False,
         optimizer="Adam",
         learning_rate=0.001,
         batch_size=32,
-        num_epochs=10,
+        num_epochs=200,
         kernel_regularizer="none",
         bias_regularizer="none",
         activity_regularizer="none",
         regularizer_factor=0.01,
+        kernel_initializer="glorot_uniform",
         shuffle_each_epoch=True,
         transform_real="none",
         transform_cat="onehot",
@@ -162,6 +173,7 @@ class DenseNNWorkflow(BaseWorkflow):
         self.activation = None if activation == "none" else activation
         self.dropout_rate = dropout_rate
         self.skip_co = skip_co
+        self.batch_norm = batch_norm
         self.optimizer = optimizer
         self.learning_rate = learning_rate
         self.batch_size = batch_size
@@ -171,6 +183,7 @@ class DenseNNWorkflow(BaseWorkflow):
         self.bias_regularizer = bias_regularizer
         self.activity_regularizer = activity_regularizer
         self.regularizer_factor = regularizer_factor
+        self.kernel_initializer = kernel_initializer
 
         self.transform_real = transform_real
         self.transform_cat = transform_cat
@@ -240,10 +253,19 @@ class DenseNNWorkflow(BaseWorkflow):
             out = tf.keras.layers.Dense(
                 self.num_units,
                 activation=self.activation,
-                activity_regularizer=REGULARIZERS[self.activity_regularizer](self.regularizer_factor),
-                kernel_regularizer=REGULARIZERS[self.kernel_regularizer](self.regularizer_factor),
-                bias_regularizer=REGULARIZERS[self.bias_regularizer](self.regularizer_factor),
+                kernel_initializer=self.kernel_initializer,
+                activity_regularizer=REGULARIZERS[self.activity_regularizer](
+                    self.regularizer_factor
+                ),
+                kernel_regularizer=REGULARIZERS[self.kernel_regularizer](
+                    self.regularizer_factor
+                ),
+                bias_regularizer=REGULARIZERS[self.bias_regularizer](
+                    self.regularizer_factor
+                ),
             )(out)
+            if self.batch_norm:
+                out = tf.keras.layers.BatchNormalization()(out)
             out = tf.keras.layers.Dropout(self.dropout_rate)(out)
 
             if self.skip_co and prev is not None:
@@ -259,7 +281,6 @@ class DenseNNWorkflow(BaseWorkflow):
         )
 
         model = tf.keras.Model(inputs=inputs, outputs=layer_proba)
-        print(model.summary())
 
         return model
 
