@@ -20,8 +20,9 @@ platform_infos = platform.platform()
 
 # What packages are required for this module to be executed?
 REQUIRED = [
-    "ConfigSpace>=0.4.20,<=0.6.1",
-    "deephyper[default,ray,redis-hiredis]>=0.6.0",
+    # "ConfigSpace>=0.4.20,<=0.6.1",
+    "ConfigSpace>=0.6.1",
+    "deephyper[hps]>=0.6.0",
     "numpy",
     "openml",
     "pandas>=0.24.2",
