@@ -13,37 +13,40 @@ set -xe
 
 # Load modules available on the current system
 module load PrgEnv-gnu/8.3.3
-module load llvm/release-17.0.0
+module load llvm/release-15.0.0
 module load conda/2023-10-04
 
 # Copy the base conda environment
-conda create -p dhenv --clone base -y
+#conda create -p dhenv --clone base -y
 conda activate dhenv/
-pip install --upgrade pip
+#pip install --upgrade pip
 
 # Install RedisJSON with Spack
 # Install Spack
-git clone -c feature.manyFiles=true https://github.com/spack/spack.git
-. ./spack/share/spack/setup-env.sh
+#git clone -c feature.manyFiles=true https://github.com/spack/spack.git
+#. ./spack/share/spack/setup-env.sh
 
-git clone https://github.com/deephyper/deephyper-spack-packages.git
+#git clone https://github.com/deephyper/deephyper-spack-packages.git
 
 # Create and activate the `redisjson` environment
-spack env create redisjson
-spack env activate redisjson
+#spack env create redisjson
+#spack env activate redisjson
 
 # Add the DeepHyper Spack packages to the environment
-spack repo add deephyper-spack-packages
+#spack repo add deephyper-spack-packages
 
 # Add the `redisjson` Spack package to the environment
-spack add redisjson
+#spack add redisjson
 
 # Build the environment
-spack install
+#spack install
 
 # Install the DeepHyper's Python package
-git clone -b master https://github.com/deephyper/deephyper.git
-pip install -e "deephyper/[default,mpi,redis-hiredis]"
+git clone -b develop git@github.com:deephyper/deephyper.git
+pip install -e "deephyper/[hps,mpi,redis-hiredis]"
+
+# Install LCDB Package
+pip install -e "../"
 
 # Create activation script
 touch activate-dhenv.sh
@@ -52,7 +55,7 @@ echo "#!/bin/bash" >> activate-dhenv.sh
 # Append modules loading and conda activation
 echo "" >> activate-dhenv.sh
 echo "module load PrgEnv-gnu/8.3.3" >> activate-dhenv.sh
-echo "module load llvm/release-17.0.0" >> activate-dhenv.sh
+echo "module load llvm/release-15.0.0" >> activate-dhenv.sh
 echo "module load conda/2023-10-04" >> activate-dhenv.sh
 echo "conda activate $PWD/dhenv/" >> activate-dhenv.sh
 
