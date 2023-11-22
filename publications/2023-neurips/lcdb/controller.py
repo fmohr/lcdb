@@ -150,7 +150,28 @@ class LCController:
                     # Predict and Score
                     if error_code == 0:
                         logging.info("Predicting and scoring...")
-                        self.compute_metrics_for_workflow()
+                        try:
+                            self.compute_metrics_for_workflow()
+                        except Exception as exception:
+                            self.report["traceback"] = traceback.format_exc()
+
+                            logging.error(
+                                f"Error while fitting the workflow: \n{self.report['traceback']}"
+                            )
+
+                            self.report["traceback"] = r'"{}"'.format(
+                                self.report["traceback"]
+                            )
+
+                            # The evaluation is considered a total failure only if
+                            # None of the anchors returned scored.
+                            if self.objective is None:
+                                self.objective = "F"
+
+                                if isinstance(exception, ValueError):
+                                    self.objective += "_value_error"
+                            error_code = 1
+                            break
                     else:
                         break
 
