@@ -25,7 +25,7 @@ export OMP_NUM_THREADS=$NDEPTH
 #!!! CONFIGURATION - END
 
 mkdir -p $LCDB_OUTPUT_RUN
-pushd $LCDB_OUTPOUT_RUN
+pushd $LCDB_OUTPUT_RUN
 
 mpiexec -n ${NTOTRANKS} -host ${RANKS_HOSTS} \
     --envall \

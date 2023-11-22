@@ -17,6 +17,7 @@ source /lus/grand/projects/datascience/regele/polaris/lcdb/publications/2023-neu
 source ./config.sh
 
 # Create Configurations
+mkdir -p $LCDB_OUTPUT_WORKFLOW
 pushd $LCDB_OUTPUT_WORKFLOW
 lcdb test \
     --openml-id $LCDB_OPENML_ID \
