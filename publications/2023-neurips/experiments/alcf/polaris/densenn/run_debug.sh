@@ -1,5 +1,5 @@
 #!/bin/bash
-#PBS -l select=2:system=polaris
+#PBS -l select=4:system=polaris
 #PBS -l place=scatter
 #PBS -l walltime=00:60:00
 #PBS -q debug
@@ -10,7 +10,7 @@ set -xe
 
 cd ${PBS_O_WORKDIR}
 
-source ../../../build/activate-dhenv.sh
+source /lus/grand/projects/datascience/regele/polaris/lcdb/publications/2023-neurips/build/activate-dhenv.sh
 
 #!!! CONFIGURATION - START
 source ./config.sh
@@ -24,11 +24,8 @@ export NTOTRANKS=$(( $NNODES * $NRANKS_PER_NODE + 1))
 export OMP_NUM_THREADS=$NDEPTH
 #!!! CONFIGURATION - END
 
-export output_workflow_dir=output/$LCDB_WORKFLOW
-export output_dataset_dir=$output_workflow_dir/$LCDB_OPENML_ID
-export output_run_dir=$output_dataset_dir/$LCDB_VALID_SEED-$LCDB_TEST_SEED-$LCDB_WORKFLOW_SEED
-mkdir -p $output_run_dir
-pushd $output_run_dir
+mkdir -p $LCDB_OUTPUT_RUN
+pushd $LCDB_OUTPOUT_RUN
 
 mpiexec -n ${NTOTRANKS} -host ${RANKS_HOSTS} \
     --envall \
