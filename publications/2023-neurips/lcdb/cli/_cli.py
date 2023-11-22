@@ -5,7 +5,7 @@ $ lcdb run ...
 """
 import argparse
 
-from lcdb.cli import _create, _run, _space, _fetch
+from lcdb.cli import _create, _run, _space, _fetch, _test
 
 
 def create_parser():
@@ -27,6 +27,9 @@ def create_parser():
 
     # fetch data
     _fetch.add_subparser(subparsers)
+
+    # test workflow
+    _test.add_subparser(subparsers)
 
     return parser
 

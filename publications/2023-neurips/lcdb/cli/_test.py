@@ -1,9 +1,19 @@
-"""Command line to test the default configuration of a workflow."""
-
-import json
+"""Command line to test workflow."""
 import logging
+import os
+import pathlib
 
-from ..workflow._util import get_all_experiments, run
+import lcdb.json
+import pandas as pd
+from deephyper.evaluator import Evaluator, RunningJob
+from deephyper.evaluator.callback import TqdmCallback
+from deephyper.problem import HpProblem
+from deephyper.search.hps import CBO
+from lcdb.utils import import_attr_from_module
+from ._run import run
+
+# Avoid Tensorflow Warnings
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = str(3)
 
 
 def add_subparser(subparsers):
@@ -13,94 +23,113 @@ def add_subparser(subparsers):
     subparser_name = "test"
     function_to_call = main
 
-    subparser = subparsers.add_parser(subparser_name, help="Test a worfklow.")
+    subparser = subparsers.add_parser(
+        subparser_name, help="Run experiments with DeepHyper."
+    )
 
     subparser.add_argument(
-        "--config", type=str, required=True, help="Path to the configuration file."
-    )
-    subparser.add_argument(
-        "--num-configs",
+        "-id",
+        "--openml-id",
         type=int,
-        required=False,
-        default=1,
-        help="The number of hyperparameter configurations that are being sampled (including the default configuration).",
+        required=True,
+        help="The identifier of the OpenML dataset.",
     )
     subparser.add_argument(
-        "--seed",
-        type=int,
-        required=False,
-        default=42,
-        help="The random seed used in sampling configurations.",
+        "-w",
+        "--workflow-class",
+        type=str,
+        required=True,
+        help="The 'path' of the workflow to train.",
     )
     subparser.add_argument(
-        "--max-num_anchors-per-row",
-        type=int,
-        required=False,
-        default=1,
-        help="The number of anchors per row in the database.",
-    )
-    subparser.add_argument(
-        "--verbose",
+        "-m",
+        "--monotonic",
         action="store_true",
-        required=False,
         default=False,
-        help="Whether to print the results of the experiments.",
+        required=False,
+        help="A boolean indicating if the sample-wise learning curve should be monotonic (i.e., sample set at smaller anchors are always included in sample sets at larger anchors) or not.",
+    )
+    subparser.add_argument(
+        "-vs",
+        "--valid-seed",
+        type=int,
+        default=42,
+        required=False,
+        help="Random state seed of train/validation split.",
+    )
+    subparser.add_argument(
+        "-ts",
+        "--test-seed",
+        type=int,
+        default=42,
+        required=False,
+        help="Random state seed of train+validation/test split.",
+    )
+    subparser.add_argument(
+        "-ws",
+        "--workflow-seed",
+        type=int,
+        default=42,
+        required=False,
+        help="Random state seed of the workflow.",
+    )
+    subparser.add_argument(
+        "-vp",
+        "--valid-prop",
+        type=float,
+        default=0.1,
+        required=False,
+        help="Ratio of validation/(train+validation).",
+    )
+    subparser.add_argument(
+        "-tp",
+        "--test-prop",
+        type=float,
+        default=0.1,
+        required=False,
+        help="Ratio of test/data.",
+    )
+    subparser.add_argument(
+        "--timeout-on-fit",
+        type=int,
+        default=-1,
+        required=False,
+        help="Timeout in seconds for the fit method. Defaults to -1 for unlimited time.",
     )
     subparser.set_defaults(func=function_to_call)
 
 
 def main(
-    config: str,
-    num_configs: int,
-    seed: int,
-    max_num_anchors_per_row: int,
-    verbose: bool,
-    *args,
-    **kwargs
+    openml_id,
+    workflow_class,
+    monotonic,
+    valid_seed,
+    test_seed,
+    workflow_seed,
+    valid_prop,
+    test_prop,
+    timeout_on_fit,
 ):
-    """
-    :meta private:
-    """
+    WorkflowClass = import_attr_from_module(workflow_class)
+    config_space = WorkflowClass.config_space()
+    config_default = dict(config_space.get_default_configuration())
 
-    if verbose:
-        logging.basicConfig(
-            # filename=path_log_file, # optional if we want to store the logs to disk
-            level=logging.INFO,
-            format="%(asctime)s - %(levelname)s - %(filename)s:%(funcName)s - %(message)s",
-            force=True,
-        )
-
-    # create experiment rows
-    workflow_class, experiments = get_all_experiments(
-        config_file=config,
-        num_configs=num_configs,
-        seed=seed,
-        max_num_anchors_per_row=max_num_anchors_per_row,
-        LHS=False,
+    output = run(
+        RunningJob(id=0, parameters=config_default),
+        openml_id=openml_id,
+        workflow_class=workflow_class,
+        monotonic=monotonic,
+        valid_seed=valid_seed,
+        test_seed=test_seed,
+        workflow_seed=workflow_seed,
+        valid_prop=valid_prop,
+        test_prop=test_prop,
+        timeout_on_fit=timeout_on_fit,
+        raise_errors=True,
     )
 
-    # filter experiments
-    if hasattr(workflow_class, "is_experiment_valid"):
-        experiments = [e for e in experiments if workflow_class.is_experiment_valid(e)]
+    # check that the output can indeed be compiled into a string using JSON
+    out = lcdb.json.dumps(output, indent=2)
+    print(out)
 
-    # replace hyperparameters by strings
-    for e in experiments:
-        e["hyperparameters"] = json.dumps(e["hyperparameters"])
-        e["train_sizes"] = json.dumps(e["train_sizes"])
-
-        print("Running experiment %s", e)
-
-        results = run(
-            openmlid=int(e["openmlid"]),
-            workflow_class=workflow_class,
-            anchors=json.loads(e["train_sizes"]),
-            monotonic=bool(e["monotonic"]),
-            inner_seed=int(e["seed_inner"]),
-            outer_seed=int(e["seed_outer"]),
-            hyperparameters=json.loads(e["hyperparameters"]),
-            maxruntime=int(e["maxruntime"]),
-            valid_prop=float(e["valid_prop"]),
-            test_prop=float(e["test_prop"]),
-            logger=logging,
-        )
-        logging.info("Results: %s", results)
+    lcdb.json.loads(out)

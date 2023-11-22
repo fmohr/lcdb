@@ -2,10 +2,12 @@
 
 set -xe
 
-source ../../../build/activate-dhenv.sh
+# Load Python Environment
+source /lus/grand/projects/datascience/regele/polaris/deephyper-scalable-bo/build/activate-dhenv.sh
 
+# Load Experiment Configuration
 source ./config.sh
 
-mkdir -p output/$LCDB_WORKFLOW
-
-lcdb create -w $LCDB_WORKFLOW -n $LCDB_NUM_CONFIGS -o output/$LCDB_WORKFLOW/configs.csv
+# Create Configurations
+pushd $LCDB_WORKFLOW
+lcdb create -w $LCDB_WORKFLOW -n $LCDB_NUM_CONFIGS -o configs.csv
