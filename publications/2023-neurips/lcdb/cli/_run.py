@@ -334,7 +334,7 @@ def main(
         mpi4py.rc.initialize = False
         mpi4py.rc.threads = True
         mpi4py.rc.thread_level = "multiple"
-        # mpi4py.rc.recv_mprobe = False
+        mpi4py.rc.recv_mprobe = False
 
         from mpi4py import MPI
 
