@@ -2,10 +2,9 @@ from ConfigSpace import (
     Categorical,
     ConfigurationSpace,
     Float,
-    ForbiddenAndConjunction,
-    ForbiddenEqualsClause,
     Integer,
 )
+from lcdb.scorer import ClassificationScorer
 from sklearn.ensemble import RandomForestClassifier
 import numpy as np
 from scipy.special import softmax
@@ -16,9 +15,7 @@ from .._preprocessing_workflow import PreprocessedWorkflow
 CONFIG_SPACE = ConfigurationSpace(
     name="sklearn.RandomForestWorkflow",
     space={
-        "n_estimators": Integer(
-            "n_estimators", bounds=(10, 500), default=100, log=True
-        ),
+        "n_estimators": Integer("n_estimators", bounds=(10, 500), default=100, log=True),
         "criterion": Categorical(
             "criterion", items=["gini", "entropy", "log_loss"], default="gini"
         ),
@@ -67,12 +64,16 @@ class RandomForestWorkflow(PreprocessedWorkflow):
         **kwargs,
     ):
         super().__init__(timer, **filter_keys_with_prefix(kwargs, prefix="pp@"))
+        self.requires_valid_to_fit = True
+        self.requires_test_to_fit = True
 
         if max_features == "all":
             max_features = 1.0
 
+        self.max_n_estimators = n_estimators
+
         learner_kwargs = dict(
-            n_estimators=n_estimators,
+            n_estimators=1,
             criterion=criterion,
             max_depth=max_depth,
             min_samples_split=min_samples_split,
@@ -84,7 +85,7 @@ class RandomForestWorkflow(PreprocessedWorkflow):
             bootstrap=bootstrap,
             oob_score=oob_score,
             n_jobs=n_jobs,
-            warm_start=False,
+            warm_start=True,
             class_weight=class_weight,
             ccp_alpha=ccp_alpha,
             max_samples=max_samples,
@@ -97,14 +98,48 @@ class RandomForestWorkflow(PreprocessedWorkflow):
     def config_space(cls):
         return cls._config_space
 
-    def _fit(self, X, y, metadata):
+    def _fit(self, X, y, X_valid, y_valid, X_test, y_test, metadata):
         self.metadata = metadata
         X = self.transform(X, y, metadata)
+        X_valid = self.transform(X_valid, y_valid, metadata)
+        X_test = self.transform(X_test, y_test, metadata)
 
-        self.learner.fit(X, y)
+        data = dict(
+            train=dict(X=X, y=y),
+            valid=dict(X=X_valid, y=y_valid),
+            test=dict(X=X_test, y=y_test),
+        )
+
+        for n_estimators in range(1, self.max_n_estimators + 1):
+            with self.timer.time("epoch", metadata={"value": n_estimators}):
+                with self.timer.time("epoch_train"):
+                    self.learner.set_params(n_estimators=n_estimators)
+                    self.learner.fit(X, y)
+
+                with self.timer.time("epoch_test"):
+                    scorer = ClassificationScorer(
+                        classes=list(self.learner.classes_), timer=self.timer
+                    )
+                    with self.timer.time("metrics"):
+                        for label_split, data_split in data.items():
+                            with self.timer.time(label_split):
+                                with self.timer.time("predict_with_proba"):
+                                    (
+                                        y_pred,
+                                        y_pred_proba,
+                                    ) = self._predict_with_proba_without_transform(
+                                        data_split["X"]
+                                    )
+
+                                y_true = data_split["y"]
+
+                                scorer.score(
+                                    y_true=y_true,
+                                    y_pred=y_pred,
+                                    y_pred_proba=y_pred_proba,
+                                )
 
         self.infos["classes"] = list(self.learner.classes_)
-
 
     def _predict(self, X):
         X = self.pp_pipeline.transform(X)
@@ -113,3 +148,10 @@ class RandomForestWorkflow(PreprocessedWorkflow):
     def _predict_proba(self, X):
         X = self.pp_pipeline.transform(X)
         return self.learner.predict_proba(X)
+
+    def _predict_with_proba_without_transform(self, X):
+        y_pred_proba = self.learner.predict_proba(X)
+        y_pred = y_pred_proba.argmax(axis=1)
+        classes = self.learner.classes_
+        y_pred = [classes[i] for i in y_pred]
+        return y_pred, y_pred_proba
