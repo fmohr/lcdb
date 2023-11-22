@@ -6,8 +6,7 @@ from ConfigSpace import (
 )
 from lcdb.scorer import ClassificationScorer
 from sklearn.ensemble import RandomForestClassifier
-import numpy as np
-from scipy.special import softmax
+from lcdb.utils import get_iteration_schedule
 
 from ...utils import filter_keys_with_prefix
 from .._preprocessing_workflow import PreprocessedWorkflow
@@ -15,7 +14,9 @@ from .._preprocessing_workflow import PreprocessedWorkflow
 CONFIG_SPACE = ConfigurationSpace(
     name="sklearn.RandomForestWorkflow",
     space={
-        "n_estimators": Integer("n_estimators", bounds=(10, 500), default=100, log=True),
+        "n_estimators": Integer(
+            "n_estimators", bounds=(10, 500), default=100, log=True
+        ),
         "criterion": Categorical(
             "criterion", items=["gini", "entropy", "log_loss"], default="gini"
         ),
@@ -94,6 +95,9 @@ class RandomForestWorkflow(PreprocessedWorkflow):
 
         self.learner = RandomForestClassifier(**learner_kwargs)
 
+        # Scoring Schedule for Sub-fidelity
+        self.schedule = get_iteration_schedule(self.max_n_estimators)[::-1]
+
     @classmethod
     def config_space(cls):
         return cls._config_space
@@ -116,6 +120,12 @@ class RandomForestWorkflow(PreprocessedWorkflow):
                     self.learner.set_params(n_estimators=n_estimators)
                     self.learner.fit(X, y)
 
+                # Manage the schedule
+                epoch_schedule = self.schedule[-1]
+                if n_estimators != epoch_schedule:
+                    continue
+                self.schedule.pop()
+                
                 with self.timer.time("epoch_test"):
                     scorer = ClassificationScorer(
                         classes=list(self.learner.classes_), timer=self.timer
