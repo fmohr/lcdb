@@ -132,4 +132,6 @@ def main(
     out = lcdb.json.dumps(output, indent=2)
     print(out)
 
-    lcdb.json.loads(out)
+    traceback = output["metadata"].get("traceback")
+    if traceback is not None and len(traceback) > 0:
+        print(traceback[1:-1])

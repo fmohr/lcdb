@@ -123,7 +123,10 @@ class IterationCurveCallback(tf.keras.callbacks.Callback):
                 for label_split, data_split in self.data.items():
                     with self.timer.time(label_split):
                         with self.timer.time("predict_with_proba"):
-                            y_pred, y_pred_proba = self.workflow._predict_with_proba(
+                            (
+                                y_pred,
+                                y_pred_proba,
+                            ) = self.workflow._predict_with_proba_without_transform(
                                 data_split["X"]
                             )
 
@@ -319,7 +322,7 @@ class DenseNNWorkflow(BaseWorkflow):
             ),
         )
 
-        fit_history = self.learner.fit(
+        self.learner.fit(
             X,
             y_,
             batch_size=min(len(X), self.batch_size),
@@ -333,7 +336,7 @@ class DenseNNWorkflow(BaseWorkflow):
                 tf.keras.callbacks.EarlyStopping(patience=10),
             ],
             verbose=self.verbose,
-        ).history
+        )
 
     def _predict(self, X):
         y_pred = self._predict_proba(X).argmax(axis=1)
@@ -347,8 +350,10 @@ class DenseNNWorkflow(BaseWorkflow):
         )
         return y_pred
 
-    def _predict_with_proba(self, X):
-        y_pred_proba = self._predict_proba(X)
+    def _predict_with_proba_without_transform(self, X):
+        y_pred_proba = self.learner.predict(
+            X, batch_size=min(len(X), self.batch_size), verbose=self.verbose
+        )
         y_pred = y_pred_proba.argmax(axis=1)
         y_pred = self._transformer_label.inverse_transform(y_pred)
         return y_pred, y_pred_proba
