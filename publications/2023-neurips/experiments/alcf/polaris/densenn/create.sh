@@ -9,5 +9,5 @@ source /lus/grand/projects/datascience/regele/polaris/deephyper-scalable-bo/buil
 source ./config.sh
 
 # Create Configurations
-pushd $LCDB_WORKFLOW
+pushd $LCDB_OUTPUT_WORKFLOW
 lcdb create -w $LCDB_WORKFLOW -n $LCDB_NUM_CONFIGS -o configs.csv
