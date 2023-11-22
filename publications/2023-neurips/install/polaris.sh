@@ -42,8 +42,11 @@ spack add redisjson
 spack install
 
 # Install the DeepHyper's Python package
-git clone -b master https://github.com/deephyper/deephyper.git
+git clone -b develop https://github.com/deephyper/deephyper.git
 pip install -e "deephyper/[default,mpi,redis-hiredis]"
+
+# Install LCDB Package
+pip install -e "../"
 
 # Create activation script
 touch activate-dhenv.sh

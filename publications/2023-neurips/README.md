@@ -18,6 +18,21 @@ To install DeepHyper (develop) version:
 pip install "deephyper @ git+https://github.com/deephyper/deephyper@develop"
 ```
 
+### ALCF - Polaris
+
+```console
+git clone -b deephyper git@github.com:fmohr/lcdb.git
+mkdir -p lcdb/publications/2023-neurips/build
+cd lcdb/publications/2023-neurips/build/
+../install/polaris.sh
+source activate-dh-env.sh
+```
+
+Test example:
+```console
+lcdb test --openml-id 61 -w lcdb.workflow.keras.DenseNNWorkflow -m
+```
+
 ## Experiments
 
 ### Example
