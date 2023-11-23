@@ -35,7 +35,7 @@ def deserialize_dataframe(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def read_csv_results(path: str) -> Tuple[pd.DataFrame, pd.DataFrame]:
+def read_csv_results(path_or_buffer) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """Read the csv file and deserialize the dataframe.
 
     Args:
@@ -44,7 +44,7 @@ def read_csv_results(path: str) -> Tuple[pd.DataFrame, pd.DataFrame]:
     Returns:
         Tuple[pd.DataFrame, pd.DataFrame]: the first dataframe is the one with successful runs, the second one is the one with failed runs.
     """
-    df = pd.read_csv(path)
+    df = pd.read_csv(path_or_buffer)
     df, df_failed = filter_failed_objectives(df)
     df = deserialize_dataframe(df)
     return df, df_failed

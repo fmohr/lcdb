@@ -40,6 +40,7 @@ def main(
 
     print(f" * X shape: {np.shape(X)}")
     print(f" * y shape: {np.shape(y)}")
+    print(f" * Classes: {dataset_metadata['num_classes']}")
 
     for k,v in dataset_metadata.items():
         print(f" * {k.capitalize()}: {v}")
