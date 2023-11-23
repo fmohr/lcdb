@@ -5,6 +5,7 @@
 #PBS -q debug-scaling
 #PBS -A datascience
 #PBS -l filesystems=grand:home
+#PBS -l mig_config=/lus/grand/projects/datascience/regele/polaris/lcdb/publications/2023-neurips/experiments/alcf/polaris/densenn/mig_config.json
 
 set -xe
 
@@ -17,6 +18,7 @@ source ./config.sh
 
 export timeout=3500
 
+export NGPUS_PER_NODE=8
 export NDEPTH=8
 export NRANKS_PER_NODE=8
 export NNODES=`wc -l < $PBS_NODEFILE`
@@ -27,13 +29,6 @@ export RANKS_HOSTS=$(python ../get_hosts_polaris.py)
 
 mkdir -p $LCDB_OUTPUT_RUN
 pushd $LCDB_OUTPUT_RUN
-
-# Enable MPS on each node allocated to job
-export CUDA_MPS_PIPE_DIRECTORY=/tmp/nvidia-mps
-export CUDA_MPS_LOG_DIRECTORY=/tmp/nvidia-log
-${PBS_O_WORKDIR}/../enable_mps_polaris.sh
-
-sleep 10
 
 # Run experiment
 mpiexec -n ${NTOTRANKS} -host ${RANKS_HOSTS} \
@@ -51,6 +46,3 @@ mpiexec -n ${NTOTRANKS} -host ${RANKS_HOSTS} \
     --test-seed $LCDB_TEST_SEED \
     --evaluator mpicomm
 
-
-# Disable MPS on each node allocated to job
-mpiexec -n ${NNODES} --ppn 1 ${PBS_O_WORKDIR}/../disable_mps_polaris.sh
