@@ -137,42 +137,49 @@ class LCController:
                     logging.info(
                         f"Running anchor {anchor} which is {anchor / self.X_train_at_anchor.shape[0] * 100:.2f}% of the dataset."
                     )
-                    # TODO: The worfklow should be recreated for each anchor!
+
                     error_code = self.fit_workflow_on_current_anchor()
 
                     if error_code != 0:
+                        # Cancer timers that were started in fit_workflow_on_current_anchor
                         self.timer.cancel(anchor_timer.id, only_children=True)
 
                     assert (
                         self.timer.active_node.id == anchor_timer.id
                     ), f"The active timer is not correct, it is {self.timer.active_node} when it should be {anchor_timer} "
 
+                    # If an error was detected then skip scoring...
+                    if error_code != 0:
+                        break
+
                     # Predict and Score
-                    if error_code == 0:
-                        logging.info("Predicting and scoring...")
-                        try:
-                            self.compute_metrics_for_workflow()
-                        except Exception as exception:
-                            self.report["traceback"] = traceback.format_exc()
+                    logging.info("Predicting and scoring...")
+                    try:
+                        self.compute_metrics_for_workflow()
+                    except Exception as exception:
+                        
+                        # Cancel timers that were started in 'try' block
+                        self.timer.cancel(anchor_timer.id, only_children=True)
 
-                            logging.error(
-                                f"Error while fitting the workflow: \n{self.report['traceback']}"
-                            )
+                        # Collect traceback
+                        self.report["traceback"] = traceback.format_exc()
 
-                            self.report["traceback"] = r'"{}"'.format(
-                                self.report["traceback"]
-                            )
+                        logging.error(
+                            f"Error while fitting the workflow: \n{self.report['traceback']}"
+                        )
 
-                            # The evaluation is considered a total failure only if
-                            # None of the anchors returned scored.
-                            if self.objective is None:
-                                self.objective = "F"
+                        self.report["traceback"] = r'"{}"'.format(
+                            self.report["traceback"]
+                        )
 
-                                if isinstance(exception, ValueError):
-                                    self.objective += "_value_error"
-                            error_code = 1
-                            break
-                    else:
+                        # The evaluation is considered a total failure only if
+                        # None of the anchors returned scored.
+                        if self.objective is None:
+                            self.objective = "F"
+
+                            if isinstance(exception, ValueError):
+                                self.objective += "_value_error"
+                        error_code = 1
                         break
 
     def fit_workflow_on_current_anchor(self) -> int:
