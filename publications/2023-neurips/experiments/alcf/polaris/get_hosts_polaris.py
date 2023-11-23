@@ -1,5 +1,5 @@
 import os
-import sys
+
 
 if __name__ == "__main__":
     ranks_per_node = int(os.environ.get("NRANKS_PER_NODE", 4))
