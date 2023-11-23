@@ -135,13 +135,13 @@ class LCController:
 
                 with self.timer.time("anchor", {"value": anchor}) as anchor_timer:
                     logging.info(
-                        f"Running anchor {anchor} which is {anchor / self.X_train_at_anchor.shape[0] * 100:.2f}% of the dataset."
+                        f"Running anchor {anchor} which is {anchor / self.X_train.shape[0] * 100:.2f}% of the dataset."
                     )
 
                     error_code = self.fit_workflow_on_current_anchor()
 
                     if error_code != 0:
-                        # Cancer timers that were started in fit_workflow_on_current_anchor
+                        # Cancel timers that were started in fit_workflow_on_current_anchor
                         self.timer.cancel(anchor_timer.id, only_children=True)
 
                     assert (
