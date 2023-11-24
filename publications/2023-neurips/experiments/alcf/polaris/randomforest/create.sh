@@ -9,6 +9,4 @@ source /lus/grand/projects/datascience/regele/polaris/lcdb/publications/2023-neu
 source ./config.sh
 
 # Create Configurations
-mkdir -p $LCDB_OUTPUT_WORKFLOW
-pushd $LCDB_OUTPUT_WORKFLOW
-lcdb create -w $LCDB_WORKFLOW -n $LCDB_NUM_CONFIGS -o configs.csv
+lcdb create -w $LCDB_WORKFLOW -n $LCDB_NUM_CONFIGS -o $LCDB_INITIAL_CONFIGS
