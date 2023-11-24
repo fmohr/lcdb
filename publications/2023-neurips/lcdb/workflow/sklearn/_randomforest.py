@@ -110,7 +110,7 @@ class RandomForestWorkflow(PreprocessedWorkflow):
 
         data = dict(
             train=dict(X=X, y=y),
-            valid=dict(X=X_valid, y=y_valid),
+            val=dict(X=X_valid, y=y_valid),
             test=dict(X=X_test, y=y_test),
         )
 

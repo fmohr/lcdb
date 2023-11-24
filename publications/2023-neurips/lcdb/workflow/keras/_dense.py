@@ -97,7 +97,7 @@ class IterationCurveCallback(tf.keras.callbacks.Callback):
     def on_epoch_begin(self, epoch, logs=None):
         super().on_epoch_begin(epoch, logs=logs)
         self.epoch = epoch
-        self.epoch_timer_id = self.timer.start("epoch", metadata={"value": self.epoch})
+        self.epoch_timer_id = self.timer.start("epoch", metadata={"value": self.epoch + 1})
 
     def on_epoch_end(self, epoch, logs=None):
         super().on_epoch_end(epoch, logs)
@@ -317,7 +317,7 @@ class DenseNNWorkflow(BaseWorkflow):
             timer=self.timer,
             data=dict(
                 train=dict(X=X, y=y),
-                valid=dict(X=X_valid, y=y_valid),
+                val=dict(X=X_valid, y=y_valid),
                 test=dict(X=X_test, y=y_test),
             ),
         )
