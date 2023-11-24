@@ -118,7 +118,9 @@ class RandomForestWorkflow(PreprocessedWorkflow):
         )
 
         for n_estimators in range(1, self.max_n_estimators + 1):
+
             with self.timer.time("epoch", metadata={"value": n_estimators}):
+                
                 with self.timer.time("epoch_train"):
                     self.learner.set_params(n_estimators=n_estimators)
                     self.learner.fit(X, y)

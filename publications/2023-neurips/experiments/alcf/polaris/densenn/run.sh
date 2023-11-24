@@ -13,7 +13,7 @@ cd ${PBS_O_WORKDIR}
 source /lus/grand/projects/datascience/regele/polaris/lcdb/publications/2023-neurips/build/activate-dhenv.sh
 
 #!!! CONFIGURATION - START
-source ./config.sh
+source config.sh
 
 export timeout=3500
 
@@ -21,7 +21,7 @@ export NGPUS_PER_NODE=4
 export NDEPTH=8
 export NRANKS_PER_NODE=$NGPUS_PER_NODE
 export NNODES=`wc -l < $PBS_NODEFILE`
-export NTOTRANKS=$(( $NNODES * $NRANKS_PER_NODE))
+export NTOTRANKS=$(($NNODES * $NRANKS_PER_NODE))
 export OMP_NUM_THREADS=$NDEPTH
 export RANKS_HOSTS=$(python ../get_hosts_polaris.py)
 #!!! CONFIGURATION - END
