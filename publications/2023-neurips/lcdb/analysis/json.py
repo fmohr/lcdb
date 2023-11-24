@@ -61,8 +61,7 @@ class QueryEpochValues(JsonQuery):
                 f"children[? tag == 'build_curves'] | [0]"
                 f".children[? tag == 'anchor'] | [*]"
                 f".children[? tag == 'fit'] | [*][0]"
-                f".children[? tag == 'epoch_train'] | [*][0]"
-                f".children[? tag == 'epoch'] | [*][?children]"
+                f".children[? tag == 'epoch'] | [*][?(children[?(tag == 'epoch_test')])]"
                 f".metadata.value"
             )
         else:
@@ -70,7 +69,6 @@ class QueryEpochValues(JsonQuery):
                 f"children[? tag == 'build_curves'] | [0]"
                 f".children[? tag == 'anchor'] | [*]"
                 f".children[? tag == 'fit'] | [*][0]"
-                f".children[? tag == 'epoch_train'] | [*][0]"
                 f".children[? tag == 'epoch'] | [*][*]"
                 f".metadata.value"
             )
@@ -84,7 +82,6 @@ class QueryMetricValuesFromEpochs(JsonQuery):
             f"children[? tag == 'build_curves'] | [0]"
             f".children[? tag == 'anchor'] | [*]"
             f".children[? tag == 'fit'] | [*][0]"
-            f".children[? tag == 'epoch_train'] | [*][0]"
             f".children[? tag == 'epoch'] | [*][*]"
             f".children[? tag == 'epoch_test'] | [*][*][0]"
             f".children[? tag == 'metrics'] | [*][*][0]"

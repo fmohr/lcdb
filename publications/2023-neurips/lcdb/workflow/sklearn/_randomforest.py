@@ -71,6 +71,9 @@ class RandomForestWorkflow(PreprocessedWorkflow):
         if max_features == "all":
             max_features = 1.0
 
+        if bootstrap == False:
+            max_samples = None
+
         self.max_n_estimators = n_estimators
 
         learner_kwargs = dict(
@@ -125,7 +128,7 @@ class RandomForestWorkflow(PreprocessedWorkflow):
                 if n_estimators != epoch_schedule:
                     continue
                 self.schedule.pop()
-                
+
                 with self.timer.time("epoch_test"):
                     scorer = ClassificationScorer(
                         classes=list(self.learner.classes_), timer=self.timer

@@ -98,20 +98,17 @@ class IterationCurveCallback(tf.keras.callbacks.Callback):
         super().on_epoch_begin(epoch, logs=logs)
         self.epoch = epoch
         self.epoch_timer_id = self.timer.start("epoch", metadata={"value": self.epoch + 1})
+        self.train_timer_id = self.timer.start("epoch_train")
 
     def on_epoch_end(self, epoch, logs=None):
         super().on_epoch_end(epoch, logs)
         assert self.timer.active_node.id == self.epoch_timer_id
         self.timer.stop()
 
-    def on_train_begin(self, logs=None):
-        self.train_timer_id = self.timer.start("epoch_train")
-
-    def on_train_end(self, logs=None):
+    def on_test_begin(self, logs=None):
         assert self.timer.active_node.id == self.train_timer_id
         self.timer.stop()
 
-    def on_test_begin(self, logs=None):
         # Manage the schedule
         epoch_schedule = self.schedule[-1]
         if self.epoch + 1 != epoch_schedule:
