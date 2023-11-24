@@ -6,7 +6,7 @@
 #PBS -A datascience
 #PBS -l filesystems=grand:home
 
-set -xe
+set -e
 
 cd ${PBS_O_WORKDIR}
 
