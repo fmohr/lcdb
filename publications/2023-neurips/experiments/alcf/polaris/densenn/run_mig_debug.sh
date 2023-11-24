@@ -19,7 +19,7 @@ source ./config.sh
 export timeout=3500
 
 export NGPUS_PER_NODE=8
-export NDEPTH=8
+export NDEPTH=4
 export NRANKS_PER_NODE=8
 export NNODES=`wc -l < $PBS_NODEFILE`
 export NTOTRANKS=$(( $NNODES * $NRANKS_PER_NODE + 1))
