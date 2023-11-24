@@ -39,10 +39,11 @@ mpiexec -n ${NTOTRANKS} -host ${RANKS_HOSTS} \
     --monotonic \
     --max-evals $LCDB_NUM_CONFIGS \
     --timeout $timeout \
-    --initial-configs configs.csv \
+    --initial-configs $LCDB_INITIAL_CONFIGS \
     --timeout-on-fit 300 \
     --workflow-seed $LCDB_WORKFLOW_SEED \
     --valid-seed $LCDB_VALID_SEED \
     --test-seed $LCDB_TEST_SEED \
     --evaluator mpicomm
 
+gzip --best results.csv

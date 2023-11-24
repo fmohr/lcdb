@@ -45,6 +45,13 @@ conda activate dhenv/
 git clone -b develop git@github.com:deephyper/deephyper.git
 pip install -e "deephyper/[hps,mpi,redis-hiredis]"
 
+# For mpi4py
+module swap PrgEnv-nvhpc PrgEnv-gnu
+module load nvhpc-mixed
+git clone https://github.com/mpi4py/mpi4py.git
+cd mpi4py/
+MPICC=CC python setup.py install
+
 # Install LCDB Package
 pip install -e "../"
 
