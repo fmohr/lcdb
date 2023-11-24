@@ -36,11 +36,14 @@ def main(
 
     print(f"Loading task '{task_id}'...", end="")
     (X, y), dataset_metadata = load_task(task_id)
-    print(" done!")
+    print(" done!\n")
 
+    print(f" * Type   : {dataset_metadata['type']}")
     print(f" * X shape: {np.shape(X)}")
     print(f" * y shape: {np.shape(y)}")
     print(f" * Classes: {dataset_metadata['num_classes']}")
+    print(f" * Categories: {dataset_metadata['categories']}")
 
-    for k,v in dataset_metadata.items():
-        print(f" * {k.capitalize()}: {v}")
+    print()
+    print(" --- Description ---")
+    print(dataset_metadata["description"])
