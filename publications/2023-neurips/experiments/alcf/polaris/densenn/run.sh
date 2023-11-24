@@ -17,10 +17,11 @@ source ./config.sh
 
 export timeout=3500
 
-export NDEPTH=16
-export NRANKS_PER_NODE=4
+export NGPUS_PER_NODE=4
+export NDEPTH=8
+export NRANKS_PER_NODE=$NGPUS_PER_NODE
 export NNODES=`wc -l < $PBS_NODEFILE`
-export NTOTRANKS=$(( $NNODES * $NRANKS_PER_NODE + 1))
+export NTOTRANKS=$(( $NNODES * $NRANKS_PER_NODE))
 export OMP_NUM_THREADS=$NDEPTH
 export RANKS_HOSTS=$(python ../get_hosts_polaris.py)
 #!!! CONFIGURATION - END
@@ -28,8 +29,7 @@ export RANKS_HOSTS=$(python ../get_hosts_polaris.py)
 mkdir -p $LCDB_OUTPUT_RUN
 pushd $LCDB_OUTPUT_RUN
 
-mpiexec -n ${NTOTRANKS} -host ${RANKS_HOSTS} \
-    --envall \
+mpiexec -n ${NTOTRANKS} --ppn ${NRANKS_PER_NODE} --depth=${NDEPTH} --cpu-bind depth --envall \
     ${PBS_O_WORKDIR}/../set_affinity_gpu_polaris.sh lcdb run \
     --openml-id $LCDB_OPENML_ID \
     --workflow-class $LCDB_WORKFLOW \
