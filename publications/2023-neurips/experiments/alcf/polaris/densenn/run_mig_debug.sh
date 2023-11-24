@@ -2,7 +2,7 @@
 #PBS -l select=2:system=polaris
 #PBS -l place=scatter
 #PBS -l walltime=00:60:00
-#PBS -q debug-scaling
+#PBS -q debug
 #PBS -A datascience
 #PBS -l filesystems=grand:home
 #PBS -l mig_config=/lus/grand/projects/datascience/regele/polaris/lcdb/publications/2023-neurips/experiments/alcf/polaris/densenn/mig_config.json

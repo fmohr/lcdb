@@ -8,7 +8,7 @@
 
 set -xe
 
-cd ${PBS_O_WORKDIR}
+#cd ${PBS_O_WORKDIR}
 
 # Load Python Environment
 source /lus/grand/projects/datascience/regele/polaris/lcdb/publications/2023-neurips/build/activate-dhenv.sh

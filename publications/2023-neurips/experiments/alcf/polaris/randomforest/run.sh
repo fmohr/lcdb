@@ -1,8 +1,8 @@
 #!/bin/bash
-#PBS -l select=2:system=polaris
+#PBS -l select=10:system=polaris
 #PBS -l place=scatter
 #PBS -l walltime=00:60:00
-#PBS -q debug-scaling
+#PBS -q prod
 #PBS -A datascience
 #PBS -l filesystems=grand:home
 
