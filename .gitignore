@@ -17,3 +17,4 @@ publications/2023-neurips/lightning_logs/*
 publications/2023-neurips/MNIST/*
 
 .codecarbon.config
+*.jpg
