@@ -5,7 +5,7 @@ import numpy as np
 from deephyper.analysis import rank
 
 
-def plot_learning_curves(fidelity_values, metric_values, mode="max", rank_method="dense", decimals=5, alpha=1.0, ax=None, **kwargs):
+def plot_learning_curves(fidelity_values, metric_values, mode="min", rank_method="ordinal", decimals=5, alpha=1.0, ax=None, **kwargs):
     if ax is None:
         fig, ax = plt.subplots()
     else:
