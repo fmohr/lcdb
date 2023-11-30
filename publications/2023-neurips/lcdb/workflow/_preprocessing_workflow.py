@@ -14,7 +14,7 @@ from sklearn.cluster import FeatureAgglomeration
 from sklearn.compose import ColumnTransformer
 from sklearn.decomposition import FastICA, KernelPCA
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
-from sklearn.feature_selection import GenericUnivariateSelect, SelectPercentile
+from sklearn.feature_selection import SelectPercentile
 from sklearn.impute import SimpleImputer
 from sklearn.kernel_approximation import Nystroem, RBFSampler
 from sklearn.pipeline import Pipeline
@@ -129,10 +129,10 @@ class PreprocessedWorkflow(BaseWorkflow):
     def config_space(
         cls,
         techniques=None,
-    ):  
+    ):
         if techniques is None:
             return cls._config_space
-        
+
         # TODO: update
         cs = ConfigurationSpace()
         hp_names = set(hp.name for hp in cls._config_space.get_hyperparameters())
