@@ -50,6 +50,9 @@ class ClassificationScorer:
 
         for metric_name in metric_names:
             with self.timer.time(metric_name) as metric_timer:
+                
+                score = None
+
                 if metric_name == "confusion_matrix":
                     score = np.round(
                         confusion_matrix(y_true, y_pred, labels=relevant_labels), 5
