@@ -59,7 +59,7 @@ class KNNWorkflow(PreprocessedWorkflow):
         self.learner_kwargs = dict(
             n_neighbors=n_neighbors, weights=weights, p=p, metric=metric
         )
-        self.learner = KNeighborsClassifier(**self.learner_kwargs)
+        self.learner = None
 
     @classmethod
     def config_space(cls):
@@ -70,9 +70,9 @@ class KNNWorkflow(PreprocessedWorkflow):
         X = self.transform(X, y, metadata)
 
         # Adapt the number of neighbors to the number of samples to avoid errors
-        self.learner.set_params(
-            {"n_neighbors": min(X.shape[0], self.learner_kwargs["n_neighbors"])}
-        )
+        updated_learner_kwargs = self.learner_kwargs.copy()
+        updated_learner_kwargs["n_neighbors"] = min(X.shape[0], updated_learner_kwargs["n_neighbors"])
+        self.learner = KNeighborsClassifier(**updated_learner_kwargs)
 
         self.learner.fit(X, y)
 
