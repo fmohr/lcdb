@@ -13,7 +13,7 @@ cd ${PBS_O_WORKDIR}
 source /lus/grand/projects/datascience/regele/polaris/lcdb/publications/2023-neurips/build/activate-dhenv.sh
 
 #!!! CONFIGURATION - START
-source ./config.sh
+source config.sh
 
 export timeout=3500
 

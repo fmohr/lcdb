@@ -97,7 +97,9 @@ class IterationCurveCallback(tf.keras.callbacks.Callback):
     def on_epoch_begin(self, epoch, logs=None):
         super().on_epoch_begin(epoch, logs=logs)
         self.epoch = epoch
-        self.epoch_timer_id = self.timer.start("epoch", metadata={"value": self.epoch + 1})
+        self.epoch_timer_id = self.timer.start(
+            "epoch", metadata={"value": self.epoch + 1}
+        )
         self.train_timer_id = self.timer.start("epoch_train")
 
     def on_epoch_end(self, epoch, logs=None):
@@ -111,7 +113,9 @@ class IterationCurveCallback(tf.keras.callbacks.Callback):
 
         # Manage the schedule
         epoch_schedule = self.schedule[-1]
-        if self.epoch + 1 != epoch_schedule:
+        is_epoch_to_test = self.epoch + 1 == epoch_schedule
+        is_training_continued = not (self.model.stop_training)
+        if is_epoch_to_test and is_training_continued:
             return
         self.schedule.pop()
 
@@ -327,10 +331,10 @@ class DenseNNWorkflow(BaseWorkflow):
             shuffle=self.shuffle_each_epoch,
             validation_data=(X_valid, y_valid_),
             callbacks=[
-                iteration_curve_callback,
                 tf.keras.callbacks.TerminateOnNaN(),
                 tf.keras.callbacks.ReduceLROnPlateau(),
                 tf.keras.callbacks.EarlyStopping(patience=10),
+                iteration_curve_callback,
             ],
             verbose=self.verbose,
         )
