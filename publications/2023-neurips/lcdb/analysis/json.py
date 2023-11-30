@@ -26,6 +26,16 @@ class QueryAnchorValues(JsonQuery):
             f".metadata.value"
         )
 
+class QueryAnchorKeys(JsonQuery):
+    """Extract the key values for all anchors."""
+
+    def __init__(self, key):
+        super().__init__(
+            f"children[?tag == 'build_curves'] | [0]"
+            f".children[?tag == 'anchor'] | []"
+            f".{key}"
+        )
+
 
 class QueryAnchorsChildren(JsonQuery):
     """Extract children data from all anchors."""
