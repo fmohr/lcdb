@@ -1,8 +1,8 @@
 #!/bin/bash
-#PBS -l select=2:system=polaris
+#PBS -l select=10:system=polaris
 #PBS -l place=scatter
 #PBS -l walltime=00:60:00
-#PBS -q debug
+#PBS -q prod 
 #PBS -A datascience
 #PBS -l filesystems=grand:home
 
@@ -21,7 +21,7 @@ export NGPUS_PER_NODE=4
 export NDEPTH=8
 export NRANKS_PER_NODE=$NGPUS_PER_NODE
 export NNODES=`wc -l < $PBS_NODEFILE`
-export NTOTRANKS=$(( $NNODES * $NRANKS_PER_NODE))
+export NTOTRANKS=$(($NNODES * $NRANKS_PER_NODE))
 export OMP_NUM_THREADS=$NDEPTH
 export RANKS_HOSTS=$(python ../get_hosts_polaris.py)
 #!!! CONFIGURATION - END
@@ -43,4 +43,4 @@ mpiexec -n ${NTOTRANKS} --ppn ${NRANKS_PER_NODE} --depth=${NDEPTH} --cpu-bind de
     --test-seed $LCDB_TEST_SEED \
     --evaluator mpicomm
 
-gzip --best results.csv
+gzip -9 results.csv
