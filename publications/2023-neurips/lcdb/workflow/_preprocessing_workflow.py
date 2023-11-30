@@ -57,8 +57,8 @@ CONFIG_SPACE = ConfigurationSpace(
         ),
         KEY_FEATURESELECTOR: Categorical(
             KEY_FEATURESELECTOR,
-            ["none", "selectp", "generic"],
-            default="generic",
+            ["none", "selectp"],
+            default="none",
         ),
         # parameters of possible elements of the preprocessing pipeline
         "kernel_pca_kernel": Categorical(
@@ -225,8 +225,6 @@ class PreprocessedWorkflow(BaseWorkflow):
                 featureselector = SelectPercentile(
                     percentile=max(self.selectp_percentile, int(100 / X.shape[1]) + 1)
                 )
-            elif fs_val == "generic":
-                featureselector = GenericUnivariateSelect()
             elif fs_val == "none":
                 featureselector = None
             else:

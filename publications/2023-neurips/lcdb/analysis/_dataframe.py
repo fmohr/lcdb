@@ -48,3 +48,15 @@ def read_csv_results(path_or_buffer) -> Tuple[pd.DataFrame, pd.DataFrame]:
     df, df_failed = filter_failed_objectives(df)
     df = deserialize_dataframe(df)
     return df, df_failed
+
+
+def hyperparameters_from_row(row) -> dict:
+    """Return a dictionary of hyperparameters from a row of the results dataframe.
+
+    Args:
+        row (pd.Series): a row of the dataframe.
+
+    Returns:
+        dict: a dictionary of hyperparameters where keys are the hyperparameters names and values are the corresponding values.
+    """
+    return {k[2:]: v for k, v in row.items() if k.startswith("p:")}
