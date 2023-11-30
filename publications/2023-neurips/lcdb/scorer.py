@@ -89,7 +89,7 @@ class ClassificationScorer:
                     score = np.round(
                         log_loss(y_true, y_base, labels=relevant_labels), 5
                     )
-                elif metric_name == "brier":
+                elif metric_name == "brier_score":
                     if is_binary:
                         score = np.round(
                             brier_score_loss(
