@@ -4,12 +4,15 @@ import logging
 import os
 import pathlib
 
-# Avoid some errors on some MPI implementations
-import mpi4py
-mpi4py.rc.initialize = False
-mpi4py.rc.threads = True
-mpi4py.rc.thread_level = "multiple"
-mpi4py.rc.recv_mprobe = False
+try:
+    # Avoid some errors on some MPI implementations
+    import mpi4py
+    mpi4py.rc.initialize = False
+    mpi4py.rc.threads = True
+    mpi4py.rc.thread_level = "multiple"
+    mpi4py.rc.recv_mprobe = False
+except ModuleNotFoundError:
+    pass
 
 import lcdb.json
 import pandas as pd
