@@ -237,6 +237,8 @@ class PreprocessedWorkflow(BaseWorkflow):
         if KEY_FEATUREGEN in kwargs:
             featuregen_val = kwargs[KEY_FEATUREGEN]
             if featuregen_val == "poly":
+                # we use include_bias=False as most linear models have a `fit_intercept=True`
+                # by default
                 featuregen = PolynomialFeatures(degree=self.poly_degree, include_bias=False)
             elif featuregen_val == "none":
                 featuregen = None
