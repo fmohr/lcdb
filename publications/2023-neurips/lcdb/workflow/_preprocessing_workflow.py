@@ -237,7 +237,7 @@ class PreprocessedWorkflow(BaseWorkflow):
         if KEY_FEATUREGEN in kwargs:
             featuregen_val = kwargs[KEY_FEATUREGEN]
             if featuregen_val == "poly":
-                featuregen = PolynomialFeatures(degree=self.poly_degree)
+                featuregen = PolynomialFeatures(degree=self.poly_degree, include_bias=False)
             elif featuregen_val == "none":
                 featuregen = None
             else:
