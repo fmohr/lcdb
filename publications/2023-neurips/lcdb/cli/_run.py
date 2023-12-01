@@ -199,6 +199,8 @@ def run(
     Returns:
         dict: a dictionary with 2 keys (objective, metadata) where objective is the objective maximized by deephyper (if used) and metadata is a JSON serializable sub-dictionnary which are complementary information about the workflow.
     """
+    logging.info(f"Running job {job.id} with parameters: {job.parameters}")
+    
     timer = Timer(precision=4)
     run_timer_id = timer.start("run")
 
@@ -322,7 +324,9 @@ def main(
             pathlib.Path(log_dir).mkdir(parents=True, exist_ok=True)
         MPI.COMM_WORLD.barrier()  # Synchronize all processes
         logging.basicConfig(
-            filename=os.path.join(log_dir, f"deephyper.{MPI.COMM_WORLD.Get_rank()}.log"),
+            filename=os.path.join(
+                log_dir, f"deephyper.{MPI.COMM_WORLD.Get_rank()}.log"
+            ),
             level=logging.INFO,
             format="%(asctime)s - %(levelname)s - %(filename)s:%(funcName)s - %(message)s",
             force=True,
