@@ -1,15 +1,12 @@
 """Command line to test workflow."""
-import logging
+import json
 import os
-import pathlib
+import logging
 
 import lcdb.json
-import pandas as pd
-from deephyper.evaluator import Evaluator, RunningJob
-from deephyper.evaluator.callback import TqdmCallback
-from deephyper.problem import HpProblem
-from deephyper.search.hps import CBO
+from deephyper.evaluator import RunningJob
 from lcdb.utils import import_attr_from_module
+
 from ._run import run
 
 # Avoid Tensorflow Warnings
@@ -96,6 +93,18 @@ def add_subparser(subparsers):
         required=False,
         help="Timeout in seconds for the fit method. Defaults to -1 for unlimited time.",
     )
+    subparser.add_argument(
+        "--parameters",
+        type=str,
+        default=None,
+        required=False,
+    )
+    subparser.add_argument(
+        "--verbose",
+        action="store_true",
+        default=False,
+        required=False,
+    )
     subparser.set_defaults(func=function_to_call)
 
 
@@ -109,10 +118,23 @@ def main(
     valid_prop,
     test_prop,
     timeout_on_fit,
+    parameters,
+    verbose,
 ):
-    WorkflowClass = import_attr_from_module(workflow_class)
-    config_space = WorkflowClass.config_space()
-    config_default = dict(config_space.get_default_configuration())
+    if verbose:
+        logging.basicConfig(
+            level=logging.INFO,
+            format="%(asctime)s - %(levelname)s - %(filename)s:%(funcName)s - %(message)s",
+            force=True,
+        )
+
+    # No parameters are given the default configuration is used
+    if parameters is None:
+        WorkflowClass = import_attr_from_module(workflow_class)
+        config_space = WorkflowClass.config_space()
+        config_default = dict(config_space.get_default_configuration())
+    else:
+        config_default = json.loads(parameters)
 
     output = run(
         RunningJob(id=0, parameters=config_default),
