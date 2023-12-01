@@ -1,3 +1,4 @@
+import logging
 import pprint
 import time
 from contextlib import contextmanager
@@ -117,6 +118,7 @@ class Timer:
         Returns:
             int: id of the created node in the timer tree.
         """
+        logging.info(f"Starting timer for '{tag}'")
 
         node = TimerNode(self.id_counter, tag, metadata, self.precision)
         self.id_counter += 1
@@ -139,6 +141,8 @@ class Timer:
 
         node = self.stack.pop()
         node.stop(metadata)
+        
+        logging.info(f"Stopping timer for '{node.tag}'")
 
     def cancel(self, node_id: int, only_children: bool = False):
         """Cancels all child nodes up to the node corresponding to node_id (i.e., cancel all branches starting from `node_id`).
