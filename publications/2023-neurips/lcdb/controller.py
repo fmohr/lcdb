@@ -157,7 +157,6 @@ class LCController:
                     try:
                         self.compute_metrics_for_workflow()
                     except Exception as exception:
-                        
                         # Cancel timers that were started in 'try' block
                         self.timer.cancel(anchor_timer.id, only_children=True)
 
@@ -179,6 +178,7 @@ class LCController:
 
                             if isinstance(exception, ValueError):
                                 self.objective += "_value_error"
+
                         error_code = 1
                         break
 

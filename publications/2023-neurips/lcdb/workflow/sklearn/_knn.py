@@ -20,6 +20,7 @@ CONFIG_SPACE = ConfigurationSpace(
         # Haversine distance is only valid in 2d so we don't include it
         # Other distance could be included with more work such as Mahalanobis
         # see: https://stackoverflow.com/questions/34643548/how-to-use-mahalanobis-distance-in-sklearn-distancemetrics/34650347#34650347
+        # see: https://scikit-learn.org/0.24/modules/generated/sklearn.neighbors.DistanceMetric.html
         "metric": Categorical(
             "metric",
             ["minkowski", "cosine", "nan_euclidean"],

@@ -66,12 +66,12 @@ def terminate_on_timeout(timeout, func, *args, **kwargs):
     try:
         return results.get(timeout)
     except multiprocessing.TimeoutError:
-        raise FunctionCallTimeoutError(f"Search timeout expired after: {timeout}")
+        raise FunctionCallTimeoutError(f"Function timeout expired after: {timeout}")
     finally:
         pool.terminate()
 
 
-def get_anchor_schedule(n, delay=7):
+def get_anchor_schedule(n: int, delay: int = 7):
     """Get a schedule of anchors for a given size `n`."""
     anchors = []
     k = 1
@@ -87,6 +87,6 @@ def get_anchor_schedule(n, delay=7):
     return anchors
 
 
-def get_iteration_schedule(n):
+def get_iteration_schedule(n: int) -> list:
     """Get a schedule of iterations for a given size `n`."""
     return get_anchor_schedule(n, delay=0)

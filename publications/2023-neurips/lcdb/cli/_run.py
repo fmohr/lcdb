@@ -7,12 +7,14 @@ import pathlib
 try:
     # Avoid some errors on some MPI implementations
     import mpi4py
+
     mpi4py.rc.initialize = False
     mpi4py.rc.threads = True
     mpi4py.rc.thread_level = "multiple"
     mpi4py.rc.recv_mprobe = False
+    MPI4PY_IMPORTED = True
 except ModuleNotFoundError:
-    pass
+    MPI4PY_IMPORTED = False
 
 import lcdb.json
 import pandas as pd
@@ -278,14 +280,55 @@ def main(
 ):
     """Entry point for the command line interface."""
 
-    pathlib.Path(log_dir).mkdir(parents=True, exist_ok=True)
+    if evaluator in ["serial", "thread", "process", "ray"]:
+        # Master-Worker Parallelism: only 1 process will run this code
+        pathlib.Path(log_dir).mkdir(parents=True, exist_ok=True)
 
-    logging.basicConfig(
-        filename=os.path.join(log_dir, "deephyper.log"),
-        level=logging.INFO,
-        format="%(asctime)s - %(levelname)s - %(filename)s:%(funcName)s - %(message)s",
-        force=True,
-    )
+        logging.basicConfig(
+            filename=os.path.join(log_dir, "deephyper.log"),
+            level=logging.INFO,
+            format="%(asctime)s - %(levelname)s - %(filename)s:%(funcName)s - %(message)s",
+            force=True,
+        )
+
+        if num_workers < 0:
+            if hasattr(os, "sched_getaffinity"):
+                # Number of CPUs the current process can use
+                num_workers = len(os.sched_getaffinity(0))
+            else:
+                num_workers = os.cpu_count()
+
+        if evaluator == "ray":
+            method_kwargs = {
+                "address": os.environ.get("RAY_ADDRESS", None),
+                "num_cpus": num_workers,
+                "num_cpus_per_task": 1,
+            }
+        else:
+            method_kwargs = {"num_workers": num_workers}
+    elif evaluator == "mpicomm":
+        # MPI Parallelism: all processes will run this code
+        method_kwargs = {}
+        if num_workers > 0:
+            method_kwargs["num_workers"] = num_workers
+
+        from mpi4py import MPI
+
+        if not MPI.Is_initialized():
+            MPI.Init_thread()
+
+        if MPI.COMM_WORLD.Get_rank() == 0:
+            # Only the root rank will create the directory
+            pathlib.Path(log_dir).mkdir(parents=True, exist_ok=True)
+        MPI.COMM_WORLD.barrier()  # Synchronize all processes
+        logging.basicConfig(
+            filename=os.path.join(log_dir, f"deephyper.{MPI.COMM_WORLD.Get_rank()}.log"),
+            level=logging.INFO,
+            format="%(asctime)s - %(levelname)s - %(filename)s:%(funcName)s - %(message)s",
+            force=True,
+        )
+    else:
+        raise ValueError(f"Unknown evaluator: {evaluator}")
 
     # Load the workflow to get its config space
     WorkflowClass = import_attr_from_module(workflow_class)
@@ -316,33 +359,6 @@ def main(
         "test_prop": test_prop,
         "timeout_on_fit": timeout_on_fit,
     }
-
-    if evaluator in ["thread", "process", "ray"]:
-        if num_workers < 0:
-            if hasattr(os, "sched_getaffinity"):
-                # Number of CPUs the current process can use
-                num_workers = len(os.sched_getaffinity(0))
-            else:
-                num_workers = os.cpu_count()
-
-        if evaluator == "ray":
-            method_kwargs = {
-                "address": os.environ.get("RAY_ADDRESS", None),
-                "num_cpus": num_workers,
-                "num_cpus_per_task": 1,
-            }
-        else:
-            method_kwargs = {"num_workers": num_workers}
-    else:  # mpicomm
-        method_kwargs = {}
-        if num_workers > 0:
-            method_kwargs["num_workers"] = num_workers
-
-    if evaluator == "mpicomm":
-        from mpi4py import MPI
-
-        if not MPI.Is_initialized():
-            MPI.Init_thread()
 
     method_kwargs["run_function_kwargs"] = run_function_kwargs
     method_kwargs["callbacks"] = [TqdmCallback()] if verbose else []
