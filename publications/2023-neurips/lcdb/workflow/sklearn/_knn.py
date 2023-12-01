@@ -17,9 +17,12 @@ CONFIG_SPACE = ConfigurationSpace(
         "n_neighbors": Integer("n_neighbors", (1, 100), default=5, log=True),
         "weights": Categorical("weights", ["uniform", "distance"], default="uniform"),
         "p": Integer("p", (1, 10), default=2),
+        # Haversine distance is only valid in 2d so we don't include it
+        # Other distance could be included with more work such as Mahalanobis
+        # see: https://stackoverflow.com/questions/34643548/how-to-use-mahalanobis-distance-in-sklearn-distancemetrics/34650347#34650347
         "metric": Categorical(
             "metric",
-            ["minkowski", "cosine", "haversine", "nan_euclidean"],
+            ["minkowski", "cosine", "nan_euclidean"],
             default="minkowski",
         ),
     },
