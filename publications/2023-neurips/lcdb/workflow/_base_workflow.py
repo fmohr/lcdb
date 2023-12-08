@@ -70,10 +70,9 @@ class BaseWorkflow(abc.ABC):
         self.transform_fitted = True
         return X
 
-    @abc.abstractmethod
     def _transform(self, X, y, metadata) -> NP_ARRAY:
         """Transform the data."""
-        raise NotImplementedError
+        return X
 
     def config_space(cls) -> ConfigSpace.ConfigurationSpace:
         return cls._config_space
