@@ -1,4 +1,6 @@
+import sklearn
 from ConfigSpace import (
+    Constant,
     Categorical,
     ConfigurationSpace,
     Float,
@@ -8,14 +10,16 @@ from lcdb.scorer import ClassificationScorer
 from sklearn.ensemble import RandomForestClassifier
 from lcdb.utils import get_iteration_schedule
 
+import numpy as np
+
 from ...utils import filter_keys_with_prefix
 from .._preprocessing_workflow import PreprocessedWorkflow
 
 CONFIG_SPACE = ConfigurationSpace(
     name="sklearn.RandomForestWorkflow",
     space={
-        "n_estimators": Integer(
-            "n_estimators", bounds=(10, 500), default=100, log=True
+        "n_estimators": Constant(
+            "n_estimators", value=2000
         ),
         "criterion": Categorical(
             "criterion", items=["gini", "entropy", "log_loss"], default="gini"
@@ -99,7 +103,7 @@ class RandomForestWorkflow(PreprocessedWorkflow):
         self.learner = RandomForestClassifier(**learner_kwargs)
 
         # Scoring Schedule for Sub-fidelity
-        self.schedule = get_iteration_schedule(self.max_n_estimators)[::-1]
+        self.schedule = get_iteration_schedule(self.max_n_estimators)
 
     @classmethod
     def config_space(cls):
@@ -117,7 +121,21 @@ class RandomForestWorkflow(PreprocessedWorkflow):
             test=dict(X=X_test, y=y_test),
         )
 
-        for n_estimators in range(1, self.max_n_estimators + 1):
+        # set up stuff for OOB measurements
+        n_samples = X.shape[0]
+        n_samples_bootstrap = sklearn.ensemble._forest._get_n_samples_bootstrap(
+            n_samples,
+            self.learner.max_samples,
+        )
+        get_unsampled_indices = lambda tree: sklearn.ensemble._forest._generate_unsampled_indices(
+            tree.random_state,
+            n_samples,
+            n_samples_bootstrap,
+        )
+        Y_pred_proba_oob = np.zeros((n_samples, len(np.unique(y))))
+
+        # now grow forest according to the schedule
+        for i, n_estimators in enumerate(self.schedule):
 
             with self.timer.time("epoch", metadata={"value": n_estimators}):
                 
@@ -125,17 +143,14 @@ class RandomForestWorkflow(PreprocessedWorkflow):
                     self.learner.set_params(n_estimators=n_estimators)
                     self.learner.fit(X, y)
 
-                # Manage the schedule
-                epoch_schedule = self.schedule[-1]
-                if n_estimators != epoch_schedule:
-                    continue
-                self.schedule.pop()
-
+                # compute test scores
                 with self.timer.time("epoch_test"):
                     scorer = ClassificationScorer(
                         classes=list(self.learner.classes_), timer=self.timer
                     )
                     with self.timer.time("metrics"):
+
+                        # compute train, validation, and test scores of current forest
                         for label_split, data_split in data.items():
                             with self.timer.time(label_split):
                                 with self.timer.time("predict_with_proba"):
@@ -153,6 +168,26 @@ class RandomForestWorkflow(PreprocessedWorkflow):
                                     y_pred=y_pred,
                                     y_pred_proba=y_pred_proba,
                                 )
+
+                        # compute train, validation, and test scores of current forest
+                        with self.timer.time("oob"):
+
+                            start_index = self.schedule[i-1] if i > 0 else 0
+                            labels = list(self.learner.classes_)
+                            for t in range(start_index, n_estimators):
+                                considered_tree = self.learner.estimators_[t]
+                                val_indices = get_unsampled_indices(considered_tree)
+                                Y_pred_oob_tree = considered_tree.predict_proba(X[val_indices])
+                                Y_pred_proba_oob[val_indices] = (Y_pred_proba_oob[val_indices] * t + Y_pred_oob_tree) / (t+1)
+
+                            Y_pred_oob = [labels[ind] for ind in np.argmax(Y_pred_proba_oob, axis=1)]
+                            y_true = y
+
+                            scorer.score(
+                                y_true=y_true,
+                                y_pred=Y_pred_oob,
+                                y_pred_proba=Y_pred_proba_oob,
+                            )
 
         self.infos["classes"] = list(self.learner.classes_)
 
