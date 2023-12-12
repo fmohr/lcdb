@@ -13,7 +13,7 @@ from lcdb.utils import (
     get_anchor_schedule,
     terminate_on_timeout,
 )
-from lcdb.scorer import ClassificationScorer
+from lcdb.scorer import ClassificationScorer, RegressionScorer
 from sklearn.preprocessing import FunctionTransformer, OneHotEncoder
 
 
@@ -22,6 +22,7 @@ class LCController:
         self,
         timer: Timer,
         workflow_factory,
+        is_classification: bool,
         X,
         y,
         dataset_metadata,
@@ -38,6 +39,7 @@ class LCController:
         self.timer = timer
         self.workflow_factory = workflow_factory
         self.workflow = None
+        self.is_classification = is_classification
 
         self.num_instances = X.shape[0]
         self.dataset_metadata = dataset_metadata
@@ -268,7 +270,7 @@ class LCController:
 
     def get_predictions(self):
         keys = {}
-        labels = self.workflow.infos["classes"]
+        labels = self.workflow.infos["classes"] if self.is_classification else None
 
         with self.timer.time("get_predictions"):
             for X_split, label_split in [
@@ -283,7 +285,7 @@ class LCController:
                     keys[f"y_pred_{label_split}"] = self.workflow.predict(X_split)
                     keys[f"y_pred_proba_{label_split}"] = self.workflow.predict_proba(
                         X_split
-                    )
+                    ) if self.is_classification else None
 
         return keys, labels
 
@@ -296,9 +298,14 @@ class LCController:
         y_pred_test,
         y_pred_proba_test,
     ):
-        scorer = ClassificationScorer(
-            classes=self.workflow.infos["classes"], timer=self.timer
-        )
+        if self.is_classification:
+            scorer = ClassificationScorer(
+                classes=self.workflow.infos["classes"], timer=self.timer
+            )
+        else:
+            scorer = RegressionScorer(
+                timer=self.timer
+            )
 
         with self.timer.time("metrics"):
             for y_true, y_pred, y_pred_proba, label_split in [
@@ -307,9 +314,13 @@ class LCController:
                 (self.y_test, y_pred_test, y_pred_proba_test, "test"),
             ]:
                 with self.timer.time(label_split) as split_timer:
-                    scores = scorer.score(y_true, y_pred, y_pred_proba)
-
-                    if label_split == "val":
-                        self.objective = -scores["log_loss"]
+                    if self.is_classification:
+                        scores = scorer.score(y_true, y_pred, y_pred_proba)
+                        if label_split == "val":
+                            self.objective = -scores["log_loss"]
+                    else:
+                        scores = scorer.score(y_true, y_pred)
+                        if label_split == "val":
+                            self.objective = -scores["mean_squared_error"]
 
         return 0  # no error occurred

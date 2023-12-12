@@ -3,6 +3,7 @@ import copy
 import logging
 import os
 import pathlib
+import numpy as np
 
 try:
     # Avoid some errors on some MPI implementations
@@ -55,6 +56,15 @@ def add_subparser(subparsers):
         type=str,
         required=True,
         help="The 'path' of the workflow to train.",
+    )
+    subparser.add_argument(
+        "-tt",
+        "--task-type",
+        type=str,
+        required=False,
+        choices=["classification", "regression"],
+        default="classification",
+        help="The type of the supervised ML task. Either 'classification' or 'regression'.",
     )
     subparser.add_argument(
         "-m",
@@ -169,6 +179,7 @@ def add_subparser(subparsers):
 def run(
     job: RunningJob,
     openml_id: int = 3,
+    task_type: str = "classification",
     workflow_class: str = "lcdb.workflow.sklearn.LibLinearWorkflow",
     monotonic: bool = True,
     valid_seed: int = 42,
@@ -224,9 +235,15 @@ def run(
     }
 
     # create controller
+    if task_type not in ["classification", "regression"]:
+        raise ValueError(f"Task type must be 'classification' or 'regression' but is {task_type}.")
+    is_classification = task_type == "classification"
+    stratify = is_classification
+
     controller = LCController(
         timer=timer,
         workflow_factory=workflow_factory,
+        is_classification=is_classification,
         X=X,
         y=y,
         dataset_metadata=dataset_metadata,
@@ -237,7 +254,7 @@ def run(
         valid_prop=valid_prop,
         timeout_on_fit=timeout_on_fit,
         known_categories=known_categories,
-        stratify=True,
+        stratify=stratify,
         raise_errors=raise_errors,
     )
 
