@@ -13,6 +13,7 @@ def plot_learning_curves(
     rank_method="ordinal",
     decimals=5,
     alpha=1.0,
+    metric_value_baseline=None,
     ax=None,
     cmap=None,
     **kwargs,
@@ -21,6 +22,40 @@ def plot_learning_curves(
         fig, ax = plt.subplots()
     else:
         fig = ax.get_figure()
+
+    # corresponds to iloc indexing
+    if metric_value_baseline is not None:
+        metric_max_fidelity = np.asarray(
+            [metric_value_baseline] + [y[-1] for y in metric_values]
+        )
+    else:
+        metric_max_fidelity = np.asarray([y[-1] for y in metric_values])
+
+    if mode == "max":
+        ranking = rank(-metric_max_fidelity, decimals=decimals, method=rank_method)
+    elif mode == "min":
+        ranking = rank(metric_max_fidelity, decimals=decimals, method=rank_method)
+    else:
+        raise ValueError(f"Unknown mode '{mode}' should be 'max' or 'min'.")
+
+    if metric_value_baseline is not None and cmap is None:
+        ranking_baseline = ranking[0]
+        ranking = ranking[1:]
+
+        center = ranking_baseline / max(ranking)
+        q1 = center / 2
+        q3 = center + (1 - center) / 2
+
+        cmap = LinearSegmentedColormap.from_list(
+            "custom",
+            (
+                # Edit this gradient at https://eltos.github.io/gradient/#0:00D0FF-25:0000FF-75:FF0000-100:FFD800
+                (0.000, (0.000, 0.816, 1.000)),
+                (q1, (0.000, 0.000, 1.000)),
+                (q3, (1.000, 0.000, 0.000)),
+                (1.000, (1.000, 0.847, 0.000)),
+            ),
+        )
 
     if cmap is None:
         cmap = LinearSegmentedColormap.from_list(
@@ -37,16 +72,6 @@ def plot_learning_curves(
         cmap = mpl.colormaps[cmap]
     else:
         cmap = cmap
-
-    # corresponds to iloc indexing
-    metric_max_fidelity = np.asarray([y[-1] for y in metric_values])
-
-    if mode == "max":
-        ranking = rank(-metric_max_fidelity, decimals=decimals, method=rank_method)
-    elif mode == "min":
-        ranking = rank(metric_max_fidelity, decimals=decimals, method=rank_method)
-    else:
-        raise ValueError(f"Unknown mode '{mode}' should be 'max' or 'min'.")
 
     ranking_max = ranking.max()
     for i, (x, y) in enumerate(zip(fidelity_values, metric_values)):

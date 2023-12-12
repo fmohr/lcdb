@@ -19,3 +19,4 @@ publications/2023-neurips/MNIST/*
 .codecarbon.config
 *.jpg
 *.pyc
+publications/2024-neurocom/database-accuracy.csv
