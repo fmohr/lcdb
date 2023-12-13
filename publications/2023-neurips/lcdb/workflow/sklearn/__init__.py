@@ -5,6 +5,7 @@ from ._knn import KNNWorkflow
 from ._libsvm import LibSVMWorkflow
 from ._liblinear import LibLinearWorkflow
 from ._randomforest import RandomForestWorkflow
+from ._random import RandomWorkflow
 
 __all__ = [
     "ConstantWorkflow",
@@ -12,4 +13,5 @@ __all__ = [
     "LibSVMWorkflow",
     "LibLinearWorkflow",
     "RandomForestWorkflow",
+    "RandomWorkflow"
 ]
