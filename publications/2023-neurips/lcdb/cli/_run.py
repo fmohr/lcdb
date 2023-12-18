@@ -94,7 +94,7 @@ def add_subparser(subparsers):
         type=float,
         default=0.1,
         required=False,
-        help="Ratio of validation/(train+validation).",
+        help="Ratio of validation/(train+validation+test).",
     )
     subparser.add_argument(
         "-tp",
@@ -102,7 +102,7 @@ def add_subparser(subparsers):
         type=float,
         default=0.1,
         required=False,
-        help="Ratio of test/data.",
+        help="Ratio of test/(train+validation+test).",
     )
     subparser.add_argument(
         "--timeout-on-fit",
