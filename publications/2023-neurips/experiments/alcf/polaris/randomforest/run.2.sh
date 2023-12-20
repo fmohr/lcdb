@@ -12,7 +12,7 @@ set -e
 
 cd ${PBS_O_WORKDIR}
 
-export PBS_ARRAY_INDEX=1
+export PBS_ARRAY_INDEX=2
 
 source /lus/grand/projects/datascience/regele/polaris/lcdb/publications/2023-neurips/build/activate-dhenv.sh
 

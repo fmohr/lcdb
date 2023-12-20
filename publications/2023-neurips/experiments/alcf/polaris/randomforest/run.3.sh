@@ -2,7 +2,7 @@
 #PBS -l select=2:system=polaris
 #PBS -l place=scatter
 #PBS -l walltime=00:60:00
-#PBS -q debug 
+#PBS -q debug-scaling
 #PBS -A datascience
 #PBS -l filesystems=grand:home
 ##PBS -J 0-3
@@ -12,7 +12,7 @@ set -e
 
 cd ${PBS_O_WORKDIR}
 
-export PBS_ARRAY_INDEX=1
+export PBS_ARRAY_INDEX=3
 
 source /lus/grand/projects/datascience/regele/polaris/lcdb/publications/2023-neurips/build/activate-dhenv.sh
 
