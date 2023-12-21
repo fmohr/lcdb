@@ -1,9 +1,12 @@
+from sklearn.preprocessing import LabelEncoder
+
+
 def load_task(task_name: str):
     """Loads a task by name.
 
     Args:
         task_name (str): Name of the task to load. A task name is composed of the `source` and the `name` of the task, separated by a dot. For example, `sklearn.breast_cancer` loads the `breast_cancer` task from `sklearn`. Similarly, `openml.3` loads the `3` task from `openml`.
-    
+
     Returns:
         data (tuple): Tuple of `(X, y)` arrays.
         metadata (dict): Dictionary of metadata for the task.
@@ -20,11 +23,15 @@ def load_task(task_name: str):
         metadata["name"] = task_name
     else:
         raise ValueError(f"Unknown task '{task_name}'")
-    
+
     # Verifications of metadata format
     assert "type" in metadata
     if metadata["type"] == "classification":
         assert "num_classes" in metadata
+
+        X, y = data
+        y = LabelEncoder().fit_transform(y)
+        data = (X, y)
 
     return data, metadata
 
