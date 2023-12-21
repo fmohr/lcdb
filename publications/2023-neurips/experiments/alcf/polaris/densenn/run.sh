@@ -1,12 +1,14 @@
 #!/bin/bash
-#PBS -l select=10:system=polaris
+#PBS -l select=2:system=polaris
 #PBS -l place=scatter
 #PBS -l walltime=00:60:00
-#PBS -q prod 
+#PBS -q debug-scaling 
 #PBS -A datascience
 #PBS -l filesystems=grand:home
+##PBS -J 0-3
+##PBS -r y
 
-set -xe
+set -e
 
 cd ${PBS_O_WORKDIR}
 
