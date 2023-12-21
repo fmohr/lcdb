@@ -2,10 +2,16 @@
 
 export LCDB_NUM_CONFIGS=1000
 export LCDB_WORKFLOW=lcdb.workflow.sklearn.LibLinearWorkflow
-export LCDB_OPENML_ID=38
 export LCDB_WORKFLOW_SEED=42
 export LCDB_VALID_SEED=42
 export LCDB_TEST_SEED=42
+export LCDB_OPENML_ID_ARRAY=(3 6 14 16)
+
+if [[ -z "${PBS_ARRAY_INDEX}" ]]; then
+  export LCDB_OPENML_ID=3
+else
+  export LCDB_OPENML_ID=${LCDB_OPENML_ID_ARRAY[PBS_ARRAY_INDEX]}
+fi
 
 export LCDB_OUTPUT_WORKFLOW=$PWD/output/$LCDB_WORKFLOW
 export LCDB_INITIAL_CONFIGS=$LCDB_OUTPUT_WORKFLOW/initial_configs.csv

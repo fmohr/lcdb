@@ -5,8 +5,8 @@
 #PBS -q debug 
 #PBS -A datascience
 #PBS -l filesystems=grand:home
-#PBS -J 0-3
-#PBS -r y
+##PBS -J 0-3
+##PBS -r y
 
 set -e
 
