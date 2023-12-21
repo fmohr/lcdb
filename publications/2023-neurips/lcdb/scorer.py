@@ -29,11 +29,10 @@ class ClassificationScorer:
                 (len(y_true), len(labels_in_true_data_not_used_by_workflow))
             )
             relevant_labels.extend(labels_in_true_data_not_used_by_workflow)
-            y_pred_proba = np.column_stack([y_pred_proba, expansion_matrix])
-            y_pred_proba = np.column_stack(
-                [y_pred_proba[:, i] for i in np.argsort(relevant_labels)]
-            )
-            relevant_labels = sorted(relevant_labels)
+            y_pred_proba = np.concatenate([y_pred_proba, expansion_matrix], axis=1)
+            sorted_idx = np.argsort(relevant_labels)
+            relevant_labels = np.array(relevant_labels)[sorted_idx]
+            y_pred_proba = y_pred_proba[:, sorted_idx]
 
         is_binary = len(np.unique(y_true)) == 2
 
@@ -45,12 +44,11 @@ class ClassificationScorer:
             "log_loss",
             "brier_score",
         ]
-        
+
         scores = {}
 
         for metric_name in metric_names:
             with self.timer.time(metric_name) as metric_timer:
-                
                 score = None
 
                 if metric_name == "confusion_matrix":
@@ -111,7 +109,7 @@ class ClassificationScorer:
                         )
 
                 metric_timer["value"] = score
-                
+
                 scores[metric_name] = score
 
-        return scores 
+        return scores
