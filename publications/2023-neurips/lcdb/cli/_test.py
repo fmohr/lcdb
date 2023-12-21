@@ -39,6 +39,15 @@ def add_subparser(subparsers):
         help="The 'path' of the workflow to train.",
     )
     subparser.add_argument(
+        "-tt",
+        "--task-type",
+        type=str,
+        required=False,
+        choices=["classification", "regression"],
+        default="classification",
+        help="The type of the supervised ML task. Either 'classification' or 'regression'.",
+    )
+    subparser.add_argument(
         "-m",
         "--monotonic",
         action="store_true",
@@ -111,6 +120,7 @@ def add_subparser(subparsers):
 def main(
     openml_id,
     workflow_class,
+    task_type,
     monotonic,
     valid_seed,
     test_seed,
@@ -136,18 +146,22 @@ def main(
     else:
         config_default = json.loads(parameters)
 
+    # create controller
+    if task_type not in ["classification", "regression"]:
+        raise ValueError(f"Task type must be 'classification' or 'regression' but is {task_type}.")
+
     output = run(
         RunningJob(id=0, parameters=config_default),
         openml_id=openml_id,
         workflow_class=workflow_class,
+        task_type=task_type,
         monotonic=monotonic,
         valid_seed=valid_seed,
         test_seed=test_seed,
         workflow_seed=workflow_seed,
         valid_prop=valid_prop,
         test_prop=test_prop,
-        timeout_on_fit=timeout_on_fit,
-        raise_errors=True,
+        timeout_on_fit=timeout_on_fit
     )
 
     # check that the output can indeed be compiled into a string using JSON

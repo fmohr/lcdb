@@ -8,6 +8,8 @@ from sklearn.metrics import (
     confusion_matrix,
     log_loss,
     roc_auc_score,
+    mean_squared_error,
+    r2_score,
 )
 
 
@@ -110,6 +112,30 @@ class ClassificationScorer:
 
                 metric_timer["value"] = score
 
+                scores[metric_name] = score
+
+        return scores
+
+
+class RegressionScorer:
+    def __init__(self, timer: Timer = None) -> None:
+        self.timer = Timer() if timer is None else timer
+
+    def score(self, y_true, y_pred):
+        metric_names = ["r2", "mean_squared_error"]
+
+        scores = {}
+
+        for metric_name in metric_names:
+            with self.timer.time(metric_name) as metric_timer:
+                score = None
+
+                if metric_name == "r2":
+                    score = np.round(mean_squared_error(y_true, y_pred), 5).tolist()
+                elif metric_name == "mean_squared_error":
+                    score = np.round(r2_score(y_true, y_pred), 5).tolist()
+
+                metric_timer["value"] = score
                 scores[metric_name] = score
 
         return scores

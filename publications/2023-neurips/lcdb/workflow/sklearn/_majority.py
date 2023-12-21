@@ -1,6 +1,5 @@
 from ConfigSpace import (
     ConfigurationSpace,
-    Constant,
 )
 from sklearn.dummy import DummyClassifier
 
@@ -8,18 +7,15 @@ from .._base_workflow import BaseWorkflow
 
 
 CONFIG_SPACE = ConfigurationSpace(
-    name="sklearn.ConstantWorkflow",
-    space={
-        "strategy": Constant("strategy", "prior"),
-    },
+    name="sklearn.MajorityWorkflow"
 )
 
 
-class ConstantWorkflow(BaseWorkflow):
+class MajorityWorkflow(BaseWorkflow):
     # Static Attribute
     _config_space = CONFIG_SPACE
 
-    def __init__(self, timer=None, strategy="prior", random_state=None, **kwargs):
+    def __init__(self, timer=None, random_state=None):
         super().__init__(timer)
 
         self.learner = DummyClassifier(strategy="prior", random_state=random_state)
