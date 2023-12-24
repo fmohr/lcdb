@@ -281,6 +281,7 @@ def run(
 
 def main(
     openml_id,
+    task_type,
     workflow_class,
     monotonic,
     valid_seed,
@@ -371,6 +372,7 @@ def main(
 
     run_function_kwargs = {
         "openml_id": openml_id,
+        "task_type": task_type,
         "workflow_class": workflow_class,
         "monotonic": monotonic,
         "valid_seed": valid_seed,
