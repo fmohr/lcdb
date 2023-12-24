@@ -112,9 +112,9 @@ class IterationCurveCallback(tf.keras.callbacks.Callback):
 
         # Manage the schedule
         epoch_schedule = self.schedule[-1]
-        is_epoch_to_test = self.epoch + 1 == epoch_schedule
+        is_epoch_to_test = (self.epoch + 1) == epoch_schedule
         is_training_continued = not (self.model.stop_training)
-        if is_epoch_to_test and is_training_continued:
+        if not (is_epoch_to_test) and is_training_continued:
             return
         self.schedule.pop()
 
@@ -291,17 +291,21 @@ class DenseNNWorkflow(BaseWorkflow):
         self.metadata = metadata
         X = self.transform(X, y, metadata).astype(np.float32)
         y_ = self._transformer_label.fit_transform(y)
+        self.infos["classes"] = self._transformer_label.classes_.tolist()
 
-        self.infos["classes"] = list(self._transformer_label.classes_)
-
-        # TODO: adapt timings for validation and test data
-        X_valid = self.transform(X_valid, y_valid, metadata).astype(np.float32)
+        mask_valid = np.isin(y_valid, self.infos["classes"])
+        X_valid = X_valid[mask_valid]
+        y_valid = y_valid[mask_valid]
         y_valid_ = self._transformer_label.transform(y_valid)
 
-        # TODO: adapt timings
+        mask_test = np.isin(y_test, self.infos["classes"])
+        X_test = X_test[mask_test]
+        y_test = y_test[mask_test]
+
+        X_valid = self.transform(X_valid, y_valid, metadata).astype(np.float32)
         X_test = self.transform(X_test, y_test, metadata).astype(np.float32)
 
-        self.learner = self.build_model(X.shape[1:], metadata["num_classes"])
+        self.learner = self.build_model(X.shape[1:], len(self.infos["classes"]))
 
         optimizer = OPTIMIZERS[self.optimizer]()
         optimizer.learning_rate = self.learning_rate

@@ -26,6 +26,7 @@ class ClassificationScorer:
         labels_in_true_data_not_used_by_workflow = list(
             set(y_true).difference(relevant_labels)
         )
+
         if len(labels_in_true_data_not_used_by_workflow) > 0:
             expansion_matrix = np.zeros(
                 (len(y_true), len(labels_in_true_data_not_used_by_workflow))
@@ -78,8 +79,8 @@ class ClassificationScorer:
                                 continue
                             auc = np.round(
                                 roc_auc_score(
-                                    y_true,
-                                    y_pred_proba,
+                                    y_true=y_true,
+                                    y_score=y_pred_proba,
                                     labels=relevant_labels,
                                     multi_class=multi_class,
                                     average=average,
