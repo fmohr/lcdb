@@ -10,7 +10,7 @@ from lcdb.data.split import train_valid_test_split
 from lcdb.timer import Timer
 from lcdb.utils import (
     FunctionCallTimeoutError,
-    get_anchor_schedule,
+    get_schedule,
     terminate_on_timeout,
 )
 from lcdb.scorer import ClassificationScorer, RegressionScorer
@@ -35,6 +35,7 @@ class LCController:
         timeout_on_fit=-1,
         known_categories: bool = True,
         raise_errors: bool = False,
+        anchor_schedule: str = "power",
     ):
         self.timer = timer
         self.workflow_factory = workflow_factory
@@ -63,8 +64,8 @@ class LCController:
         self.monotonic = monotonic
         self.timeout_on_fit = timeout_on_fit
         self.raise_errors = raise_errors
-        self.anchors = get_anchor_schedule(
-            int(self.num_instances * (1 - test_prop - valid_prop))
+        self.anchors = get_schedule(
+            name=anchor_schedule, n=len(self.X_train), base=2, power=0.5, delay=7
         )
 
         # state variables
@@ -283,9 +284,11 @@ class LCController:
 
                     # TODO: this should be replaced to avoid infering twice
                     keys[f"y_pred_{label_split}"] = self.workflow.predict(X_split)
-                    keys[f"y_pred_proba_{label_split}"] = self.workflow.predict_proba(
-                        X_split
-                    ) if self.is_classification else None
+                    keys[f"y_pred_proba_{label_split}"] = (
+                        self.workflow.predict_proba(X_split)
+                        if self.is_classification
+                        else None
+                    )
 
         return keys, labels
 
@@ -303,9 +306,7 @@ class LCController:
                 classes=self.workflow.infos["classes"], timer=self.timer
             )
         else:
-            scorer = RegressionScorer(
-                timer=self.timer
-            )
+            scorer = RegressionScorer(timer=self.timer)
 
         with self.timer.time("metrics"):
             for y_true, y_pred, y_pred_proba, label_split in [

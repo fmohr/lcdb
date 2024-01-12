@@ -71,13 +71,34 @@ def terminate_on_timeout(timeout, func, *args, **kwargs):
         pool.terminate()
 
 
-def get_anchor_schedule(n: int, delay: int = 7):
+def get_schedule(name, **kwargs):
+    """Get a schedule given its name and optional arguments.
+
+    Args:
+        name (str): name of the schedule.
+        **kwargs: optional arguments to pass to the schedule.
+    """
+    if name == "linear":
+        return get_linear_schedule(**kwargs)
+    elif name == "last":
+        return [kwargs["n"]]
+    elif name == "power":
+        return get_power_schedule(**kwargs)
+    else:
+        raise ValueError(f"Unknown schedule: {name}")
+
+
+def get_linear_schedule(n: int, step: 1 = 1):
+    return list(range(1, n + 1, step))
+
+
+def get_power_schedule(n: int, base=2, power=0.5, delay: int = 7):
     """Get a schedule of anchors for a given size `n`."""
     anchors = []
     k = 1
     while True:
-        exponent = (delay + k) / 2
-        sample_size = int(np.round(2**exponent))
+        exponent = (delay + k) * power
+        sample_size = int(np.round(base**exponent))
         if sample_size > n:
             break
         anchors.append(sample_size)
@@ -85,8 +106,3 @@ def get_anchor_schedule(n: int, delay: int = 7):
     if anchors[-1] < n:
         anchors.append(n)
     return anchors
-
-
-def get_iteration_schedule(n: int) -> list:
-    """Get a schedule of iterations for a given size `n`."""
-    return get_anchor_schedule(n, delay=0)

@@ -6,7 +6,7 @@ import tensorflow as tf
 from ConfigSpace import Categorical, ConfigurationSpace, Float, Integer
 from lcdb.scorer import ClassificationScorer
 from lcdb.timer import Timer
-from lcdb.utils import get_iteration_schedule
+from lcdb.utils import get_schedule
 from lcdb.workflow._base_workflow import BaseWorkflow
 from lcdb.workflow.keras.utils import (
     ACTIVATIONS,
@@ -77,7 +77,13 @@ CONFIG_SPACE = ConfigurationSpace(
 
 
 class IterationCurveCallback(tf.keras.callbacks.Callback):
-    def __init__(self, workflow: BaseWorkflow, timer: Timer, data: dict):
+    def __init__(
+        self,
+        workflow: BaseWorkflow,
+        timer: Timer,
+        data: dict,
+        epoch_schedule: str = "power",
+    ):
         super().__init__()
         self.timer = timer
         self.workflow = workflow
@@ -86,7 +92,9 @@ class IterationCurveCallback(tf.keras.callbacks.Callback):
         self.scorer = ClassificationScorer(
             classes=self.workflow.infos["classes"], timer=self.timer
         )
-        self.schedule = get_iteration_schedule(self.workflow.num_epochs)[::-1]
+        self.schedule = get_schedule(
+            name=epoch_schedule, n=self.workflow.num_epochs, base=2, power=0.5, delay=0
+        )[::-1]
 
         # Safeguard to check timers
         self.train_timer_id = None
@@ -165,6 +173,7 @@ class DenseNNWorkflow(BaseWorkflow):
         transform_real="none",
         transform_cat="onehot",
         verbose=0,
+        epoch_schedule: str = "power",
         **kwargs,
     ):
         super().__init__(timer)
@@ -193,6 +202,7 @@ class DenseNNWorkflow(BaseWorkflow):
         self._transformer_label = LabelEncoder()
 
         self.verbose = verbose
+        self.epoch_schedule = epoch_schedule
 
         tf.keras.backend.clear_session()
 
@@ -324,6 +334,7 @@ class DenseNNWorkflow(BaseWorkflow):
                 val=dict(X=X_valid, y=y_valid),
                 test=dict(X=X_test, y=y_test),
             ),
+            epoch_schedule=self.epoch_schedule,
         )
 
         self.learner.fit(

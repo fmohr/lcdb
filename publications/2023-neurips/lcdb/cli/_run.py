@@ -172,6 +172,18 @@ def add_subparser(subparsers):
         type=int,
         help="The number of workers to use with the evaluator. Defaults to -1 for all available workers.",
     )
+    subparser.add_argument(
+        "--anchor-schedule",
+        default="power",
+        type=str,
+        help="The type of schedule for anchors (over samples of the dataset). Value in ['linear', 'last', 'power'].",
+    )
+    subparser.add_argument(
+        "--epoch-schedule",
+        default="power",
+        type=str,
+        help="The type of schedule for anchors (over learning iterations of the workflow). Value in ['linear', 'last', 'power'].",
+    )
     subparser.set_defaults(func=function_to_call)
 
 
@@ -190,6 +202,8 @@ def run(
     timeout_on_fit=-1,
     known_categories: bool = True,
     raise_errors: bool = False,
+    anchor_schedule: str = "power",
+    epoch_schedule: str = "power",
 ):
     """This function trains the workflow on a dataset and returns performance metrics.
 
@@ -206,12 +220,14 @@ def run(
         timeout_on_fit (int, optional): Timeout in seconds for the fit method. Defaults to -1 for infinite time.
         known_categories (bool, optional): If all the possible categories are assumed to be known in advance. Defaults to True.
         raise_errors (bool, optional): If `True`, then errors are risen to the outside. Otherwise, just a log message is generated. Defaults to False.
+        anchor_schedule (str, optional): A type of schedule for anchors (over samples of the dataset). Defaults to "power".
+        epoch_schedule (str, optional): A type of schedule for epochs (over epochs of the dataset). Defaults to "power".
 
     Returns:
         dict: a dictionary with 2 keys (objective, metadata) where objective is the objective maximized by deephyper (if used) and metadata is a JSON serializable sub-dictionnary which are complementary information about the workflow.
     """
     logging.info(f"Running job {job.id} with parameters: {job.parameters}")
-    
+
     timer = Timer(precision=4)
     run_timer_id = timer.start("run")
 
@@ -224,6 +240,7 @@ def run(
     logging.info("Importing the workflow...")
     WorkflowClass = import_attr_from_module(workflow_class)
     workflow_kwargs = copy.deepcopy(job.parameters)
+    workflow_kwargs["epoch_schedule"] = epoch_schedule
     workflow_kwargs["random_state"] = workflow_seed
     workflow_factory = lambda: WorkflowClass(timer=timer, **workflow_kwargs)
 
@@ -236,7 +253,9 @@ def run(
 
     # create controller
     if task_type not in ["classification", "regression"]:
-        raise ValueError(f"Task type must be 'classification' or 'regression' but is {task_type}.")
+        raise ValueError(
+            f"Task type must be 'classification' or 'regression' but is {task_type}."
+        )
     is_classification = task_type == "classification"
     stratify = is_classification
 
@@ -256,6 +275,7 @@ def run(
         known_categories=known_categories,
         stratify=stratify,
         raise_errors=raise_errors,
+        anchor_schedule=anchor_schedule,
     )
 
     # build the curves
@@ -297,6 +317,8 @@ def main(
     verbose,
     evaluator,
     num_workers,
+    anchor_schedule,
+    epoch_schedule,
 ):
     """Entry point for the command line interface."""
 
@@ -381,6 +403,8 @@ def main(
         "valid_prop": valid_prop,
         "test_prop": test_prop,
         "timeout_on_fit": timeout_on_fit,
+        "anchor_schedule": anchor_schedule,
+        "epoch_schedule": epoch_schedule,
     }
 
     method_kwargs["run_function_kwargs"] = run_function_kwargs
