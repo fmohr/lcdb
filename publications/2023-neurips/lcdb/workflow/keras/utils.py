@@ -1,5 +1,7 @@
 import platform
+import numpy as np
 import tensorflow as tf
+import tensorflow.keras.backend as K
 
 
 def is_arm_mac():
@@ -65,3 +67,25 @@ INITIALIZERS = [
     "orthogonal",
     "variance_scaling",
 ]
+
+
+def count_params(model: tf.keras.Model) -> dict:
+    """Evaluate the number of parameters of a Keras model.
+
+    Args:
+        model (tf.keras.Model): a Keras model.
+
+    Returns:
+        dict: a dictionary with the number of trainable ``"num_parameters_train"`` and
+        non-trainable parameters ``"num_parameters_not_train"``.
+    """
+    num_parameters_train = int(
+        np.sum([np.prod(v.get_shape()) for v in model.trainable_weights])
+    )
+    num_parameters_not_train = int(
+        np.sum([np.prod(v.get_shape()) for v in model.non_trainable_weights])
+    )
+    return {
+        "num_parameters_not_train": num_parameters_not_train,
+        "num_parameters_train": num_parameters_train,
+    }

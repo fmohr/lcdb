@@ -13,6 +13,7 @@ from lcdb.workflow.keras.utils import (
     OPTIMIZERS,
     REGULARIZERS,
     INITIALIZERS,
+    count_params,
 )
 from sklearn.preprocessing import (
     FunctionTransformer,
@@ -316,6 +317,12 @@ class DenseNNWorkflow(BaseWorkflow):
         X_test = self.transform(X_test, y_test, metadata).astype(np.float32)
 
         self.learner = self.build_model(X.shape[1:], len(self.infos["classes"]))
+
+        # Count Parameters in Model and Record
+        if self.timer.root.metadata.get("num_parameters_train") is None:
+            params = count_params(self.learner)
+            self.timer.root["num_parameters_not_train"] = params["num_parameters_not_train"]
+            self.timer.root["num_parameters_train"] = params["num_parameters_train"]
 
         optimizer = OPTIMIZERS[self.optimizer]()
         optimizer.learning_rate = self.learning_rate
