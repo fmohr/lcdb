@@ -10,8 +10,7 @@ export stopper="deephyper.stopper.ConstantStopper"
 export max_evals=200
 # export random_states=(1608637542)
 export random_states=(1608637542 3421126067 4083286876  787846414 3143890026 3348747335 2571218620 2563451924  670094950 1914837113) 
-export stop_steps=(1 10 25 50 100)
-# export stop_steps=(5)
+export stop_steps=(1 4 8 16 32 64 100)
 
 exec_search () {
     export log_dir="output/$problem-RANDOM-$stopper-$stop_step-$max_evals-$random_state"

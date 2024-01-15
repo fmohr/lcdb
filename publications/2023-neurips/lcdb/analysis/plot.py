@@ -14,6 +14,7 @@ def plot_learning_curves(
     decimals=5,
     alpha=1.0,
     metric_value_baseline=None,
+    plot_worse_than_baseline=True,
     ax=None,
     cmap=None,
     **kwargs,
@@ -75,13 +76,21 @@ def plot_learning_curves(
 
     ranking_max = ranking.max()
     for i, (x, y) in enumerate(zip(fidelity_values, metric_values)):
+        if not plot_worse_than_baseline:
+            # if mode == "min" and metric_value_baseline and all(map(lambda yi: yi > metric_value_baseline , y)):
+            if mode == "min" and metric_value_baseline is not None and y[-1] > metric_value_baseline:
+                continue
+            elif mode == "max" and metric_value_baseline is not None and -y[-1] > metric_value_baseline:
+                continue
         ax.plot(x, y, color=cmap(ranking[i] / ranking_max), alpha=alpha)
 
     ax.grid()
 
     norm = mpl.cm.ScalarMappable(norm=None, cmap=cmap)
     norm.set_clim(1, ranking_max)
-    plt.colorbar(norm, ax=plt.gca(), label="Rank")
+    cb = plt.colorbar(norm, ax=plt.gca(), label="Rank")
+    if metric_value_baseline is not None:
+        cb.ax.axhline(ranking_baseline, c="lime", linewidth=2, linestyle="--")
     # plt.xlim(0, fidelities.max())
 
     return fig, ax

@@ -2,9 +2,11 @@
 
 set -e
 
-export DEEPHYPER_BENCHMARK_TASK="navalpropulsion"
+export DEEPHYPER_BENCHMARK_MAX_FIDELITY=100
+export DEEPHYPER_BENCHMARK_FIDELITY="epoch"
+export DEEPHYPER_BENCHMARK_CSV="/Users/romainegele/Documents/Research/LCDB/lcdb/publications/2023-neurips/experiments/alcf/polaris/densenn/output/lcdb.workflow.keras.DenseNNWorkflow/3/42-42-42/results.csv.gz"
 
-export problem="dhexp.benchmark.hpobench_tabular"
+export problem="dhexp.benchmark.lcdb_hpo"
 export search="deephyper.search.hps.CBO"
 export stopper="deephyper.stopper.LCModelStopper"
 export max_evals=200

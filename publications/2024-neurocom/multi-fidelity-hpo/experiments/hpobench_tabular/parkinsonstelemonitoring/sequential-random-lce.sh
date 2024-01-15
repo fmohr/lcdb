@@ -2,7 +2,7 @@
 
 set -e
 
-export DEEPHYPER_BENCHMARK_TASK="navalpropulsion"
+export DEEPHYPER_BENCHMARK_TASK="parkinsonstelemonitoring"
 
 export problem="dhexp.benchmark.hpobench_tabular"
 export search="deephyper.search.hps.CBO"
