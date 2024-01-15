@@ -114,6 +114,18 @@ def add_subparser(subparsers):
         default=False,
         required=False,
     )
+    subparser.add_argument(
+        "--anchor-schedule",
+        default="power",
+        type=str,
+        help="The type of schedule for anchors (over samples of the dataset). Value in ['linear', 'last', 'power'].",
+    )
+    subparser.add_argument(
+        "--epoch-schedule",
+        default="power",
+        type=str,
+        help="The type of schedule for anchors (over learning iterations of the workflow). Value in ['linear', 'last', 'power'].",
+    )
     subparser.set_defaults(func=function_to_call)
 
 
@@ -130,6 +142,8 @@ def main(
     timeout_on_fit,
     parameters,
     verbose,
+    anchor_schedule,
+    epoch_schedule,
 ):
     if verbose:
         logging.basicConfig(
@@ -148,7 +162,9 @@ def main(
 
     # create controller
     if task_type not in ["classification", "regression"]:
-        raise ValueError(f"Task type must be 'classification' or 'regression' but is {task_type}.")
+        raise ValueError(
+            f"Task type must be 'classification' or 'regression' but is {task_type}."
+        )
 
     output = run(
         RunningJob(id=0, parameters=config_default),
@@ -161,7 +177,9 @@ def main(
         workflow_seed=workflow_seed,
         valid_prop=valid_prop,
         test_prop=test_prop,
-        timeout_on_fit=timeout_on_fit
+        timeout_on_fit=timeout_on_fit,
+        anchor_schedule=anchor_schedule,
+        epoch_schedule=epoch_schedule,
     )
 
     # check that the output can indeed be compiled into a string using JSON

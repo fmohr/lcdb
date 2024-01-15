@@ -88,11 +88,11 @@ def get_schedule(name, **kwargs):
         raise ValueError(f"Unknown schedule: {name}")
 
 
-def get_linear_schedule(n: int, step: 1 = 1):
+def get_linear_schedule(n: int, step: 1 = 1, **kwargs):
     return list(range(1, n + 1, step))
 
 
-def get_power_schedule(n: int, base=2, power=0.5, delay: int = 7):
+def get_power_schedule(n: int, base=2, power=0.5, delay: int = 7, **kwargs):
     """Get a schedule of anchors for a given size `n`."""
     anchors = []
     k = 1
