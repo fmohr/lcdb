@@ -8,3 +8,7 @@ __pycache__
 *.png
 *.yaml
 *.zip
+
+# Output I/O files from PBS scheduler
+*.sh.e*
+*.sh.o*
