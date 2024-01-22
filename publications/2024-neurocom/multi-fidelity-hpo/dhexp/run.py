@@ -54,13 +54,13 @@ def create_parser():
         default=-1,
         help="Number of iterations to run for each optimization.",
     )
-    # parser.add_argument(
-    #     "-v",
-    #     "--verbose",
-    #     type=bool,
-    #     default=False,
-    #     help="Wether to activate or not the verbose mode.",
-    # )
+    parser.add_argument(
+        "-v",
+        "--verbose",
+        action="store_true",
+        default=False,
+        help="Wether to activate or not the verbose mode.",
+    )
     return parser
 
 
@@ -81,6 +81,7 @@ def main(args):
     search_kwargs["problem"] = pmodule.problem
     search_kwargs["evaluator"] = pmodule.run
     search_kwargs["stopper"] = Stopper
+    search_kwargs["verbose"] = args["verbose"]
 
     pathlib.Path(search_kwargs.get("log_dir", ".")).mkdir(parents=True, exist_ok=True)
 
