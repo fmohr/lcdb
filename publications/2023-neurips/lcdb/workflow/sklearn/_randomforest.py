@@ -8,7 +8,7 @@ from ConfigSpace import (
 )
 from lcdb.scorer import ClassificationScorer
 from sklearn.ensemble import RandomForestClassifier
-from lcdb.utils import get_iteration_schedule
+from lcdb.utils import get_schedule
 
 import numpy as np
 
@@ -64,6 +64,7 @@ class RandomForestWorkflow(PreprocessedWorkflow):
         ccp_alpha=0.0,
         max_samples=None,
         random_state=None,
+        epoch_schedule: str = "power",
         **kwargs,
     ):
         super().__init__(timer, **filter_keys_with_prefix(kwargs, prefix="pp@"))
@@ -101,7 +102,9 @@ class RandomForestWorkflow(PreprocessedWorkflow):
         self.learner = RandomForestClassifier(**learner_kwargs)
 
         # Scoring Schedule for Sub-fidelity
-        self.schedule = get_iteration_schedule(self.max_n_estimators)
+        self.schedule = get_schedule(
+            name=epoch_schedule, n=self.max_n_estimators, base=2, power=0.5, delay=0
+        )
 
     @classmethod
     def config_space(cls):
