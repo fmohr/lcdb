@@ -21,7 +21,7 @@ exec_search () {
         --search $search \
         --search-kwargs "{'log_dir': '$log_dir', 'surrogate_model': 'DUMMY', 'random_state': $random_state}" \
         --stopper $stopper \
-        --stopper-kwargs "{'max_steps': 100, 'lc_model': '$lc_model', 'prob_promotion': $prob_promotion}" \
+        --stopper-kwargs "{'max_steps': 100, 'lc_model': '$lc_model', 'prob_promotion': $prob_promotion, 'reduction_factor': 1}" \
         --max-evals $max_evals \
         --verbose
 }

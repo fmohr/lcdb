@@ -25,7 +25,8 @@ exec_search () {
         --search-kwargs "{'log_dir': '$log_dir', 'surrogate_model': 'DUMMY', 'random_state': $random_state}" \
         --stopper $stopper \
         --stopper-kwargs "{'max_steps': 100, 'prob_promotion': $prob_promotion}" \
-        --max-evals $max_evals
+        --max-evals $max_evals \
+        --verbose
 }
 
 for prob_promotion in ${prob_promotions[@]}; do
@@ -33,6 +34,7 @@ for prob_promotion in ${prob_promotions[@]}; do
   echo "prob_promotion: $prob_promotion"
 
   for random_state in ${random_states[@]}; do
+    echo "random_state: $random_state"
     for i in {1..5}; do 
         exec_search && break || sleep 5;
     done
