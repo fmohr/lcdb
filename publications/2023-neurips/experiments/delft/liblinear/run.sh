@@ -10,7 +10,8 @@
 module load miniconda/3.11
 module load openmpi/4.0.1
 
-source ../../../build/activate-dhenv.sh
+source $HOME/.bashrc # this is to make sure that we have CONDA available, could be done in a different way
+source $HOME/build/activate-dhenv.sh
 
 #!!! CONFIGURATION - START
 source config.sh
