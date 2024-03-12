@@ -1,5 +1,8 @@
 #!/bin/bash
 
+echo "Installing to ../build"
+cd ../build
+
 set -xe
 
 # Load modules available on the current system
@@ -22,9 +25,15 @@ echo "Installing mpi4py with mpicc=$MPICC"
 export LD_LIBRARY_PATH="/usr/lib64:$LD_LIBRARY_PATH"
 python setup.py install
 cd ..
+pwd
 
 # Install LCDB Package
-pip install -e "../"
+cd ..
+pwd
+pip install -e .
+cd build
+pwd
+lcdb --help
 
 # Create activation script
 touch activate-dhenv.sh
