@@ -1,13 +1,12 @@
 #!/bin/bash
-#SBATCH --nodes=2
-#SBATCH --ntasks=2
-#SBATCH --cpus-per-task=16
-#SBATCH --partition=rome
-#SBATCH --time=01:00:00
-#SBATCH --job-name=liblinear
-#SBATCH --output=out/%a.log
-#SBATCH --error=err/%a.log
-#SBATCH --array=0-1
+#SBATCH --partition=general --qos=short
+#SBATCH --time=4:00:00
+#SBATCH --ntasks=128 --cpus-per-task=2
+#SBATCH --mem-per-cpu=4096
+#SBATCH --job-name=lcdb2
+#SBATCH --output=lcdbB2.txt
+#SBATCH --error=lcdbB2.txt
+
 module load miniconda/3.11
 module load openmpi/4.0.1
 
@@ -29,7 +28,7 @@ mkdir -p $LCDB_OUTPUT_RUN
 pushd $LCDB_OUTPUT_RUN
 
 # Run experiment
-srun -n $(( $NDEPTH * $NRANKS_PER_NODE )) -N $NDEPTH lcdb run \
+srun -n 128 -c 2 lcdb run \
     --openml-id $LCDB_OPENML_ID \
     --workflow-class $LCDB_WORKFLOW \
     --monotonic \
