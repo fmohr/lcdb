@@ -29,7 +29,7 @@ mkdir -p $LCDB_OUTPUT_RUN
 pushd $LCDB_OUTPUT_RUN
 
 # Run experiment
-srun -n $(( $NDEPTH * $NRANKS_PER_NODE )) -N $NDEPTH ../../../build/dhenv/bin/lcdb run \
+srun -n $(( $NDEPTH * $NRANKS_PER_NODE )) -N $NDEPTH lcdb run \
     --openml-id $LCDB_OPENML_ID \
     --workflow-class $LCDB_WORKFLOW \
     --monotonic \
