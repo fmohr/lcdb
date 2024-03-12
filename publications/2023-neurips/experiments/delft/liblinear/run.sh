@@ -8,9 +8,10 @@
 #SBATCH --output=out/%a.log
 #SBATCH --error=err/%a.log
 #SBATCH --array=0-1
-module load 2023
-module load OpenMPI/4.1.5-GCC-12.3.0
-source /home/jvanrijn/projects/lcdb/publications/2023-neurips/build/activate-dhenv.sh
+module load miniconda/3.11
+module load openmpi/4.0.1
+
+source ../../../build/activate-dhenv.sh
 
 #!!! CONFIGURATION - START
 source config.sh
@@ -28,9 +29,7 @@ mkdir -p $LCDB_OUTPUT_RUN
 pushd $LCDB_OUTPUT_RUN
 
 # Run experiment
-# srun -n ${NTOTRANKS} --ppn ${NRANKS_PER_NODE} --depth=${NDEPTH} --cpu-bind depth --envall \
-srun -n $(( $NDEPTH * $NRANKS_PER_NODE )) -N $NDEPTH\
-    /home/jvanrijn/miniconda3/envs/dhenv/bin/lcdb run \
+srun -n $(( $NDEPTH * $NRANKS_PER_NODE )) -N $NDEPTH ../../../build/dhenv/bin/lcdb run \
     --openml-id $LCDB_OPENML_ID \
     --workflow-class $LCDB_WORKFLOW \
     --monotonic \
