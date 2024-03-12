@@ -30,6 +30,7 @@ REQUIRED = [
     "pyyaml",
     "scikit-learn>=0.23.1",
     "scipy>=1.7",
+    "tensorflow>=2.0.0",
     "tqdm>=4.64.0",
     "xgboost>=1.7.6",
 ]
