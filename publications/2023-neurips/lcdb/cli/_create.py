@@ -62,6 +62,9 @@ def main(
     config_default = config_space.get_default_configuration()
     x = []
     for i, k in enumerate(skopt_space.dimension_names):
+        # Check if hyperparameter k is active
+        # If it is not active we attribute the "lower bound value" of the space
+        # To avoid duplication of the same "entity" in the list of configurations
         if k in config_default.keys():
             val = config_default[k]
         else:
