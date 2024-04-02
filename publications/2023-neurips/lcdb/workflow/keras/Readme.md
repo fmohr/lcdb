@@ -8,15 +8,15 @@
 - [ ] `lookahead`
     - Description: If the lookahead optimizing technique should be used.
     - Value: `[True, False]`
-- [ ] `weight_decay`
+- [x] `weight_decay`
     - Description: If weight decay regularization should be used.
     - Value: `[True, False]`
-- [ ] `batch_normalization`
+- [x] `batch_normalization`
     - Description: If batch normalization regularization should be used.
     - Value: `[True, False]`
-- [ ] `skip_connection`
+- [x] `skip_connection`
     - Description: If skip connections should be used. Turns the network into a residual network.- Value: `[True, False]`
-- [ ] `dropout` 
+- [x] `dropout` 
     - Description: If dropout regularization should be used.
     - Value: `[True, False]`
 - [ ] `multi_branch_choice`
