@@ -40,12 +40,12 @@ conda create -n dhenv python=3.11 -y
 conda activate dhenv
 ```
 
-To install, `deephyper` (the software providing hyperparameter optimization and early discarding methods):
+To install, `deephyper` (the software providing hyperparameter optimization and early discarding methods), at the time of the last test the commit used was `2609c9188970925bed7533b08d241fafb9a27014`:
 ```console
 pip install "deephyper[hps,jax-cpu] @ git+https://github.com/deephyper/deephyper@develop"
 ```
 
-To install `deephyper_benchmark` (the software providing learning curve benchmarks for hyperparameter optimization):
+To install `deephyper_benchmark` (the software providing learning curve benchmarks for hyperparameter optimization), at the time of the last test the commit used was `7b60adfb3e98515153ef1f82d8030aaa3c92185e`:
 ```console
 pip install -e "git+https://github.com/deephyper/benchmark.git@main#egg=deephyper-benchmark"
 ```
