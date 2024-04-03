@@ -1,8 +1,5 @@
-import logging
-
-import absl.logging
+import keras
 import numpy as np
-import tensorflow as tf
 from ConfigSpace import Categorical, ConfigurationSpace, Float, Integer
 from lcdb.scorer import ClassificationScorer
 from lcdb.timer import Timer
@@ -10,9 +7,9 @@ from lcdb.utils import get_schedule
 from lcdb.workflow._base_workflow import BaseWorkflow
 from lcdb.workflow.keras.utils import (
     ACTIVATIONS,
+    INITIALIZERS,
     OPTIMIZERS,
     REGULARIZERS,
-    INITIALIZERS,
     count_params,
 )
 from sklearn.preprocessing import (
@@ -23,12 +20,6 @@ from sklearn.preprocessing import (
     OrdinalEncoder,
     StandardScaler,
 )
-
-logging.root.removeHandler(absl.logging._absl_handler)
-absl.logging._warn_preinit_stderr = False
-
-tf.get_logger().setLevel("ERROR")
-tf.autograph.set_verbosity(2)
 
 CONFIG_SPACE = ConfigurationSpace(
     name="keras._dense",
@@ -77,7 +68,7 @@ CONFIG_SPACE = ConfigurationSpace(
 )
 
 
-class IterationCurveCallback(tf.keras.callbacks.Callback):
+class IterationCurveCallback(keras.callbacks.Callback):
     def __init__(
         self,
         workflow: BaseWorkflow,
@@ -205,7 +196,7 @@ class DenseNNWorkflow(BaseWorkflow):
         self.verbose = verbose
         self.epoch_schedule = epoch_schedule
 
-        tf.keras.backend.clear_session()
+        keras.backend.clear_session()
 
     @classmethod
     def config_space(cls):
@@ -258,13 +249,13 @@ class DenseNNWorkflow(BaseWorkflow):
         return X
 
     def build_model(self, input_shape, num_classes):
-        inputs = out = tf.keras.Input(shape=input_shape)
+        inputs = out = keras.Input(shape=input_shape)
 
         prev = None
 
         # Model layers
         for layer_i in range(self.num_layers):
-            out = tf.keras.layers.Dense(
+            out = keras.layers.Dense(
                 self.num_units,
                 activation=self.activation,
                 kernel_initializer=self.kernel_initializer,
@@ -279,22 +270,22 @@ class DenseNNWorkflow(BaseWorkflow):
                 ),
             )(out)
             if self.batch_norm:
-                out = tf.keras.layers.BatchNormalization()(out)
-            out = tf.keras.layers.Dropout(self.dropout_rate)(out)
+                out = keras.layers.BatchNormalization()(out)
+            out = keras.layers.Dropout(self.dropout_rate)(out)
 
             if self.skip_co and prev is not None:
                 out = out + prev
             prev = out
 
         # Model output
-        layer_logits = tf.keras.layers.Dense(
-            self.num_units, activation=self.activation
-        )(out)
-        layer_proba = tf.keras.layers.Dense(num_classes, activation="softmax")(
+        layer_logits = keras.layers.Dense(self.num_units, activation=self.activation)(
+            out
+        )
+        layer_proba = keras.layers.Dense(num_classes, activation="softmax")(
             layer_logits
         )
 
-        model = tf.keras.Model(inputs=inputs, outputs=layer_proba)
+        model = keras.Model(inputs=inputs, outputs=layer_proba)
 
         return model
 
@@ -321,7 +312,9 @@ class DenseNNWorkflow(BaseWorkflow):
         # Count Parameters in Model and Record
         if self.timer.root.metadata.get("num_parameters_train") is None:
             params = count_params(self.learner)
-            self.timer.root["num_parameters_not_train"] = params["num_parameters_not_train"]
+            self.timer.root["num_parameters_not_train"] = params[
+                "num_parameters_not_train"
+            ]
             self.timer.root["num_parameters_train"] = params["num_parameters_train"]
 
         optimizer = OPTIMIZERS[self.optimizer]()
@@ -352,9 +345,9 @@ class DenseNNWorkflow(BaseWorkflow):
             shuffle=self.shuffle_each_epoch,
             validation_data=(X_valid, y_valid_),
             callbacks=[
-                tf.keras.callbacks.TerminateOnNaN(),
-                tf.keras.callbacks.ReduceLROnPlateau(),
-                tf.keras.callbacks.EarlyStopping(patience=10),
+                keras.callbacks.TerminateOnNaN(),
+                keras.callbacks.ReduceLROnPlateau(),
+                keras.callbacks.EarlyStopping(patience=10),
                 iteration_curve_callback,
             ],
             verbose=self.verbose,
