@@ -2,6 +2,7 @@
 
 Here we provide documentation about how to reproduce experiments to compare different early discarding strategies: $i$-Epoch, $\rho$-LCE, and $r$-SHA.
 
+In the `../learning-curves/` folder, we provide the Python notebook used to plot learning curves.
 
 ## Simplified reproducible example
 
