@@ -2,6 +2,7 @@ import warnings
 
 import numpy as np
 import pandas as pd
+from sys import getsizeof
 from ConfigSpace import (
     Categorical,
     ConfigurationSpace,
@@ -147,11 +148,42 @@ class PreprocessedWorkflow(BaseWorkflow):
         return cs
 
     def _transform(self, X, y, metadata):
+
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", UserWarning)
 
             if not self.transform_fitted:
                 self.pp_pipeline = self.get_pp_pipeline(X, y, metadata, **self.pp_kws)
+
+                # test feasibility
+                descriptor = str(self.pp_pipeline)
+                if "PolynomialFeatures" in descriptor:
+
+                    memory_limit = 4  # in GB
+                    max_memory = memory_limit * 1024**3
+                    memory_cost_per_feature = X.shape[0] * 8  # independently of the original type, it WILL be float64
+                    num_allowed_features = int(max_memory / memory_cost_per_feature)
+
+                    poly = self.pp_pipeline[KEY_FEATUREGEN]
+                    num_created_features = poly._num_combinations(
+                        n_features=X.shape[1],
+                        min_degree=0,
+                        max_degree=poly.degree,
+                        interaction_only=poly.interaction_only,
+                        include_bias=poly.include_bias,
+                    )
+                    predicted_memory = num_created_features * memory_cost_per_feature
+
+                    if num_created_features > num_allowed_features:
+                        raise Exception(
+                            f"PolynomialFeatures would generate {num_created_features} features. "
+                            f"The {memory_limit}GB memory constraint only allows for {num_allowed_features}."
+                        )
+
+                    if num_created_features > 10**6:
+                        raise Exception(f"We do not allow more than one million features.")
+
+                self.pp_pipeline.fit(X, y)
             X = self.pp_pipeline.transform(X) if self.pp_pipeline is not None else X
 
         return X
@@ -214,10 +246,6 @@ class PreprocessedWorkflow(BaseWorkflow):
         # step 6: feature selector
         if KEY_FEATURESELECTOR in kwargs:
             fs_val = kwargs[KEY_FEATURESELECTOR]
-
-            # print(metadata["num_classes"], featuremapper_val)
-            # if metadata["num_classes"] == 2 and featuremapper_val == "lda":
-            #     fs_val = "none"
 
             if fs_val == "selectp":
                 # as we want to keep a minimum of 1 feature, we need to ensure that
@@ -299,4 +327,4 @@ class PreprocessedWorkflow(BaseWorkflow):
             raise ValueError(f"Untreated pre-processing kwargs: {untreated_kws}")
 
         # return trained pipeline
-        return Pipeline(steps).fit(X, y) if steps else None
+        return Pipeline(steps) if steps else None
