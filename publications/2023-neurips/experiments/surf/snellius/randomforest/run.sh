@@ -4,8 +4,10 @@
 #SBATCH --time=01:00:00
 #SBATCH --cpus-per-task=128
 #SBATCH --threads-per-core=1
-#SBATCH --output=out/%x_%a.log
-#SBATCH --error=err/%x_%a.log
+#SBATCH --job-name=liblinear
+#SBATCH --output=out/liblinear_%a.log
+#SBATCH --error=err/liblinear_%a.log
+#SBATCH --array=0,1
 
 module load 2023
 module load OpenMPI/4.1.5-GCC-12.3.0
@@ -18,7 +20,7 @@ export timeout=3500
 
 export NRANKS_PER_NODE=128
 export NTASKS=$SLURM_ARRAY_TASK_COUNT
-export CORES_PER_NODE=$SLURM_CPUS_PER_TASK
+export CORES_PER_NODE=$SLURM_CPUS_PER_TASK  # 128
 export NNODES=$SLURM_JOB_NUM_NODES
 export NODES_PER_TASK=$(( $NNODES / $NTASKS ))
 export NTOTRANKS=$(( $NNODES * $NRANKS_PER_NODE ))
@@ -34,7 +36,7 @@ pushd $LCDB_OUTPUT_RUN
 srun -n ${NTOTRANKS} -N ${NNODES} \
      --cpus-per-task $CORES_PER_TASK \
      --threads-per-core $THREADS_PER_CORE \
-    /home/jvanrijn/miniconda3/envs/dhenv/bin/lcdb run \
+    lcdb run \
     --openml-id $LCDB_OPENML_ID \
     --workflow-class $LCDB_WORKFLOW \
     --monotonic \

@@ -1,15 +1,11 @@
 #!/bin/bash
-export LCDB_NUM_CONFIGS=127
-export LCDB_WORKFLOW=lcdb.workflow.sklearn.LibLinearWorkflow
+
+export LCDB_NUM_CONFIGS=10 # 1000
+export LCDB_WORKFLOW=lcdb.workflow.xgboost.XGBoostWorkflow
 export LCDB_WORKFLOW_SEED=42
 export LCDB_VALID_SEED=42
 export LCDB_TEST_SEED=42
-# Read the CSV file and load into an array
-declare -a values
-while IFS= read -r line || [[ -n "$line" ]]; do
-    values+=("$line")
-done < "./../datasets_to_test.csv"
-export LCDB_OPENML_ID_ARRAY=(${values[@]})
+export LCDB_OPENML_ID_ARRAY=(3 6)
 
 if [[ -z "${SLURM_ARRAY_TASK_ID}" ]]; then
   export LCDB_OPENML_ID=3

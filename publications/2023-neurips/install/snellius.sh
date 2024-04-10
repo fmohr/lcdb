@@ -31,7 +31,6 @@ export MPICC=$(which mpicc)
 which mpicc
 pip install mpi4py --no-cache-dir
 which mpicc
-exit 0
 
 # Install the DeepHyper's Python package
 git clone -b develop git@github.com:deephyper/deephyper.git

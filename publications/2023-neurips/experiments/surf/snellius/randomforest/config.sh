@@ -1,6 +1,7 @@
 #!/bin/bash
+
 export LCDB_NUM_CONFIGS=127
-export LCDB_WORKFLOW=lcdb.workflow.sklearn.LibLinearWorkflow
+export LCDB_WORKFLOW=lcdb.workflow.sklearn.RandomForestWorkflow
 export LCDB_WORKFLOW_SEED=42
 export LCDB_VALID_SEED=42
 export LCDB_TEST_SEED=42
@@ -16,8 +17,6 @@ if [[ -z "${SLURM_ARRAY_TASK_ID}" ]]; then
 else
   export LCDB_OPENML_ID=${LCDB_OPENML_ID_ARRAY[SLURM_ARRAY_TASK_ID]}
 fi
-
-echo $LCDB_OPENML_ID
 
 export LCDB_OUTPUT_WORKFLOW=$PWD/output/$LCDB_WORKFLOW
 export LCDB_INITIAL_CONFIGS=$LCDB_OUTPUT_WORKFLOW/initial_configs.csv
