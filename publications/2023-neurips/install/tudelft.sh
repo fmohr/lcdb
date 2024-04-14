@@ -44,6 +44,7 @@ echo '#!/bin/bash' >> activate-dhenv.sh # ! = history expansion when " is used. 
 
 # Append modules loading and conda activation
 echo "" >> activate-dhenv.sh
+echo 'module use /opt/insy/modulefiles' >> activate-dhenv.sh
 echo "module load openmpi/4.0.1" >> activate-dhenv.sh
 echo "module load miniconda/3.11" >> activate-dhenv.sh
 echo "conda activate $PWD/dhenv/" >> activate-dhenv.sh
