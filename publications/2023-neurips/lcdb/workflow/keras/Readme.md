@@ -1,7 +1,8 @@
 **Regularization Cocktails**:
-- [ ] `stochastic_weight_averaging`
-    - Description: If stochastic weight averaging should be used.
+- [x] `stochastic_weight_averaging`
+    - Description: If stochastic weight averaging should be used. This is implemented via the `keras-swa` package: https://github.com/simon-larsson/keras-swa
     - Value: `[True, False]`
+    - Observation: Actually, this has some hyperparameters itself (start_epoch, lr_schedule,  swa_lr, swa_lr2, swa_freq)
 - [ ] `snapshot_ensembling`
     - Description: If snapshot ensembling should be used.
     - Value: `[True, False]`
