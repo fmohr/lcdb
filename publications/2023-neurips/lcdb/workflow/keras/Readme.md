@@ -22,7 +22,8 @@
     - Value: `[True, False]`
 
 - [x] `skip_connection`
-    - Description: If skip connections should be used. Turns the network into a residual network.- Value: `[True, False]`
+    - Description: If skip connections should be used. Turns the network into a residual network.
+    - - Value: `[True, False]`
 
 - [ ] `multi_branch_choice`
     - Description: Multibranch network regularization. Only active when `skip_connection` is active.
