@@ -190,7 +190,7 @@ class PreprocessedWorkflow(BaseWorkflow):
 
     def get_pp_pipeline(self, X, y, metadata, **kwargs):
         idx_cat_col = np.where(metadata["categories"]["columns"])[0]
-        idx_num_col = np.where(~metadata["categories"]["columns"])[0]
+        idx_num_col = np.where(~np.array(metadata["categories"]["columns"]))[0]
         has_cat = len(idx_cat_col) > 0
         has_num = len(idx_num_col) > 0
 
