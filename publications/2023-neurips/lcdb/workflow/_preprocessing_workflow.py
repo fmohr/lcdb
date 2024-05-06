@@ -157,6 +157,8 @@ class PreprocessedWorkflow(BaseWorkflow):
 
                 # test feasibility
                 descriptor = str(self.pp_pipeline)
+                print(descriptor)
+                print(f'X shape {X.shape}')
                 if "PolynomialFeatures" in descriptor:
 
                     memory_limit = 4  # in GB
@@ -165,6 +167,7 @@ class PreprocessedWorkflow(BaseWorkflow):
                     num_allowed_features = int(max_memory / memory_cost_per_feature)
 
                     poly = self.pp_pipeline[KEY_FEATUREGEN]
+                    print(f'Poly setup: {poly}')
                     num_created_features = poly._num_combinations(
                         n_features=X.shape[1],
                         min_degree=0,
@@ -173,7 +176,10 @@ class PreprocessedWorkflow(BaseWorkflow):
                         include_bias=poly.include_bias,
                     )
                     predicted_memory = num_created_features * memory_cost_per_feature
-
+                    print(f'Memory allowed: {max_memory}')
+                    print(f'Memory predicted: {predicted_memory}')
+                    print(f'Features allowed: {num_allowed_features}')
+                    print(f'Features created: {num_created_features}')
                     if num_created_features > num_allowed_features:
                         raise Exception(
                             f"PolynomialFeatures would generate {num_created_features} features. "
@@ -201,7 +207,7 @@ class PreprocessedWorkflow(BaseWorkflow):
         # step 1: imputation
         if np.any(pd.isnull(X)):
             cat_steps.append(("cat_imputer", SimpleImputer(strategy="most_frequent")))
-            num_steps.append(("num_imputer", SimpleImputer(strategy="median")))
+            num_steps.append(("num_imputer", SimpleImputer(strategy="most_frequent")))
 
         # step 2: encoding of categorical attributes
         if has_cat:

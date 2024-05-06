@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --nodes=1
+#SBATCH --nodes=2
 #SBATCH --partition=rome
 #SBATCH --time=01:00:00
 #SBATCH --cpus-per-task=128
@@ -35,7 +35,7 @@ echo "Initial configs '$LCDB_INITIAL_CONFIGS'"
 
 # Run experiment
 srun -n ${NTOTRANKS} -N ${NNODES} \
-     --cpus-per-task $CORES_PER_TASK \
+     --tres-per-task=cpu:$CORES_PER_TASK \
      --threads-per-core $THREADS_PER_CORE \
      lcdb run \
     --openml-id $LCDB_OPENML_ID \

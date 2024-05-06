@@ -1,6 +1,6 @@
 #!/bin/bash
 
-export LCDB_NUM_CONFIGS=127
+export LCDB_NUM_CONFIGS=254
 export LCDB_WORKFLOW=lcdb.workflow.sklearn.KNNWorkflow
 export LCDB_WORKFLOW_SEED=42
 export LCDB_VALID_SEED=42
@@ -10,7 +10,9 @@ declare -a values
 while IFS= read -r line || [[ -n "$line" ]]; do
     values+=("$line")
 done < "./../datasets_to_test.csv"
-export LCDB_OPENML_ID_ARRAY=(${values[@]})
+# export LCDB_OPENML_ID_ARRAY=(${values[@]})
+export LCDB_OPENML_ID_ARRAY=(3)
+
 
 if [[ -z "${SLURM_ARRAY_TASK_ID}" ]]; then
   export LCDB_OPENML_ID=3

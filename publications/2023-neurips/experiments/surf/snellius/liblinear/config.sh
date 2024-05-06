@@ -10,6 +10,8 @@ while IFS= read -r line || [[ -n "$line" ]]; do
     values+=("$line")
 done < "./../datasets_to_test.csv"
 export LCDB_OPENML_ID_ARRAY=(${values[@]})
+export LCDB_OPENML_ID_ARRAY=(33)
+
 
 if [[ -z "${SLURM_ARRAY_TASK_ID}" ]]; then
   export LCDB_OPENML_ID=3
