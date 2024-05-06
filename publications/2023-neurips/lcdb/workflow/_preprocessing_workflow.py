@@ -1,5 +1,6 @@
 import warnings
 
+import os
 import numpy as np
 import pandas as pd
 from sys import getsizeof
@@ -153,43 +154,66 @@ class PreprocessedWorkflow(BaseWorkflow):
             warnings.simplefilter("ignore", UserWarning)
 
             if not self.transform_fitted:
+
+                # Memory limits (Configurable)
+                memory_limit_giga_bytes = float(
+                    os.environ.get("LCDB_EVALUATION_MEMORY_LIMIT", 4)
+                )  # in GB
+                memory_limit_bytes = memory_limit_giga_bytes * 1024**3  # in bytes
+
                 self.pp_pipeline = self.get_pp_pipeline(X, y, metadata, **self.pp_kws)
+                pipeline_descriptor = str(self.pp_pipeline)
 
-                # test feasibility
-                descriptor = str(self.pp_pipeline)
-                print(descriptor)
-                print(f'X shape {X.shape}')
-                if "PolynomialFeatures" in descriptor:
+                num_instances = X.shape[0]
+                num_features = X.shape[1]
 
-                    memory_limit = 4  # in GB
-                    max_memory = memory_limit * 1024**3
-                    memory_cost_per_feature = X.shape[0] * 8  # independently of the original type, it WILL be float64
-                    num_allowed_features = int(max_memory / memory_cost_per_feature)
+                used_memory_bytes = num_instances * num_features * 8
+
+                if "PolynomialFeatures" in pipeline_descriptor:
+
+                    memory_cost_per_feature = (
+                        num_instances * 8
+                    )  # independently of the original type, it WILL be float64
+
+                    # !Uncomment to debug
+                    # num_allowed_features = int(
+                    #     memory_limit_bytes / memory_cost_per_feature
+                    # )
+                    # print(f"{num_allowed_features}")
 
                     poly = self.pp_pipeline[KEY_FEATUREGEN]
-                    print(f'Poly setup: {poly}')
                     num_created_features = poly._num_combinations(
-                        n_features=X.shape[1],
+                        n_features=num_features,
                         min_degree=0,
                         max_degree=poly.degree,
                         interaction_only=poly.interaction_only,
                         include_bias=poly.include_bias,
                     )
-                    predicted_memory = num_created_features * memory_cost_per_feature
-                    print(f'Memory allowed: {max_memory}')
-                    print(f'Memory predicted: {predicted_memory}')
-                    print(f'Features allowed: {num_allowed_features}')
-                    print(f'Features created: {num_created_features}')
-                    if num_created_features > num_allowed_features:
-                        raise Exception(
-                            f"PolynomialFeatures would generate {num_created_features} features. "
-                            f"The {memory_limit}GB memory constraint only allows for {num_allowed_features}."
+
+                    used_memory_bytes += num_created_features * memory_cost_per_feature
+
+                    if used_memory_bytes > memory_limit_bytes:
+                        raise RuntimeError(
+                            f"PolynomialFeatures is predicted to consume approximately {used_memory_bytes/(1024**3):.3f} GB when a maximum of {memory_limit_bytes/(1024**3):.3f} GB is allowed!"
                         )
 
-                    if num_created_features > 10**6:
-                        raise Exception(f"We do not allow more than one million features.")
+                    # Update the resulting number of features `num_features` after applying PolynomialFeatures transformation
+                    num_features = num_created_features
+
+                if "FeatureAgglomeration" in pipeline_descriptor:
+                    # Will test `num_features**2` possible "links" (translating the memory complexity)
+
+                    used_memory_bytes += (
+                        num_features * num_features * num_instances * 8
+                    )  # in bytes
+
+                    if used_memory_bytes > memory_limit_bytes:
+                        raise RuntimeError(
+                            f"FeatureAgglomeration is predicted to consume approximately {used_memory_bytes/(1024**3):.3f} GB when a maximum of {memory_limit_bytes/(1024**3):.3f} GB is allowed!"
+                        )
 
                 self.pp_pipeline.fit(X, y)
+
             X = self.pp_pipeline.transform(X) if self.pp_pipeline is not None else X
 
         return X
@@ -273,7 +297,9 @@ class PreprocessedWorkflow(BaseWorkflow):
             if featuregen_val == "poly":
                 # we use include_bias=False as most linear models have a `fit_intercept=True`
                 # by default
-                featuregen = PolynomialFeatures(degree=self.poly_degree, include_bias=False)
+                featuregen = PolynomialFeatures(
+                    degree=self.poly_degree, include_bias=False
+                )
             elif featuregen_val == "none":
                 featuregen = None
             else:
@@ -316,6 +342,7 @@ class PreprocessedWorkflow(BaseWorkflow):
             elif featuremapper_val == "ka_nystroem":
                 featuremapper = Nystroem()
             elif featuremapper_val == "agglomerator":
+                # If enable, n_features**2 combinations
                 featuremapper = FeatureAgglomeration()
             elif featuremapper_val == "none":
                 featuremapper = None

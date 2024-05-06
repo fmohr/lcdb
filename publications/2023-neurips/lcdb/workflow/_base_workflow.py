@@ -74,5 +74,6 @@ class BaseWorkflow(abc.ABC):
         """Transform the data."""
         return X
 
+    @classmethod
     def config_space(cls) -> ConfigSpace.ConfigurationSpace:
         return cls._config_space
