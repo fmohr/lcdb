@@ -22,6 +22,7 @@ platform_infos = platform.platform()
 REQUIRED = [
     "ConfigSpace>=0.6.1",
     "deephyper[hps]>=0.6.0",
+    "jmespath==1.0.1",
     "numpy",
     "openml",
     "pandas>=0.24.2",
