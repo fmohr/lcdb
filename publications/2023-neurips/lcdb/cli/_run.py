@@ -291,10 +291,7 @@ def run(
 
     infos["json"] = timer.as_json()
 
-    # TODO: to be replaced by the real score(s)
-    # get validation accuracy score on last anchor
-    valid_accuracy = controller.objective
-    results = {"objective": valid_accuracy, "metadata": infos}
+    results = {"objective": controller.objective, "metadata": infos}
 
     return results
 
