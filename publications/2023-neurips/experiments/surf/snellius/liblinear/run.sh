@@ -17,6 +17,7 @@ source config.sh
 
 export timeout=3500
 
+export LCDB_EVALUATION_MEMORY_LIMIT=2
 export NRANKS_PER_NODE=32
 export CORES_PER_NODE=$SLURM_CPUS_PER_TASK
 export CORES_PER_TASK=$(( $CORES_PER_NODE / $NRANKS_PER_NODE))
@@ -50,14 +51,6 @@ srun -n ${NTOTRANKS} -N ${NNODES} \
     --test-seed $LCDB_TEST_SEED \
     --evaluator mpicomm 
 
-    #  lcdb test \
-    # --openml-id $LCDB_OPENML_ID \
-    # --workflow-class $LCDB_WORKFLOW \
-    # --monotonic \
-    # --valid-seed $LCDB_VALID_SEED \
-    # --test-seed $LCDB_TEST_SEED \
-    # --workflow-seed $LCDB_WORKFLOW_SEED \
-    # --timeout-on-fit -1 > test-output.json
 gzip --best results.csv 
 
 

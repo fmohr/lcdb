@@ -167,8 +167,12 @@ def main(
             f"Task type must be 'classification' or 'regression' but is {task_type}."
         )
 
+    memory_limit_giga_bytes = float(
+        os.environ.get("LCDB_EVALUATION_MEMORY_LIMIT", 10)
+    )  # in GB
+
     # TODO: memory_limit should replaced and passed as a parameter
-    run_function = profile(memory=True, memory_limit=2010667776, memory_tracing_interval=0.01)(run)
+    run_function = profile(memory=True, memory_limit=memory_limit_giga_bytes * 1024**3, memory_tracing_interval=0.01)(run)
 
     output = run_function(
         RunningJob(id=0, parameters=config_default),
