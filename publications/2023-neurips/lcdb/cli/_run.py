@@ -187,7 +187,6 @@ def add_subparser(subparsers):
     subparser.set_defaults(func=function_to_call)
 
 
-@profile(memory=True)
 def run(
     job: RunningJob,
     openml_id: int = 3,
@@ -387,6 +386,7 @@ def main(
         for _, row in ip_df.iterrows():
             initial_points.append(row.to_dict())
     else:
+        # TODO: this will fail, needs special preprocessing for inactive parameters such as in lcdb test
         initial_points.append(config_default)
 
     run_function_kwargs = {
@@ -407,8 +407,12 @@ def main(
     method_kwargs["run_function_kwargs"] = run_function_kwargs
     method_kwargs["callbacks"] = [TqdmCallback()] if verbose else []
 
+    # Imposing memory limits to the run-function
+    # TODO: memory_limit should replaced and passed as a parameter
+    run_function = profile(memory=True)(run)
+
     with Evaluator.create(
-        run,
+        run_function,
         method=evaluator,
         method_kwargs=method_kwargs,
     ) as evaluator:

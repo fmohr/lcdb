@@ -1,10 +1,11 @@
 """Command line to test workflow."""
+
 import json
 import os
 import logging
 
 import lcdb.json
-from deephyper.evaluator import RunningJob
+from deephyper.evaluator import RunningJob, profile
 from lcdb.utils import import_attr_from_module
 
 from ._run import run
@@ -166,7 +167,10 @@ def main(
             f"Task type must be 'classification' or 'regression' but is {task_type}."
         )
 
-    output = run(
+    # TODO: memory_limit should replaced and passed as a parameter
+    run_function = profile(memory=True, memory_limit=2010667776, memory_tracing_interval=0.01)(run)
+
+    output = run_function(
         RunningJob(id=0, parameters=config_default),
         openml_id=openml_id,
         workflow_class=workflow_class,
