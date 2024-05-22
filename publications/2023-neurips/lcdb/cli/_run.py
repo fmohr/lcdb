@@ -1,4 +1,5 @@
 """Command line to run experiments."""
+
 import copy
 import logging
 import os
@@ -330,7 +331,9 @@ def main(
         )
 
         if num_workers < 0:
-            if hasattr(os, "sched_getaffinity"):
+            if evaluator == "serial":
+                num_workers = 1
+            elif hasattr(os, "sched_getaffinity"):
                 # Number of CPUs the current process can use
                 num_workers = len(os.sched_getaffinity(0))
             else:
