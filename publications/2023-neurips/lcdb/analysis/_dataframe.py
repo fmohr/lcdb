@@ -3,7 +3,7 @@ from typing import Tuple
 
 import numpy as np
 import pandas as pd
-from deephyper.analysis.hpo import filter_failed_objectives
+from deephyper.analysis.hps import filter_failed_objectives
 
 import lcdb.json
 
