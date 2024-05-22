@@ -1,6 +1,7 @@
 """Command line to run experiments."""
 
 import copy
+import functools
 import logging
 import os
 import pathlib
@@ -20,14 +21,14 @@ except ModuleNotFoundError:
 
 import lcdb.json
 import pandas as pd
-from deephyper.evaluator import Evaluator, RunningJob, profile
+from deephyper.evaluator import Evaluator, RunningJob
 from deephyper.evaluator.callback import TqdmCallback
 from deephyper.problem import HpProblem
 from deephyper.search.hps import CBO
 from lcdb.controller import LCController
 from lcdb.data import load_task
 from lcdb.timer import Timer
-from lcdb.utils import import_attr_from_module
+from lcdb.utils import import_attr_from_module, terminate_on_memory_exceeded
 
 # Avoid Tensorflow Warnings
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = str(3)
@@ -412,9 +413,16 @@ def main(
 
     # Imposing memory limits to the run-function
     # TODO: memory_limit should replaced and passed as a parameter
-    run_function = profile(
-        memory=True, memory_limit=0.7 * (1024**3), memory_tracing_interval=0.1
-    )(run)
+    memory_limit = 0.7 * (1024**3)
+    memory_tracing_interval = 0.1
+    raise_exception = False
+    run_function = functools.partial(
+        terminate_on_memory_exceeded,
+        memory_limit,
+        memory_tracing_interval,
+        raise_exception,
+        run,
+    )
 
     with Evaluator.create(
         run_function,

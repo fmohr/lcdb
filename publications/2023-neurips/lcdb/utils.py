@@ -1,8 +1,15 @@
+import functools
 import importlib
 import multiprocessing
 import multiprocessing.pool
+import os
 import time
+from concurrent.futures import CancelledError, ProcessPoolExecutor
+
 import numpy as np
+import psutil
+
+from deephyper.evaluator._run_function_utils import standardize_run_function_output
 
 
 def import_attr_from_module(path: str):
@@ -69,6 +76,78 @@ def terminate_on_timeout(timeout, func, *args, **kwargs):
         raise FunctionCallTimeoutError(f"Function timeout expired after: {timeout}")
     finally:
         pool.terminate()
+
+
+def terminate_on_memory_exceeded(
+    memory_limit,
+    memory_tracing_interval,
+    raise_exception,
+    func,
+    *args,
+    **kwargs,
+):
+    """Decorator to use on a ``run_function`` to profile its execution-time and peak memory usage.
+
+    Args:
+        memory_limit (int): In bytes, if set to a positive integer, the memory usage is measured at regular intervals and the function is interrupted if the memory usage exceeds the limit. If set to ``-1``, only the peak memory is measured. If the executed function is busy outside of the Python interpretor, this mechanism will not work properly. Defaults to ``-1``.
+        memory_tracing_interval (float): In seconds, the interval at which the memory usage is measured. Defaults to ``0.1``.
+
+    Returns:
+        function: a decorated function.
+    """
+
+    timestamp_start = time.time()
+
+    p = psutil.Process()  # get the current process
+
+    output = None
+
+    # with ThreadPoolExecutor(max_workers=1) as executor:
+    with ProcessPoolExecutor(max_workers=1) as executor:
+        future = executor.submit(os.getpid)
+        pid = future.result()
+        p = psutil.Process(pid)
+
+        future = executor.submit(func, *args, **kwargs)
+
+        memory_peak = p.memory_info().rss
+
+        while not future.done():
+
+            # in bytes (not the peak memory but last snapshot)
+            memory_peak = max(p.memory_info().rss, memory_peak)
+
+            if memory_limit > 0 and memory_peak > memory_limit:
+                p.kill()
+                future.cancel()
+                output = "F_memory_limit_exceeded"
+
+                if raise_exception:
+                    raise CancelledError(
+                        f"Memory limit exceeded: {memory_peak} > {memory_limit}"
+                    )
+
+                break
+
+            time.sleep(memory_tracing_interval)
+
+        if output is None:
+            output = future.result()
+
+    timestamp_end = time.time()
+
+    output = standardize_run_function_output(output)
+    metadata = {
+        "timestamp_start": timestamp_start,
+        "timestamp_end": timestamp_end,
+    }
+
+    metadata["memory"] = memory_peak
+
+    metadata.update(output["metadata"])
+    output["metadata"] = metadata
+
+    return output
 
 
 def get_schedule(name, **kwargs):
