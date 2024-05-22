@@ -1,12 +1,13 @@
 """Command line to test workflow."""
 
+import functools
 import json
 import os
 import logging
 
 import lcdb.json
-from deephyper.evaluator import RunningJob, profile
-from lcdb.utils import import_attr_from_module
+from deephyper.evaluator import RunningJob
+from lcdb.utils import import_attr_from_module, terminate_on_memory_exceeded
 
 from ._run import run
 
@@ -172,7 +173,16 @@ def main(
     )  # in GB
 
     # TODO: memory_limit should replaced and passed as a parameter
-    run_function = profile(memory=True, memory_limit=memory_limit_giga_bytes * 1024**3, memory_tracing_interval=0.01)(run)
+    memory_limit = memory_limit_giga_bytes * (1024**3)
+    memory_tracing_interval = 0.1
+    raise_exception = False
+    run_function = functools.partial(
+        terminate_on_memory_exceeded,
+        memory_limit,
+        memory_tracing_interval,
+        raise_exception,
+        run,
+    )
 
     output = run_function(
         RunningJob(id=0, parameters=config_default),
