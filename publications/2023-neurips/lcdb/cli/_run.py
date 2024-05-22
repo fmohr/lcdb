@@ -412,7 +412,9 @@ def main(
 
     # Imposing memory limits to the run-function
     # TODO: memory_limit should replaced and passed as a parameter
-    run_function = profile(memory=True)(run)
+    run_function = profile(
+        memory=True, memory_limit=0.7 * (1024**3), memory_tracing_interval=0.1
+    )(run)
 
     with Evaluator.create(
         run_function,
