@@ -72,7 +72,10 @@ CONFIG_SPACE = ConfigurationSpace(
         "snapshot_ensembles": Categorical(
             "snapshot_ensembles", items=[False, True], default=True
         ),
-        # TODO: Define Conditional for this one and also the period for Snapshot Ensembles
+        # TODO: The following snapshot parameters should be made conditional and only appear if snapshot_ensembles=True
+        "snapshot_ensembles_period": Integer(
+            "snapshot_ensembles_period", bounds=[2, 100], default=20
+        ),
         "snapshot_ensembles_reset_weights": Categorical(
             "snapshot_ensembles_reset_weights", items=[False, True], default=False
         ),
@@ -183,6 +186,7 @@ class DenseNNWorkflow(BaseWorkflow):
         stochastic_weight_averaging=True,
         lookahead=True,
         snapshot_ensembles=True,
+        snapshot_ensembles_period=20,
         snapshot_ensembles_reset_weights=False,
         shuffle_each_epoch=True,
         transform_real="none",
@@ -242,6 +246,7 @@ class DenseNNWorkflow(BaseWorkflow):
         self.stochastic_weight_averaging = stochastic_weight_averaging
         self.lookahead = lookahead
         self.snapshot_ensembles = snapshot_ensembles
+        self.snapshot_ensembles_period = snapshot_ensembles_period
         self.snapshot_ensembles_reset_weights = snapshot_ensembles_reset_weights
         self.snapshot_callback = None
 
@@ -410,7 +415,7 @@ class DenseNNWorkflow(BaseWorkflow):
                 workflow=self,
                 optimizer=base_optimizer,
                 reset_weights=self.snapshot_ensembles_reset_weights,
-                period=50
+                period=self.snapshot_ensembles_period
             )
             callbacks.append(self.snapshot_callback)
 
