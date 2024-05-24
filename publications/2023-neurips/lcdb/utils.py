@@ -3,8 +3,9 @@ import importlib
 import multiprocessing
 import multiprocessing.pool
 import os
+import signal
 import time
-from concurrent.futures import CancelledError, ProcessPoolExecutor
+from concurrent.futures import CancelledError, ProcessPoolExecutor, BrokenExecutor
 
 import numpy as np
 import psutil
@@ -102,37 +103,39 @@ def terminate_on_memory_exceeded(
 
     output = None
 
-    # with ThreadPoolExecutor(max_workers=1) as executor:
-    with ProcessPoolExecutor(max_workers=1) as executor:
-        future = executor.submit(os.getpid)
-        pid = future.result()
-        p = psutil.Process(pid)
+    try:
+        with ProcessPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(os.getpid)
+            pid = future.result()
+            p = psutil.Process(pid)
 
-        future = executor.submit(func, *args, **kwargs)
+            future = executor.submit(func, *args, **kwargs)
 
-        memory_peak = p.memory_info().rss
+            memory_peak = p.memory_info().rss
 
-        while not future.done():
+            while not future.done():
 
-            # in bytes (not the peak memory but last snapshot)
-            memory_peak = max(p.memory_info().rss, memory_peak)
+                # in bytes (not the peak memory but last snapshot)
+                memory_peak = max(p.memory_info().rss, memory_peak)
 
-            if memory_limit > 0 and memory_peak > memory_limit:
-                p.kill()
-                future.cancel()
-                output = "F_memory_limit_exceeded"
+                if memory_limit > 0 and memory_peak > memory_limit:
+                    output = "F_memory_limit_exceeded"
+                    os.kill(pid, signal.SIGTERM)
+                    future.cancel()
 
-                if raise_exception:
-                    raise CancelledError(
-                        f"Memory limit exceeded: {memory_peak} > {memory_limit}"
-                    )
+                    if raise_exception:
+                        raise CancelledError(
+                            f"Memory limit exceeded: {memory_peak} > {memory_limit}"
+                        )
 
-                break
+                    break
 
-            time.sleep(memory_tracing_interval)
+                time.sleep(memory_tracing_interval)
 
-        if output is None:
-            output = future.result()
+            if output is None:
+                output = future.result()
+    except BrokenExecutor:
+        pass
 
     timestamp_end = time.time()
 
