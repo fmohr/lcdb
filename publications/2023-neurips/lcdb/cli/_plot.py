@@ -8,6 +8,7 @@ import pandas as pd
 import matplotlib as mpl
 import numpy as np
 from matplotlib.colors import LinearSegmentedColormap
+import json
 
 
 from deephyper.analysis import rank
@@ -20,6 +21,7 @@ from lcdb.analysis.score import balanced_accuracy_from_confusion_matrix
 
 update_matplotlib_rc()
 figsize = figure_size(252 * 1.8, 1.0)
+
 
 def plot_learning_curves(
     fidelity_values,
@@ -150,7 +152,98 @@ def plot_regret_from_topk(fidelity_values, metric_values, topk=10, ax=None):
 
     return fig, ax
 
+def plto_mem_per_job(r_df, output_path):
+    """
+    Method to plot and save peak memory usage per (successful) job id 
+    Input:
+        - r_df: dataframe with successful job_id 
+        - output_path: output directory
+    """
+    fig, ax = plt.subplots(figsize=figsize)
+    ax.bar(r_df['job_id'], r_df['m:memory']/(1024**3), color='blue')
 
+    avg_mem_usage = r_df['m:memory'].mean()/(1024**3)
+    ax.axhline(y=avg_mem_usage, color='green', linestyle='--', linewidth=2, label=f'avereg_mem_use')
+
+    ax.set_title('Memory Usage per Job ID')
+    ax.set_xlabel('Job ID')
+    ax.set_ylabel('Memory Peak (GBs)')
+    plt.savefig(os.path.join(os.path.dirname(output_path), "jobID_vs_mem.jpg"), dpi=300, bbox_inches="tight")
+
+def save_stats(r_df, r_df_failed, output_path):
+
+    csv_file = os.path.join(os.path.dirname(output_path), "statistics.json")
+
+    dataset_id = int(r_df['m:openmlid'][0])
+
+    # Calculate several memory statistics
+    avg_mem_usage = r_df['m:memory'].mean()/(1024**3)
+    std_mem_usage = r_df['m:memory'].std()/(1024**3)
+    min_mem_usage = r_df['m:memory'].min()/(1024**3)
+    max_mem_usage = r_df['m:memory'].max()/(1024**3)
+    quartile_25_mem = r_df['m:memory'].quantile(0.25)/(1024**3)
+    quartile_75_mem = r_df['m:memory'].quantile(0.75)/(1024**3)
+    start_timestamp =  r_df['m:timestamp_start'].sum()
+    end_timestamp = r_df['m:timestamp_end'].sum()
+    # time elapsed for whole dataset
+    time_elapsed = end_timestamp - start_timestamp
+
+
+    # Calculate suggested number of cores and memory per core
+    total_memory_per_node = 224
+    dynamic_k = 1.0 + (std_mem_usage / avg_mem_usage)
+    safe_memory_per_core = avg_mem_usage + dynamic_k * std_mem_usage
+    suggested_core_usage = min(128, total_memory_per_node//safe_memory_per_core)
+    memory_per_core = total_memory_per_node / suggested_core_usage
+
+    # percentage of failed configs 
+    failed_perc = len(r_df_failed) / (len(r_df) + len(r_df_failed))*100
+
+    stats = {
+        'openML_id': dataset_id,
+        'avg_mem_usage': avg_mem_usage,
+        'std_mem_usage': std_mem_usage,
+        'min_mem_usage': min_mem_usage,
+        'max_mem_usage': max_mem_usage,
+        'quantile_25_mem': quartile_25_mem,
+        'quantile_75_mem': quartile_75_mem,
+        'time_elapsed': time_elapsed,
+        'cores_suggestion': suggested_core_usage,
+        'mem_per_core': memory_per_core,
+        'failed_mem(%)': failed_perc
+    }
+
+    with open(csv_file, 'w') as json_file:
+        json.dump(stats, json_file, indent=4)
+
+        
+def plot_error_rate_vs_samples(r_df, output_path):
+
+    """
+    Method to plot and save Validation Balanced Error Rate vs. Number of Samples 
+    Input:
+        - r_df: dataframe with successful job_id 
+        - output_path: output directory
+    """
+    source = r_df["m:json"]
+    query_anchor_values = QueryAnchorValues()
+    anchor_values = source.apply(query_anchor_values).to_list()
+
+    query_confusion_matrix_values = QueryMetricValuesFromAnchors("confusion_matrix", split_name="val")
+    out = source.apply(query_confusion_matrix_values)
+    balanced_error_rate_values = out.apply(lambda x: list(map(lambda x: 1 - balanced_accuracy_from_confusion_matrix(x), x))).to_list()
+
+    for i, (xi, yi) in enumerate(zip(anchor_values, balanced_error_rate_values)):
+        anchor_values[i] = xi[:len(yi)]
+
+    fig, ax = plt.subplots(figsize=figsize)
+    plot_learning_curves(anchor_values, balanced_error_rate_values, metric_value_baseline=balanced_error_rate_values[0][-1], ax=ax)
+    ax.axhline(y=balanced_error_rate_values[0][-1], color="lime", linestyle="--")
+    ax.set_xlabel(f"Number of Samples")
+    ax.set_ylabel(f"Validation Balanced Error Rate")
+    ax.set_xscale("log")
+    ax.set_yscale("log")
+    plt.savefig(os.path.join(os.path.dirname(output_path), "val_balanced_error_rate_vs_samples.jpg"), dpi=300, bbox_inches="tight")
 
 def add_subparser(subparsers):
     """
@@ -185,26 +278,9 @@ def main(
     with gzip.GzipFile(source_csv, "rb") as f:        
         r_df, r_df_failed = read_csv_results(f)
 
-    
-  # Plot: Validation Balanced Error Rate vs. Number of Samples
-    source = r_df["m:json"]
-
-    query_anchor_values = QueryAnchorValues()
-    anchor_values = source.apply(query_anchor_values).to_list()
-
-    query_confusion_matrix_values = QueryMetricValuesFromAnchors("confusion_matrix", split_name="val")
-    out = source.apply(query_confusion_matrix_values)
-    balanced_error_rate_values = out.apply(lambda x: list(map(lambda x: 1 - balanced_accuracy_from_confusion_matrix(x), x))).to_list()
-
-    for i, (xi, yi) in enumerate(zip(anchor_values, balanced_error_rate_values)):
-        anchor_values[i] = xi[:len(yi)]
-
-    fig, ax = plt.subplots(figsize=figsize)
-    plot_learning_curves(anchor_values, balanced_error_rate_values, metric_value_baseline=balanced_error_rate_values[0][-1], ax=ax)
-    ax.axhline(y=balanced_error_rate_values[0][-1], color="lime", linestyle="--")
-    ax.set_xlabel(f"Number of Samples")
-    ax.set_ylabel(f"Validation Balanced Error Rate")
-    ax.set_xscale("log")
-    ax.set_yscale("log")
-    plt.savefig(os.path.join(os.path.dirname(output_path), "val_balanced_error_rate_vs_samples.jpg"), dpi=300, bbox_inches="tight")
-    plt.show()
+    # Plot: Validation Balanced Error Rate vs. Number of Samples
+    plot_error_rate_vs_samples(r_df, output_path)
+    # Plot: Memory usage per job ID
+    plto_mem_per_job(r_df, output_path)
+    # Save stats for current execution
+    save_stats(r_df, r_df_failed, output_path)

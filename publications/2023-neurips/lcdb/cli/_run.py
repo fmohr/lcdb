@@ -147,6 +147,13 @@ def add_subparser(subparsers):
         help="Overall timeout in seconds.",
     )
     subparser.add_argument(
+        "--workflow-memory-limit",
+        type=float,
+        default=1750.0,
+        required=False,
+        help="Memory limit per config (MBs).",
+    )
+    subparser.add_argument(
         "--initial-configs",
         type=str,
         required=False,
@@ -317,6 +324,7 @@ def main(
     num_workers,
     anchor_schedule,
     epoch_schedule,
+    workflow_memory_limit
 ):
     """Entry point for the command line interface."""
 
@@ -411,9 +419,8 @@ def main(
     method_kwargs["run_function_kwargs"] = run_function_kwargs
     method_kwargs["callbacks"] = [TqdmCallback()] if verbose else []
 
-    # Imposing memory limits to the run-function
-    # TODO: memory_limit should replaced and passed as a parameter
-    memory_limit = 0.7 * (1024**3)
+    # Convert from MBs to Bytes
+    memory_limit = workflow_memory_limit * (1024**2)
     memory_tracing_interval = 0.1
     raise_exception = False
     run_function = functools.partial(

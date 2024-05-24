@@ -171,8 +171,6 @@ def main(
     memory_limit_giga_bytes = float(
         os.environ.get("LCDB_EVALUATION_MEMORY_LIMIT", 10)
     )  # in GB
-
-    # TODO: memory_limit should replaced and passed as a parameter
     memory_limit = memory_limit_giga_bytes * (1024**3)
     memory_tracing_interval = 0.1
     raise_exception = False
