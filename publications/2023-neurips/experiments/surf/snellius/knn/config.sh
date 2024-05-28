@@ -1,6 +1,6 @@
 #!/bin/bash
 
-export LCDB_NUM_CONFIGS=63
+export LCDB_NUM_CONFIGS=10
 export LCDB_WORKFLOW=lcdb.workflow.sklearn.KNNWorkflow
 export LCDB_WORKFLOW_SEED=42
 export LCDB_VALID_SEED=42

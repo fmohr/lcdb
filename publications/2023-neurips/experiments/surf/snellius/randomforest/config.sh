@@ -1,6 +1,6 @@
 #!/bin/bash
 
-export LCDB_NUM_CONFIGS=127
+export LCDB_NUM_CONFIGS=10
 export LCDB_WORKFLOW=lcdb.workflow.sklearn.RandomForestWorkflow
 export LCDB_WORKFLOW_SEED=42
 export LCDB_VALID_SEED=42

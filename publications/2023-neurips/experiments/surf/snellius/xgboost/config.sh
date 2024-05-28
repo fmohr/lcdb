@@ -1,6 +1,6 @@
 #!/bin/bash
 
-export LCDB_NUM_CONFIGS=127
+export LCDB_NUM_CONFIGS=1023
 export LCDB_WORKFLOW=lcdb.workflow.xgboost.XGBoostWorkflow
 export LCDB_WORKFLOW_SEED=42
 export LCDB_VALID_SEED=42
