@@ -1,8 +1,8 @@
 import platform
+import importlib
 
 import keras
 import numpy as np
-import importlib
 
 
 def is_arm_mac():
