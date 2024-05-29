@@ -62,6 +62,7 @@ class LibSVMWorkflow(PreprocessedWorkflow):
 
     def __init__(
         self,
+        timer=None,
         C=1,
         shrinking=True,
         tol=1e-4,
@@ -76,7 +77,7 @@ class LibSVMWorkflow(PreprocessedWorkflow):
         random_state=None,
         **kwargs,
     ):
-        super().__init__(**filter_keys_with_prefix(kwargs, prefix="pp@"))
+        super().__init__(timer, **filter_keys_with_prefix(kwargs, prefix="pp@"))
 
         learner_kwargs = dict(
             C=C,
@@ -97,21 +98,18 @@ class LibSVMWorkflow(PreprocessedWorkflow):
     def config_space(cls):
         return cls._config_space
 
-    def _fit(self, X, y, metadata):
+    def _fit_model_after_transformation(self, X, y, X_valid, y_valid, X_test, y_test, metadata):
         self.metadata = metadata
-        X = self.transform(X, y, metadata)
 
         self.learner.fit(X, y)
 
         self.infos["classes"] = list(self.learner.classes_)
         self.infos["n_iter_"] = self.learner.n_iter_
 
-    def _predict(self, X):
-        X = self.pp_pipeline.transform(X)
+    def _predict_after_transform(self, X):
         return self.learner.predict(X)
 
-    def _predict_proba(self, X):
-        X = self.pp_pipeline.transform(X)
+    def _predict_proba_after_transform(self, X):
         decision_fun_vals = self.learner.decision_function(X)
         sigmoid = lambda z: 1/(1 + np.exp(-z))
         if len(decision_fun_vals.shape) == 2:

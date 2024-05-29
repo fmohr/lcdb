@@ -25,7 +25,7 @@ from sklearn.preprocessing import (
     OneHotEncoder,
     OrdinalEncoder,
     PolynomialFeatures,
-    StandardScaler,
+    StandardScaler, LabelEncoder,
 )
 
 from ._base_workflow import BaseWorkflow
@@ -40,7 +40,7 @@ CONFIG_SPACE = ConfigurationSpace(
     name="standard_preprocessing",
     space={
         KEY_CAT_ENCODER: Categorical(
-            KEY_CAT_ENCODER, ["onehot", "ordinal"], default="ordinal"
+            KEY_CAT_ENCODER, ["onehot", "ordinal"], default="onehot"
         ),
         KEY_SCALER: Categorical(KEY_SCALER, ["none", "minmax", "std"], default="none"),
         KEY_FEATUREGEN: Categorical(KEY_FEATUREGEN, ["none", "poly"], default="none"),
@@ -160,7 +160,6 @@ class PreprocessedWorkflow(BaseWorkflow):
                 self.pp_pipeline.fit(X, y)
 
             X = self.pp_pipeline.transform(X) if self.pp_pipeline is not None else X
-
         return X
 
     def get_pp_pipeline(self, X, y, metadata, **kwargs):
@@ -306,3 +305,29 @@ class PreprocessedWorkflow(BaseWorkflow):
 
         # return trained pipeline
         return Pipeline(steps) if steps else None
+
+    def _fit(self, X, y, X_valid, y_valid, X_test, y_test, metadata):
+
+        # transform all the data and store them
+        X_train_transformed = self.transform(X=X, y=y, metadata=metadata, timer_suffix="_train").astype(np.float32)  # create + fit pp pipeline
+        X_valid_transformed = self.transform(X_valid, y_valid, metadata, timer_suffix="_valid").astype(np.float32)
+        X_test_transformed = self.transform(X_test, y_test, metadata, timer_suffix="_test").astype(np.float32)
+
+        self._fit_model_after_transformation(X_train_transformed, y, X_valid_transformed, y_valid, X_test_transformed, y_test, metadata)
+
+    def _fit_model_after_transformation(self, X, y, X_valid, y_valid, X_test, y_test, metadata):
+        raise NotImplementedError
+
+    def _predict(self, X):
+        X = self.pp_pipeline.transform(X).astype(np.float32)
+        return self._predict_after_transform(X)
+
+    def _predict_after_transform(self, X):
+        raise NotImplementedError
+
+    def _predict_proba(self, X):
+        X = self.pp_pipeline.transform(X).astype(np.float32)
+        return self._predict_proba_after_transform(X)
+
+    def _predict_proba_after_transform(self, X):
+        raise NotImplementedError

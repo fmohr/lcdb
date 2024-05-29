@@ -2,6 +2,7 @@ from typing import Tuple
 
 import numpy as np
 import openml
+import pandas as pd
 
 
 def load_from_openml(dataset_id: str) -> Tuple[np.ndarray, np.ndarray, dict]:
@@ -27,6 +28,8 @@ def load_from_openml(dataset_id: str) -> Tuple[np.ndarray, np.ndarray, dict]:
         target=dataset.default_target_attribute
     )
     X, y = X.values, y.values
+    if isinstance(y, pd.core.arrays.categorical.Categorical):
+        y = np.array([v for v in y])
 
     metadata = {
         "type": "classification",

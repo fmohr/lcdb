@@ -2,4 +2,3 @@ numpy
 openml
 py_experimenter
 tqdm
-keras-swa

@@ -18,7 +18,7 @@ from .._preprocessing_workflow import PreprocessedWorkflow
 CONFIG_SPACE = ConfigurationSpace(
     name="sklearn.RandomForestWorkflow",
     space={
-        "n_estimators": Constant("n_estimators", value=2000),
+        "n_estimators": Constant("n_estimators", value=32),
         "criterion": Categorical(
             "criterion", items=["gini", "entropy", "log_loss"], default="gini"
         ),
@@ -110,7 +110,7 @@ class RandomForestWorkflow(PreprocessedWorkflow):
     def config_space(cls):
         return cls._config_space
 
-    def _fit(self, X, y, X_valid, y_valid, X_test, y_test, metadata):
+    def _fit_model_after_transformation(self, X, y, X_valid, y_valid, X_test, y_test, metadata):
         self.metadata = metadata
         X = self.transform(X, y, metadata)
         X_valid = self.transform(X_valid, y_valid, metadata)
@@ -139,6 +139,7 @@ class RandomForestWorkflow(PreprocessedWorkflow):
 
         # now grow forest according to the schedule
         for i, n_estimators in enumerate(self.schedule):
+            print(n_estimators)
             with self.timer.time("epoch", metadata={"value": n_estimators}):
                 with self.timer.time("epoch_train"):
                     self.learner.set_params(n_estimators=n_estimators)
@@ -147,7 +148,9 @@ class RandomForestWorkflow(PreprocessedWorkflow):
                 # compute test scores
                 with self.timer.time("epoch_test"):
                     scorer = ClassificationScorer(
-                        classes=list(self.learner.classes_), timer=self.timer
+                        classes_learner=list(self.learner.classes_),
+                        classes_overall=self.infos["classes_overall"],
+                        timer=self.timer
                     )
                     with self.timer.time("metrics"):
                         # compute train, validation, and test scores of current forest
@@ -170,10 +173,13 @@ class RandomForestWorkflow(PreprocessedWorkflow):
                                 )
 
                         if self.learner.bootstrap:
+
                             # compute train, validation, and test scores of current forest
+                            counters = np.zeros(y_pred_proba_oob.shape)
                             with self.timer.time("oob") as oob_timer:
                                 start_index = self.schedule[i - 1] if i > 0 else 0
                                 labels = list(self.learner.classes_)
+                                n_labels = len(labels)
                                 for t in range(start_index, n_estimators):
                                     considered_tree = self.learner.estimators_[t]
                                     val_indices = get_unsampled_indices(considered_tree)
@@ -181,9 +187,10 @@ class RandomForestWorkflow(PreprocessedWorkflow):
                                         X[val_indices]
                                     )
                                     y_pred_proba_oob[val_indices] = (
-                                        y_pred_proba_oob[val_indices] * t
+                                        y_pred_proba_oob[val_indices] * counters[val_indices]
                                         + y_pred_oob_tree
-                                    ) / (t + 1)
+                                    ) / (counters[val_indices] + 1)
+                                    counters[val_indices] += 1
 
                                 y_pred_oob = np.array(
                                     [
@@ -197,7 +204,8 @@ class RandomForestWorkflow(PreprocessedWorkflow):
                                 sum_of_probs = y_pred_proba_oob.sum(axis=1)
                                 mask = sum_of_probs > 0.0
                                 num_samples = np.sum(mask)
-                                oob_timer["num_samples"] = num_samples
+                                oob_timer["num_samples"] = float(num_samples)
+                                assert np.allclose(1, sum_of_probs[mask]), f"NOT A DISTRIBUTION: {y_pred_proba_oob[mask]}"
 
                                 scorer.score(
                                     y_true=y_true[mask],

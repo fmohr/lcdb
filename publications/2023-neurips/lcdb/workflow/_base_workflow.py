@@ -5,11 +5,13 @@ from lcdb.timer import Timer
 import ConfigSpace
 
 import numpy as np
+from sklearn.preprocessing import LabelEncoder
 
 NP_ARRAY = np.ndarray
 
 
 class BaseWorkflow(abc.ABC):
+
     def __init__(self, timer=None, **kwargs) -> None:
         super().__init__()
         self.timer = Timer() if timer is None else timer
@@ -25,10 +27,52 @@ class BaseWorkflow(abc.ABC):
         # Indicates if the workflow requires test data to be fitted (to be able to predict on test data on child fidelities)
         self.requires_test_to_fit = False
 
-    def fit(self, X, y, metadata, *args, **kwargs) -> "BaseWorkflow":
-        """Fit the workflow to the data."""
-        with self.timer.time("fit"):
-            self._fit(X=X, y=y, metadata=metadata, *args, **kwargs)
+        self.constant_prediction = None  # this is used to treat cases where only one class is provided
+
+        self.label_encoder = LabelEncoder()  # internally we will always work with numeric classes
+
+    def fit(self, X, y, X_valid, y_valid, X_test, y_test, metadata) -> "BaseWorkflow":
+
+        # get label-encoded versions of target
+        y_complete = np.concatenate([y, y_valid, y_test])
+        self.label_encoder.fit(y_complete)
+
+        self.infos["classes_overall_orig"] = self.label_encoder.classes_.tolist()
+
+        self.timer.root["classes"] = self.infos["classes_overall_orig"]
+
+        self.infos["classes_train_orig"] = np.unique(y).tolist()
+        self.infos["classes_valid_orig"] = np.unique(y_valid).tolist()
+        self.infos["classes_test_orig"] = np.unique(y_test).tolist()
+
+        # replace labels
+        y = self.label_encoder.transform(y)
+        y_valid = self.label_encoder.transform(y_valid)
+        y_test = self.label_encoder.transform(y_test)
+
+        # register occurring internal labels
+        self.infos["classes_overall"] = list(range(len(self.label_encoder.classes_)))
+        self.infos["classes_train"] = np.unique(y).tolist()
+        self.infos["classes_valid"] = np.unique(y_valid).tolist()
+        self.infos["classes_test"] = np.unique(y_test).tolist()
+
+        # if there is only one class, create a dummy classifier and always return this class
+        if len(self.infos["classes_train"]) == 1:
+            self.constant_prediction = self.infos["classes_train"][0]
+        else:
+            self.constant_prediction = None
+
+            """Fit the workflow to the data."""
+            with self.timer.time("fit"):
+                self._fit(
+                    X=X,
+                    y=y,
+                    X_valid=X_valid,
+                    y_valid=y_valid,
+                    X_test=X_test,
+                    y_test=y_test,
+                    metadata=metadata
+                )
         self.workflow_fitted = True
         return self
 
@@ -40,8 +84,13 @@ class BaseWorkflow(abc.ABC):
     def predict(self, *args, **kwargs) -> NP_ARRAY:
         """Predict from the data."""
         with self.timer.time("predict"):
-            y_pred = self._predict(*args, **kwargs)
+            y_pred = self.get_predictions_from_probas(self.predict_proba(*args, **kwargs))
+            raise Exception(y_pred)
+
         return y_pred
+
+    def get_predictions_from_probas(self, y_proba):
+        return self.label_encoder.inverse_transform(np.argmax(y_proba, axis=1))
 
     @abc.abstractmethod
     def _predict(
@@ -53,7 +102,13 @@ class BaseWorkflow(abc.ABC):
     def predict_proba(self, *args, **kwargs) -> NP_ARRAY:
         """Predict from the data."""
         with self.timer.time("predict_proba"):
-            y_pred = self._predict_proba(*args, **kwargs)
+
+            # if there is a constant prediction, do not refer to the actual workflow
+            if self.constant_prediction is not None:
+                X = kwargs["X"] if "X" in kwargs else args[0]
+                y_pred = np.ones(X.shape[0])
+            else:
+                y_pred = self._predict_proba(*args, **kwargs)
         return y_pred
 
     @abc.abstractmethod
@@ -63,9 +118,9 @@ class BaseWorkflow(abc.ABC):
         """Predict from the data."""
         raise NotImplementedError
 
-    def transform(self, X, y, metadata) -> NP_ARRAY:
+    def transform(self, X, y, metadata, timer_suffix="") -> NP_ARRAY:
         """Transform the data."""
-        with self.timer.time("transform"):
+        with self.timer.time("transform" + timer_suffix):
             X = self._transform(X, y, metadata)
         self.transform_fitted = True
         return X

@@ -29,10 +29,6 @@ def load_task(task_name: str):
     if metadata["type"] == "classification":
         assert "num_classes" in metadata
 
-        X, y = data
-        y = LabelEncoder().fit_transform(y)
-        data = (X, y)
-
     return data, metadata
 
 

@@ -15,8 +15,8 @@ class MajorityWorkflow(BaseWorkflow):
     # Static Attribute
     _config_space = CONFIG_SPACE
 
-    def __init__(self, timer=None, random_state=None):
-        super().__init__(timer)
+    def __init__(self, timer=None, random_state=None, **kwargs):
+        super().__init__(timer, **kwargs)
 
         self.learner = DummyClassifier(strategy="prior", random_state=random_state)
 
@@ -24,7 +24,7 @@ class MajorityWorkflow(BaseWorkflow):
     def config_space(cls):
         return cls._config_space
 
-    def _fit(self, X, y, metadata):
+    def _fit(self, X, y, X_valid, y_valid, X_test, y_test, metadata):
         self.metadata = metadata
 
         self.learner.fit(X, y)

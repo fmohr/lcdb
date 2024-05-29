@@ -1,10 +1,13 @@
 import keras
+import pandas as pd
 import numpy as np
 from ConfigSpace import Categorical, ConfigurationSpace, Float, Integer
 from ...scorer import ClassificationScorer
 from ...timer import Timer
-from ...utils import get_schedule
+from ...utils import get_schedule, filter_keys_with_prefix
 from .._base_workflow import BaseWorkflow
+from .._preprocessing_workflow import PreprocessedWorkflow
+from ._augmentation import augment_with_mixup
 from .utils import (
     ACTIVATIONS,
     INITIALIZERS,
@@ -15,7 +18,6 @@ from .utils import (
 
 from sklearn.preprocessing import (
     FunctionTransformer,
-    LabelEncoder,
     MinMaxScaler,
     OneHotEncoder,
     OrdinalEncoder,
@@ -30,8 +32,8 @@ from ._snapshot import Snapshot
 CONFIG_SPACE = ConfigurationSpace(
     name="keras._dense",
     space={
-        "num_layers": Integer("num_layers", bounds=(1, 20), default=5),
-        "num_units": Integer("num_units", bounds=(1, 200), log=True, default=20),
+        "num_layers": Integer("num_layers", bounds=(1, 20), default=9),
+        "num_units": Integer("num_units", bounds=(1, 4096), log=True, default=512),
         "activation": Categorical("activation", items=ACTIVATIONS, default="relu"),
         "dropout_rate": Float("dropout_rate", bounds=(0.0, 0.9), default=0.1),
         "skip_co": Categorical("skip_co", items=[True, False], default=True),
@@ -40,7 +42,7 @@ CONFIG_SPACE = ConfigurationSpace(
             "optimizer", items=list(OPTIMIZERS.keys()), default="SGD"
         ),
         "learning_rate": Float(
-            "learning_rate", bounds=(1e-5, 10.0), log=True, default=1e-3
+            "learning_rate", bounds=(1e-5, 10.0), log=True, default=1e-4
         ),
         "batch_size": Integer("batch_size", bounds=(1, 512), log=True, default=32),
         # "num_epochs": Integer("num_epochs", bounds=(1, 100), log=True, default=10),
@@ -64,17 +66,17 @@ CONFIG_SPACE = ConfigurationSpace(
             "kernel_initializer", INITIALIZERS, default="glorot_uniform"
         ),
         "stochastic_weight_averaging": Categorical(
-            "stochastic_weight_averaging", items=[True, False], default=True
+            "stochastic_weight_averaging", items=[True, False], default=False
         ),
         "lookahead": Categorical(
-            "lookahead", items=[True, False], default=True
+            "lookahead", items=[True, False], default=False
         ),
         "snapshot_ensembles": Categorical(
-            "snapshot_ensembles", items=[False, True], default=True
+            "snapshot_ensembles", items=[False, True], default=False
         ),
         # TODO: The following snapshot parameters should be made conditional and only appear if snapshot_ensembles=True
         "snapshot_ensembles_period": Integer(
-            "snapshot_ensembles_period", bounds=[2, 100], default=20
+            "snapshot_ensembles_period", bounds=(2, 100), default=20
         ),
         "snapshot_ensembles_reset_weights": Categorical(
             "snapshot_ensembles_reset_weights", items=[False, True], default=False
@@ -104,7 +106,9 @@ class IterationCurveCallback(keras.callbacks.Callback):
         self.data = data
         self.epoch = None
         self.scorer = ClassificationScorer(
-            classes=self.workflow.infos["classes"], timer=self.timer
+            classes_learner=self.workflow.infos["classes_train"],
+            classes_overall=self.workflow.infos["classes_overall"],
+            timer=self.timer
         )
         self.schedule = get_schedule(
             name=epoch_schedule, n=self.workflow.num_epochs, base=2, power=0.5, delay=0
@@ -148,22 +152,28 @@ class IterationCurveCallback(keras.callbacks.Callback):
                             (
                                 y_pred,
                                 y_pred_proba,
-                            ) = self.workflow._predict_with_proba_without_transform(
-                                data_split["X"]
+                            ) = self.workflow._predict_with_proba_after_transform(
+                                data_split["X"],
+                                use_snapshot_ensemble=True
                             )
 
                         y_true = data_split["y"]
-
-                        self.scorer.score(
+                        scores = self.scorer.score(
                             y_true=y_true,
                             y_pred=y_pred,
                             y_pred_proba=y_pred_proba,
                         )
+                        print(scores)
 
 
-class DenseNNWorkflow(BaseWorkflow):
+class DenseNNWorkflow(PreprocessedWorkflow):
     # Static Attribute
     _config_space = CONFIG_SPACE
+    _config_space.add_configuration_space(
+        prefix="pp",
+        delimiter="@",
+        configuration_space=PreprocessedWorkflow.config_space(),
+    )
 
     def __init__(
         self,
@@ -183,9 +193,9 @@ class DenseNNWorkflow(BaseWorkflow):
         activity_regularizer="none",
         regularizer_factor=0.01,
         kernel_initializer="glorot_uniform",
-        stochastic_weight_averaging=True,
-        lookahead=True,
-        snapshot_ensembles=True,
+        stochastic_weight_averaging=False,
+        lookahead=False,
+        snapshot_ensembles=False,
         snapshot_ensembles_period=20,
         snapshot_ensembles_reset_weights=False,
         shuffle_each_epoch=True,
@@ -223,7 +233,7 @@ class DenseNNWorkflow(BaseWorkflow):
             epoch_schedule (str, optional): _description_. Defaults to "power".
         """
 
-        super().__init__(timer)
+        super().__init__(timer, **filter_keys_with_prefix(kwargs, prefix="pp@"))
         self.requires_valid_to_fit = True
         self.requires_test_to_fit = True
 
@@ -252,7 +262,6 @@ class DenseNNWorkflow(BaseWorkflow):
 
         self.transform_real = transform_real
         self.transform_cat = transform_cat
-        self._transformer_label = LabelEncoder()
 
         self.verbose = verbose
         self.epoch_schedule = epoch_schedule
@@ -265,52 +274,6 @@ class DenseNNWorkflow(BaseWorkflow):
     @classmethod
     def config_space(cls):
         return cls._config_space
-
-    def _transform(self, X, y, metadata):
-        X_cat = X[:, metadata["categories"]["columns"]]
-        X_real = X[:, ~metadata["categories"]["columns"]]
-
-        has_cat = X_cat.shape[1] > 0
-        has_real = X_real.shape[1] > 0
-
-        if not self.transform_fitted:
-            # Categorical features
-            if self.transform_cat == "onehot":
-                self._transformer_cat = OneHotEncoder(
-                    drop="first", sparse_output=False, handle_unknown="ignore"
-                )
-            elif self.transform_cat == "ordinal":
-                self._transformer_cat = OrdinalEncoder(
-                    handle_unknown="use_encoded_value", unknown_value=-1
-                )
-            else:
-                raise ValueError(
-                    f"Unknown categorical transformation {self.transform_cat}"
-                )
-
-            if has_cat:
-                self._transformer_cat.fit(X_cat)
-
-            # Real features
-            if self.transform_real == "minmax":
-                self._transformer_real = MinMaxScaler()
-            elif self.transform_real == "std":
-                self._transformer_real = StandardScaler()
-            elif self.transform_real == "none":
-                # No transformation
-                self._transformer_real = FunctionTransformer(func=lambda x: x)
-            else:
-                raise ValueError(f"Unknown real transformation {self.transform_real}")
-
-            if has_real:
-                self._transformer_real.fit(X_real)
-
-        if has_cat:
-            X_cat = self._transformer_cat.transform(X_cat)
-        if has_real:
-            X_real = self._transformer_real.transform(X_real)
-        X = np.concatenate([X_real, X_cat], axis=1)
-        return X
 
     def build_model(self, input_shape, num_classes):
         inputs = out = keras.Input(shape=input_shape)
@@ -353,25 +316,29 @@ class DenseNNWorkflow(BaseWorkflow):
 
         return model
 
-    def _fit(self, X, y, X_valid, y_valid, X_test, y_test, metadata):
+    def _encode_label_vector(self, y):
+        return np.array([
+            self.infos["classes_train"].index(self.infos["classes_overall"][label])
+            for label in y
+        ])
+
+    def _decode_label_vector(self, y):
+        return np.array([
+            self.infos["classes_overall"].index(self.infos["classes_train"][i])
+            for i in y
+        ])
+
+    def _fit_model_after_transformation(self, X, y, X_valid, y_valid, X_test, y_test, metadata):
         self.metadata = metadata
-        X = self.transform(X, y, metadata).astype(np.float32)
-        y_ = self._transformer_label.fit_transform(y)
-        self.infos["classes"] = self._transformer_label.classes_.tolist()
 
-        mask_valid = np.isin(y_valid, self.infos["classes"])
-        X_valid = X_valid[mask_valid]
-        y_valid = y_valid[mask_valid]
-        y_valid_ = self._transformer_label.transform(y_valid)
+        # create internal labels for keras ordered from 0 to k-1 where, k is the number of labels *known* to the NN
+        mask_valid = np.isin(y_valid, self.infos["classes_train"])
+        self.y_valid_label_encoded_keras = np.array([
+            self.infos["classes_train"].index(label) for label in y_valid[mask_valid]
+        ])
 
-        mask_test = np.isin(y_test, self.infos["classes"])
-        X_test = X_test[mask_test]
-        y_test = y_test[mask_test]
-
-        X_valid = self.transform(X_valid, y_valid, metadata).astype(np.float32)
-        X_test = self.transform(X_test, y_test, metadata).astype(np.float32)
-
-        self.learner = self.build_model(X.shape[1:], len(self.infos["classes"]))
+        # build skeleton of neural network
+        self.learner = self.build_model(X.shape[1:], len(self.infos["classes_train"]))
 
         # Count Parameters in Model and Record
         if self.timer.root.metadata.get("num_parameters_train") is None:
@@ -425,30 +392,26 @@ class DenseNNWorkflow(BaseWorkflow):
             metrics=["accuracy"],
         )
 
+        # now fit model
         self.learner.fit(
             X,
-            y_,
+            self._encode_label_vector(y),
             batch_size=min(len(X), self.batch_size),
             epochs=self.num_epochs,
             shuffle=self.shuffle_each_epoch,
-            validation_data=(X_valid, y_valid_),
+            validation_data=(X_valid[mask_valid], self._encode_label_vector(y_valid[mask_valid])),
             callbacks=callbacks,
             verbose=self.verbose,
         )
 
-    def _predict(self, X):
-        y_pred = self._predict_proba(X).argmax(axis=1)
-        y_pred = self._transformer_label.inverse_transform(y_pred)
-        return y_pred
+    def _predict_after_transform(self, X):
+        return self._predict_with_proba_after_transform(X)[0]
 
-    def _predict_proba(self, X, apply_transform=True, use_snapshot_ensemble=None):
-        if apply_transform:
-            X = self.transform(X, y=None, metadata=self.metadata).astype(np.float32)
+    def _predict_proba_after_transform(self, X, use_snapshot_ensemble=False):
+        assert not np.any(pd.isna(X)), "Found NANs in the input (after transformation) for the NN prediction!"
 
         # determine models used to make prediction (usually just the model itself unless snapshot ensembles are used)
         models = [self.learner]
-        if use_snapshot_ensemble is None:
-            use_snapshot_ensemble = self.use_snapshot_models_for_prediction
         if use_snapshot_ensemble and self.snapshot_callback is not None:
             models.extend(self.snapshot_callback.checkpoint_models)
 
@@ -462,15 +425,15 @@ class DenseNNWorkflow(BaseWorkflow):
 
         # average probabilities
         y_pred_proba = np.array(y_pred_proba)
+        assert not np.any(np.isnan(y_pred_proba)), "There are NAN values in the NN prediction!"
         return y_pred_proba.mean(axis=0)
 
-    def _predict_with_proba_without_transform(self, X):
+    def _predict_with_proba_after_transform(self, X, use_snapshot_ensemble=False):
 
         # obtain probabilistic prediction from snapshot ensemble
-        y_pred_proba = self._predict_proba(X, apply_transform=False, use_snapshot_ensemble=True)
+        y_pred_proba = self._predict_proba_after_transform(X, use_snapshot_ensemble=use_snapshot_ensemble)
 
         # derive predictions
-        y_pred = y_pred_proba.argmax(axis=1)
-        y_pred = self._transformer_label.inverse_transform(y_pred)
+        y_pred = self._decode_label_vector(y_pred_proba.argmax(axis=1))
 
         return y_pred, y_pred_proba
