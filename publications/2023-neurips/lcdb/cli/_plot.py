@@ -99,7 +99,13 @@ def plot_learning_curves(
                 continue
             elif mode == "max" and metric_value_baseline is not None and -y[-1] > metric_value_baseline:
                 continue
-        ax.plot(x, y, color=cmap(ranking[i] / ranking_max), alpha=alpha)
+            
+        if i == 0:  # highlight the default setting 
+            ax.plot(x, y, color='black', linestyle='--', alpha=alpha, zorder=10)  
+        else:
+            ax.plot(x, y, color=cmap(ranking[i] / ranking_max), alpha=alpha, zorder=1)  
+
+        # ax.plot(x, y, color=cmap(ranking[i] / ranking_max), alpha=alpha)
 
     ax.grid()
 
