@@ -161,7 +161,9 @@ def get_schedule(name, **kwargs):
         name (str): name of the schedule.
         **kwargs: optional arguments to pass to the schedule.
     """
-    if name == "linear":
+    if name == "full":
+        return get_linear_schedule(**kwargs)
+    elif name == "linear":
         return get_linear_schedule(**kwargs)
     elif name == "last":
         return [kwargs["n"]]

@@ -45,7 +45,7 @@ class SVMWorkflow(SklearnWorkflow):
         else:
             learner = OneVsOneClassifier(svm_instance, n_jobs=None)
 
-        super().__init__(learner, timer, **filter_keys_with_prefix(kwargs, prefix="pp@"))
+        super().__init__(learner, timer, **kwargs)
 
     @classmethod
     def config_space(cls):

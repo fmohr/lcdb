@@ -8,7 +8,7 @@ from ConfigSpace import (
 from sklearn.linear_model import LogisticRegression, PassiveAggressiveClassifier, RidgeClassifier, Perceptron
 
 from ._base import SklearnWorkflow
-from ...utils import filter_keys_with_prefix, decision_fun_to_proba
+from ...utils import decision_fun_to_proba
 
 
 CONFIG_SPACE_LR = ConfigurationSpace(
@@ -35,7 +35,7 @@ class LRWorkflow(SklearnWorkflow):
         super().__init__(
             learner=LogisticRegression(),
             timer=timer,
-            **filter_keys_with_prefix(kwargs, prefix="pp@")
+            **kwargs
         )
 
     @classmethod
@@ -67,7 +67,7 @@ class RidgeWorkflow(SklearnWorkflow):
         super().__init__(
             learner=RidgeClassifier(),
             timer=timer,
-            **filter_keys_with_prefix(kwargs, prefix="pp@")
+            **kwargs
         )
 
     @classmethod
@@ -102,7 +102,7 @@ class PAWorkflow(SklearnWorkflow):
         super().__init__(
             learner=PassiveAggressiveClassifier(),
             timer=timer,
-            **filter_keys_with_prefix(kwargs, prefix="pp@")
+            **kwargs
         )
 
     @classmethod
@@ -137,7 +137,7 @@ class PerceptronWorkflow(SklearnWorkflow):
         super().__init__(
             learner=Perceptron(),
             timer=timer,
-            **filter_keys_with_prefix(kwargs, prefix="pp@")
+            **kwargs
         )
 
     @classmethod

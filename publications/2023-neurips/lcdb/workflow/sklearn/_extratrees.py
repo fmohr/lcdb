@@ -76,7 +76,7 @@ class ExtraTreesWorkflow(ForestWorkflow):
             forest=ExtraTreesClassifier(**learner_kwargs),
             n_estimators=n_estimators,
             timer=timer,
-            **filter_keys_with_prefix(kwargs, prefix="pp@")
+            **kwargs
         )
 
     @classmethod

@@ -49,12 +49,11 @@ class ForestWorkflow(SklearnWorkflow):
         forest,
         n_estimators,
         timer=None,
-        epoch_schedule: str = "power",
+        epoch_schedule: str = "full",
         **kwargs,
     ):
         self.requires_valid_to_fit = True
         self.requires_test_to_fit = True
-
 
         self.max_n_estimators = n_estimators
 
@@ -66,7 +65,7 @@ class ForestWorkflow(SklearnWorkflow):
 
         # Scoring Schedule for Sub-fidelity
         self.schedule = get_schedule(
-            name=epoch_schedule, n=self.max_n_estimators, base=2, power=0.5, delay=0
+            name=epoch_schedule, n=self.max_n_estimators #, base=2, power=0.5, delay=0
         )
 
     @classmethod

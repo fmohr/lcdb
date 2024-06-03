@@ -72,7 +72,7 @@ class DTWorkflow(SklearnWorkflow):
                 random_state=random_state
             ),
             timer=timer,
-            **filter_keys_with_prefix(kwargs, prefix="pp@")
+            **kwargs
         )
 
     @classmethod

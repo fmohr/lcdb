@@ -7,7 +7,6 @@ from ConfigSpace import (
 )
 from sklearn.ensemble import RandomForestClassifier
 
-from ...utils import filter_keys_with_prefix
 from ._forest import ForestWorkflow
 
 CONFIG_SPACE = ConfigurationSpace(
@@ -71,7 +70,7 @@ class RandomForestWorkflow(ForestWorkflow):
             forest=RandomForestClassifier(**learner_kwargs),
             n_estimators=n_estimators,
             timer=timer,
-            **filter_keys_with_prefix(kwargs, prefix="pp@")
+            **kwargs
         )
 
     @classmethod

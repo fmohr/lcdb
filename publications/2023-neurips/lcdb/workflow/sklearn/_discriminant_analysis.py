@@ -8,7 +8,6 @@ from ConfigSpace import (
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis, QuadraticDiscriminantAnalysis
 
 from ._base import SklearnWorkflow
-from ...utils import filter_keys_with_prefix
 
 
 CONFIG_SPACE_LDA = ConfigurationSpace(
@@ -35,7 +34,7 @@ class LDAWorkflow(SklearnWorkflow):
         super().__init__(
             learner=LinearDiscriminantAnalysis(),
             timer=timer,
-            **filter_keys_with_prefix(kwargs, prefix="pp@")
+            **kwargs
         )
 
     @classmethod
@@ -66,7 +65,7 @@ class QDAWorkflow(SklearnWorkflow):
         super().__init__(
             learner=QuadraticDiscriminantAnalysis(),
             timer=timer,
-            **filter_keys_with_prefix(kwargs, prefix="pp@")
+            **kwargs
         )
 
     @classmethod

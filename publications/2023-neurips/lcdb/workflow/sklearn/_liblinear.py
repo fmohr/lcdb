@@ -94,7 +94,7 @@ class LibLinearWorkflow(SVMWorkflow):
         )
 
         svm_instance = LinearSVC(**learner_kwargs)
-        super().__init__(svm_instance, timer, **filter_keys_with_prefix(kwargs, prefix="pp@"))
+        super().__init__(svm_instance, timer, **kwargs)
 
     @classmethod
     def config_space(cls):

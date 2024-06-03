@@ -8,8 +8,6 @@ from ConfigSpace import (
 from sklearn.naive_bayes import GaussianNB
 
 from ._base import SklearnWorkflow
-from ...utils import filter_keys_with_prefix
-
 
 CONFIG_SPACE_GAUSSIAN_NB = ConfigurationSpace(
     name="sklearn.GaussianNBWorkflow",
@@ -35,7 +33,7 @@ class GaussianNBWorkflow(SklearnWorkflow):
         super().__init__(
             learner=GaussianNB(),
             timer=timer,
-            **filter_keys_with_prefix(kwargs, prefix="pp@")
+            **kwargs
         )
 
     @classmethod
