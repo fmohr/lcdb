@@ -1,4 +1,5 @@
 import platform
+import importlib
 
 import keras
 import numpy as np
@@ -89,3 +90,27 @@ def count_params(model: keras.Model) -> dict:
         "num_parameters_not_train": num_parameters_not_train,
         "num_parameters_train": num_parameters_train,
     }
+
+
+def serialize_object(obj):
+    config = obj.get_config()
+    class_name = obj.__class__.__name__
+    module_name = obj.__class__.__module__
+    return {
+        'class_name': class_name,
+        'module_name': module_name,
+        'config': config
+    }
+
+
+def deserialize_object(serialized_obj):
+    class_name = serialized_obj['class_name']
+    module_name = serialized_obj['module_name']
+    config = serialized_obj['config']
+
+    # Dynamically import the module and get the class
+    module = importlib.import_module(module_name)
+    cls = getattr(module, class_name)
+
+    # Use the class to create a new instance
+    return cls.from_config(config)

@@ -3,7 +3,7 @@ from ConfigSpace import ConfigurationSpace, Float, Integer, Uniform
 from lcdb.scorer import ClassificationScorer
 #from lcdb.utils import filter_keys_with_prefix
 #from lcdb.workflow._preprocessing_workflow import PreprocessedWorkflow
-from ...utils import filter_keys_with_prefix
+from ...utils import filter_keys_with_prefix, get_schedule
 from .._preprocessing_workflow import PreprocessedWorkflow
 from sklearn.preprocessing import LabelEncoder
 from xgboost import DMatrix, XGBClassifier
@@ -91,14 +91,18 @@ CONFIG_SPACE = ConfigurationSpace(
 
 
 class EvalCallBack(TrainingCallback):
-    def __init__(self, workflow, timer, encoder, data):
+    def __init__(self, workflow, timer, encoder, data, epoch_schedule: str = "power"):
         super().__init__()
         self.timer = timer
         self.workflow = workflow
-        self.scorer = ClassificationScorer(classes=self.workflow.infos["classes"], timer=self.timer)
+        self.scorer = None
         self.encoder = encoder
         self.data = data
-        self.n_classes = len(self.workflow.infos["classes"])
+        self.n_classes = len(self.workflow.infos["classes_train"])
+        self.epoch_schedule = epoch_schedule
+        self.schedule = set(get_schedule(
+            name=epoch_schedule, n=self.workflow.n_estimators, base=2, power=0.5, delay=0
+        ))
 
         self.epoch = None
         self.train_timer_id = None
@@ -120,26 +124,35 @@ class EvalCallBack(TrainingCallback):
     def after_iteration(self, model, epoch, evals_log):
         assert self.timer.active_node.id == self.train_timer_id
         self.timer.stop()
-        self.test_timer_id = self.timer.start("epoch_test")
-        with self.timer.time("metrics"):
-            for label_split, data_split in self.data.items():
-                with self.timer.time(label_split):
-                    with self.timer.time("predict_with_proba"):
-                        y_pred_proba = model.predict(data_split["X"], strict_shape=True)
+        if epoch in self.schedule:
+            self.test_timer_id = self.timer.start("epoch_test")
+            with self.timer.time("metrics"):
+                for label_split, data_split in self.data.items():
+                    with self.timer.time(label_split):
+                        with self.timer.time("predict_with_proba"):
+                            y_pred_proba = model.predict(data_split["X"], strict_shape=True)
 
-                    y_pred_proba = self.create_full_probs(y_pred_proba)
-                    y_pred = self.create_labels_from_probs(y_pred_proba, invert=True)
+                        y_pred_proba = self.create_full_probs(y_pred_proba)
+                        y_pred = self.create_labels_from_probs(y_pred_proba, invert=True)
 
-                    y_true = data_split["y"]
+                        y_true = data_split["y"]
 
-                    self.scorer.score(
-                        y_true=y_true,
-                        y_pred=y_pred,
-                        y_pred_proba=y_pred_proba,
-                    )
-        assert self.timer.active_node.id == self.test_timer_id
-        self.timer.stop()
-        assert self.timer.active_node.id == self.epoch_timer_id
+                        # get the scorer lazy, because at init time, the labels are not yet registered
+                        if self.scorer is None:
+                            self.scorer = ClassificationScorer(
+                                classes_learner=list(self.workflow.learner.classes_),
+                                classes_overall=self.workflow.infos["classes_overall"],
+                                timer=self.timer
+                            )
+
+                        self.scorer.score(
+                            y_true=y_true,
+                            y_pred=y_pred,
+                            y_pred_proba=y_pred_proba,
+                        )
+            assert self.timer.active_node.id == self.test_timer_id
+            self.timer.stop()
+            assert self.timer.active_node.id == self.epoch_timer_id
         self.timer.stop()
         return False
 
@@ -191,7 +204,6 @@ class EvalCallBack(TrainingCallback):
 class XGBoostWorkflow(PreprocessedWorkflow):
     # Static Attribute
     _config_space = CONFIG_SPACE
-    # FIXME: drop some unnecessary preprocessing steps
     _config_space.add_configuration_space(
         prefix="pp",
         delimiter="@",
@@ -220,6 +232,7 @@ class XGBoostWorkflow(PreprocessedWorkflow):
 
         self.requires_valid_to_fit = True
         self.requires_test_to_fit = True
+        self.n_estimators = n_estimators
 
         learner_kwargs = dict(
             n_estimators=n_estimators,
@@ -266,6 +279,7 @@ class XGBoostWorkflow(PreprocessedWorkflow):
             timer=self.timer,
             encoder=self.encoder,
             data=dict(train=dict(X=DMatrix(X, label=y), y=y), val=dict(X=DMatrix(X_valid), y=y_valid), test=dict(X=DMatrix(X_test), y=y_test)),
+            epoch_schedule="power"
         )
         self.learner.set_params(callbacks=[eval_callback])
 

@@ -206,40 +206,15 @@ class LCController:
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
 
-                if self.workflow.requires_valid_to_fit:
-                    if self.workflow.requires_test_to_fit:
-                        self.workflow.fit(
-                            self.X_train_at_anchor,
-                            self.y_train_at_anchor,
-                            X_valid=self.X_valid,
-                            y_valid=self.y_valid,
-                            X_test=self.X_test,
-                            y_test=self.y_test,
-                            metadata=self.dataset_metadata,
-                        )
-                    else:
-                        self.workflow.fit(
-                            self.X_train_at_anchor,
-                            self.y_train_at_anchor,
-                            X_valid=self.X_valid,
-                            y_valid=self.y_valid,
-                            metadata=self.dataset_metadata,
-                        )
-                else:
-                    if self.workflow.requires_test_to_fit:
-                        self.workflow.fit(
-                            self.X_train_at_anchor,
-                            self.y_train_at_anchor,
-                            X_test=self.X_test,
-                            y_test=self.y_test,
-                            metadata=self.dataset_metadata,
-                        )
-                    else:
-                        self.workflow.fit(
-                            self.X_train_at_anchor,
-                            self.y_train_at_anchor,
-                            metadata=self.dataset_metadata,
-                        )
+                self.workflow.fit(
+                    self.X_train_at_anchor,
+                    self.y_train_at_anchor,
+                    X_valid=self.X_valid,
+                    y_valid=self.y_valid,
+                    X_test=self.X_test,
+                    y_test=self.y_test,
+                    metadata=self.dataset_metadata,
+                )
 
         except Exception as exception:
             self.report["traceback"] = traceback.format_exc()
@@ -271,7 +246,7 @@ class LCController:
 
     def get_predictions(self):
         keys = {}
-        labels = self.workflow.infos["classes"] if self.is_classification else None
+        labels = self.workflow.infos["classes_overall"] if self.is_classification else None
 
         with self.timer.time("get_predictions"):
             for X_split, label_split in [
@@ -282,13 +257,12 @@ class LCController:
                 with warnings.catch_warnings(), self.timer.time(label_split):
                     warnings.simplefilter("ignore")
 
-                    # TODO: this should be replaced to avoid infering twice
-                    keys[f"y_pred_{label_split}"] = self.workflow.predict(X_split)
                     keys[f"y_pred_proba_{label_split}"] = (
                         self.workflow.predict_proba(X_split)
                         if self.is_classification
                         else None
                     )
+                    keys[f"y_pred_{label_split}"] = self.workflow.get_predictions_from_probas(keys[f"y_pred_proba_{label_split}"])
 
         return keys, labels
 
@@ -303,7 +277,9 @@ class LCController:
     ):
         if self.is_classification:
             scorer = ClassificationScorer(
-                classes=self.workflow.infos["classes"], timer=self.timer
+                classes_learner=self.workflow.infos["classes_train_orig"],
+                classes_overall=self.workflow.infos["classes_overall_orig"],
+                timer=self.timer
             )
         else:
             scorer = RegressionScorer(timer=self.timer)
