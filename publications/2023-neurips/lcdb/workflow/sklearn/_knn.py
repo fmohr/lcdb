@@ -7,7 +7,7 @@ from ConfigSpace import (
 )
 from sklearn.neighbors import KNeighborsClassifier
 
-from .._preprocessing_workflow import PreprocessedWorkflow
+from ._base import SklearnWorkflow
 from ...utils import filter_keys_with_prefix
 
 
@@ -40,13 +40,13 @@ CONFIG_SPACE.add_conditions(
 )
 
 
-class KNNWorkflow(PreprocessedWorkflow):
+class KNNWorkflow(SklearnWorkflow):
     # Static Attribute
     _config_space = CONFIG_SPACE
     _config_space.add_configuration_space(
-        prefix="pp",
-        delimiter="@",
-        configuration_space=PreprocessedWorkflow.config_space(),
+        prefix="",
+        delimiter="",
+        configuration_space=SklearnWorkflow.config_space(),
     )
 
     def __init__(
@@ -58,34 +58,26 @@ class KNNWorkflow(PreprocessedWorkflow):
         metric="minkowski",
         **kwargs
     ):
-        super().__init__(timer, **filter_keys_with_prefix(kwargs, prefix="pp@"))
+        super().__init__(
+            learner=None,
+            timer=timer,
+            **filter_keys_with_prefix(kwargs, prefix="pp@")
+        )
 
         self.learner_kwargs = dict(
             n_neighbors=n_neighbors, weights=weights, p=p, metric=metric
         )
-        self.learner = None
 
     @classmethod
     def config_space(cls):
         return cls._config_space
 
-    def _fit(self, X, y, metadata):
-        self.metadata = metadata
-        X = self.transform(X, y, metadata)
+    def _fit_model_after_transformation(self, X, y, X_valid, y_valid, X_test, y_test, metadata):
 
-        # Adapt the number of neighbors to the number of samples to avoid errors
+        # instantiate the learner
         updated_learner_kwargs = self.learner_kwargs.copy()
         updated_learner_kwargs["n_neighbors"] = min(X.shape[0], updated_learner_kwargs["n_neighbors"])
         self.learner = KNeighborsClassifier(**updated_learner_kwargs)
 
-        self.learner.fit(X, y)
-
-        self.infos["classes"] = list(self.learner.classes_)
-
-    def _predict(self, X):
-        X = self.pp_pipeline.transform(X)
-        return self.learner.predict(X)
-
-    def _predict_proba(self, X):
-        X = self.pp_pipeline.transform(X)
-        return self.learner.predict_proba(X)
+        # apply standard fitting procedure
+        super()._fit_model_after_transformation(X, y, X_valid, y_valid, X_test, y_test, metadata)

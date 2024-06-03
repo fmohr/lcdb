@@ -10,9 +10,7 @@ from ConfigSpace import (
 from sklearn.svm import SVC
 
 from ...utils import filter_keys_with_prefix
-from .._preprocessing_workflow import PreprocessedWorkflow
-import numpy as np
-from scipy.special import softmax
+from ._svm import SVMWorkflow
 
 CONFIG_SPACE = ConfigurationSpace(
     name="libsvm",
@@ -51,13 +49,13 @@ coef0 = Float(
 CONFIG_SPACE.add_hyperparameters([kernel, degree, coef0, gamma])
 
 
-class LibSVMWorkflow(PreprocessedWorkflow):
+class LibSVMWorkflow(SVMWorkflow):
     # Static Attribute
     _config_space = CONFIG_SPACE
     _config_space.add_configuration_space(
-        prefix="pp",
-        delimiter="@",
-        configuration_space=PreprocessedWorkflow.config_space(),
+        prefix="",
+        delimiter="",
+        configuration_space=SVMWorkflow.config_space(),
     )
 
     def __init__(
@@ -77,7 +75,6 @@ class LibSVMWorkflow(PreprocessedWorkflow):
         random_state=None,
         **kwargs,
     ):
-        super().__init__(timer, **filter_keys_with_prefix(kwargs, prefix="pp@"))
 
         learner_kwargs = dict(
             C=C,
@@ -92,28 +89,9 @@ class LibSVMWorkflow(PreprocessedWorkflow):
             coef0=coef0,
             random_state=random_state,
         )
-        self.learner = SVC(**learner_kwargs)
+        svm_instance = SVC(**learner_kwargs)
+        super().__init__(svm_instance, timer, **filter_keys_with_prefix(kwargs, prefix="pp@"))
 
     @classmethod
     def config_space(cls):
         return cls._config_space
-
-    def _fit_model_after_transformation(self, X, y, X_valid, y_valid, X_test, y_test, metadata):
-        self.metadata = metadata
-
-        self.learner.fit(X, y)
-
-        self.infos["classes"] = list(self.learner.classes_)
-        self.infos["n_iter_"] = self.learner.n_iter_
-
-    def _predict_after_transform(self, X):
-        return self.learner.predict(X)
-
-    def _predict_proba_after_transform(self, X):
-        decision_fun_vals = self.learner.decision_function(X)
-        sigmoid = lambda z: 1/(1 + np.exp(-z))
-        if len(decision_fun_vals.shape) == 2:
-            return softmax(decision_fun_vals, axis=1)
-        else:
-            a = sigmoid(decision_fun_vals)
-            return np.column_stack([a, 1 - a])

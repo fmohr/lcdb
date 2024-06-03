@@ -8,6 +8,7 @@ import time
 from concurrent.futures import CancelledError, ProcessPoolExecutor, BrokenExecutor
 
 import numpy as np
+from scipy.special import softmax
 import psutil
 
 from deephyper.evaluator._run_function_utils import standardize_run_function_output
@@ -188,3 +189,19 @@ def get_power_schedule(n: int, base=2, power=0.5, delay: int = 7, **kwargs):
     if anchors[-1] < n:
         anchors.append(n)
     return anchors
+
+
+def decision_fun_to_proba(decision_fun_vals):
+    """
+    take a vector or matrix of decision function values and turn them into probabilities through a softmax
+
+    :param decision_fun_vals:
+    :return:
+    """
+    sigmoid = lambda z: 1/(1 + np.exp(-z))
+    if len(decision_fun_vals.shape) == 2:
+        return softmax(decision_fun_vals, axis=1)
+    else:
+        a = sigmoid(decision_fun_vals)
+        return np.column_stack([a, 1 - a])
+
