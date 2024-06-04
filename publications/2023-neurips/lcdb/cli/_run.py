@@ -24,6 +24,7 @@ import pandas as pd
 from deephyper.evaluator import Evaluator, RunningJob
 from deephyper.evaluator.callback import TqdmCallback
 from deephyper.problem import HpProblem
+from deephyper.problem._hyperparameter import convert_to_skopt_space
 from deephyper.search.hps import CBO
 from lcdb.controller import LCController
 from lcdb.data import load_task
@@ -324,7 +325,7 @@ def main(
     num_workers,
     anchor_schedule,
     epoch_schedule,
-    workflow_memory_limit
+    workflow_memory_limit,
 ):
     """Entry point for the command line interface."""
 
@@ -398,7 +399,17 @@ def main(
         for _, row in ip_df.iterrows():
             initial_points.append(row.to_dict())
     else:
-        # TODO: this will fail, needs special preprocessing for inactive parameters such as in lcdb test
+        # Add the default configuration
+        # Convert the config space to a skopt space
+        skopt_space = convert_to_skopt_space(config_space, surrogate_model="RF")
+
+        config_default = problem.default_configuration
+        for i, k in enumerate(skopt_space.dimension_names):
+            # Check if hyperparameter k is active
+            # If it is not active we attribute the "lower bound value" of the space
+            # To avoid duplication of the same "entity" in the list of configurations
+            if k not in config_default.keys():
+                config_default[k] = skopt_space.dimensions[i].bounds[0]
         initial_points.append(config_default)
 
     run_function_kwargs = {
