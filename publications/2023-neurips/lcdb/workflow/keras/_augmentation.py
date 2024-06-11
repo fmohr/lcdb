@@ -1,55 +1,105 @@
 from tensorflow import data as tf_data
 from keras.random import gamma as tf_random_gamma
 import keras.ops as ops
+import numpy as np
 
 
-def sample_beta_distribution(size, concentration_0=0.2, concentration_1=0.2):
-    gamma_1_sample = tf_random_gamma(shape=[size], alpha=concentration_1)
-    gamma_2_sample = tf_random_gamma(shape=[size], alpha=concentration_0)
-    return gamma_1_sample / (gamma_1_sample + gamma_2_sample)
+class Augmenter:
+
+    def __init__(self, replace=False):
+        self.replace = replace
+
+    def augment(self, X, y):
+        raise NotImplementedError
 
 
-def mix_up(ds_one, ds_two, alpha=0.2):
-    # Unpack two datasets
-    X_1, y_1 = ds_one
-    X_2, y_2 = ds_two
-    batch_size = X_1.shape[0]
+class RandomnessBasedAugmenter(Augmenter):
 
-    print(X_1.shape)
-
-    # Sample lambda and reshape it to do the mixup
-    l = sample_beta_distribution(batch_size, alpha, alpha)
-    #x_l = ops.reshape(l, X_1.shape)
-    #y_l = ops.reshape(l, y_1.shape)
-    print(l)
-    #print(x_l)
-    #print(y_l)
-
-    # Perform mixup on both images and labels by combining a pair of images/labels
-    # (one from each dataset) into one image/label
-    X = X_1 * x_l + X_2 * (1 - x_l)
-    y = y_1 * y_l + y_2 * (1 - y_l)
-    return X, y
+    def __init__(self, random_state, **kwargs):
+        super().__init__(**kwargs)
+        if isinstance(random_state, np.random.RandomState):
+            self.random_state = random_state
+        else:
+            self.random_state = np.random.RandomState() if random_state is None else np.random.RandomState(random_state)
 
 
-def augment_with_mixup(X, y):
+class CutOutAugmentation(RandomnessBasedAugmenter):
 
-    print(X.shape)
+    def __init__(self, probability_of_cut, **kwargs):
+        super().__init__(**kwargs)
+        self.probability_of_cut = probability_of_cut
 
-    # get two randomly shuffled version of the datasets and zip them
-    train_ds_one = (
-        tf_data.Dataset.from_tensor_slices((X, y))
-        .shuffle(X.shape[0])
-    )
-    train_ds_two = (
-        tf_data.Dataset.from_tensor_slices((X, y))
-        .shuffle(X.shape[0])
-    )
-    train_ds = tf_data.Dataset.zip((train_ds_one, train_ds_two))
+    def augment(self, X, y):
+        indices = list(range(X.shape[0]))
+        n_instances = len(indices)
+        n_cells = n_instances * X.shape[1]
+        random_binary_mask = self.random_state.random(size=n_cells).reshape((n_instances, -1)) <= self.probability_of_cut
 
-    # now mix-up pair instances
-    train_ds_mu = train_ds.map(
-        lambda ds_one, ds_two: mix_up(ds_one, ds_two, alpha=0.2)
-        #num_parallel_calls=AUTO,
-    )
-    return train_ds_mu
+        # cut mix X
+        X[random_binary_mask] = 0
+        return X, y
+
+
+class MixUpAugmentation(RandomnessBasedAugmenter):
+
+    def __init__(self, split_point_distribution=None, **kwargs):
+        super().__init__(**kwargs)
+
+        if split_point_distribution is not None:
+            self.split_point_distribution = split_point_distribution
+        else:
+            self.split_point_distribution = self.sample_beta_distribution
+
+    def sample_beta_distribution(self, size, concentration_0=0.2, concentration_1=0.2):
+        gamma_1_sample = tf_random_gamma(shape=[size], alpha=concentration_1, seed=self.random_state.randint(10**10))
+        gamma_2_sample = tf_random_gamma(shape=[size], alpha=concentration_0, seed=self.random_state.randint(10**10))
+        return gamma_1_sample / (gamma_1_sample + gamma_2_sample)
+
+    def augment(self, X, y):
+        indices = list(range(X.shape[0]))
+        random_partner_indices = self.random_state.choice(indices, size=len(indices), replace=False)
+        cross_over = np.array(self.split_point_distribution(size=len(indices))).reshape(-1, 1)
+
+        # mix up X
+        X_right = X[random_partner_indices]
+        X_after = X * cross_over + X_right * (1 - cross_over)
+
+        # mix up y
+        y_right = y[random_partner_indices]
+        y_after = y * cross_over + y_right * (1 - cross_over)
+
+        return X_after, y_after
+
+
+class CutMixAugmentation(RandomnessBasedAugmenter):
+
+    def __init__(self, split_point_distribution=None, **kwargs):
+        super().__init__(**kwargs)
+
+        if split_point_distribution is not None:
+            self.split_point_distribution = split_point_distribution
+        else:
+            self.split_point_distribution = self.sample_beta_distribution
+
+    def sample_beta_distribution(self, size, concentration_0=0.2, concentration_1=0.2):
+        gamma_1_sample = tf_random_gamma(shape=[size], alpha=concentration_1, seed=self.random_state.randint(10**10))
+        gamma_2_sample = tf_random_gamma(shape=[size], alpha=concentration_0, seed=self.random_state.randint(10**10))
+        return gamma_1_sample / (gamma_1_sample + gamma_2_sample)
+
+    def augment(self, X, y):
+        indices = list(range(X.shape[0]))
+        n_instances = len(indices)
+        n_cells = n_instances * X.shape[1]
+        random_partner_indices = self.random_state.choice(indices, size=n_instances, replace=False)
+        random_binary_mask = self.random_state.randint(low=0, high=2, size=n_cells).reshape((n_instances, -1))
+        lambdas = np.array(self.split_point_distribution(size=n_instances)).reshape(-1, 1)
+
+        # cut mix X
+        X_right = X[random_partner_indices]
+        X_after = X * random_binary_mask + X_right * (1 - random_binary_mask)
+
+        # mix up y
+        y_right = y[random_partner_indices]
+        y_after = y * lambdas + y_right * (1 - lambdas)
+
+        return X_after, y_after

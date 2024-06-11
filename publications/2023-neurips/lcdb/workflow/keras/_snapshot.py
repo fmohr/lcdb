@@ -14,7 +14,8 @@ class Snapshot(Callback):
             self,
             workflow,
             optimizer,
-            period=20,
+            period_init=20,
+            period_increase=0,
             reset_weights=False,
             verbose=0
     ):
@@ -23,8 +24,12 @@ class Snapshot(Callback):
         self.workflow = workflow
         self.optimizer = optimizer
         self.verbose = verbose
-        self.period = period
+        self.period_init = period_init
+        self.period_increase = period_increase
+        self.period = period_init
         self.reset_weights = reset_weights
+
+        self.last_snapshot_after_epoch = -1
 
         self.checkpoint_models = []
 
@@ -54,8 +59,12 @@ class Snapshot(Callback):
     def on_epoch_end(self, epoch, logs=None):
 
         # only do something at the end of each cycle
-        if epoch == 0 or (epoch + 1) % self.period != 0:
+        if epoch == 0 or (epoch - self.last_snapshot_after_epoch < self.period):
             return
+
+        # augment period
+        self.last_snapshot_after_epoch = epoch
+        self.period += self.period_increase
 
         # save model for this cycle
         model_copy = clone_model(self.model)
@@ -69,11 +78,9 @@ class Snapshot(Callback):
     def on_epoch_begin(self, epoch, logs=None):
 
         # adjust learning rate through cyclic cosine annealing
-        if epoch > 0:
-            lr = math.pi * (epoch % self.period) / self.period
-            lr = self.base_lr / 2 * (math.cos(lr) + 1)
-            self._set_lr(lr)
-            print(f"Learning rate is now {convert_to_numpy(self.model.optimizer.learning_rate)}")
+        lr = math.pi * (epoch - 1 - self.last_snapshot_after_epoch) / self.period
+        lr = self.base_lr / 2 * (math.cos(lr) + 1)
+        self._set_lr(lr)
 
     def on_test_begin(self, logs=None):
         self.workflow.use_snapshot_models_for_prediction = True
@@ -92,5 +99,3 @@ class Snapshot(Callback):
 
         # Get initial learning rate
         self.base_lr = float(self._get_lr())
-
-        self._reset_weights()

@@ -308,6 +308,9 @@ class PreprocessedWorkflow(BaseWorkflow):
 
     def _fit(self, X, y, X_valid, y_valid, X_test, y_test, metadata):
 
+        # first give the workflow a chance to transform the data, e.g., with data augmentation
+        X, y = self._transform_train_data_prior_to_standard_preprocessing(X, y)
+
         # transform all the data and store them
         X_train_transformed = self.transform(X=X, y=y, metadata=metadata, timer_suffix="_train").astype(np.float32)  # create + fit pp pipeline
         X_valid_transformed = self.transform(X_valid, y_valid, metadata, timer_suffix="_valid").astype(np.float32)
@@ -315,6 +318,9 @@ class PreprocessedWorkflow(BaseWorkflow):
         print(f"Transformed. New shape: {X_train_transformed.shape}")
 
         self._fit_model_after_transformation(X_train_transformed, y, X_valid_transformed, y_valid, X_test_transformed, y_test, metadata)
+
+    def _transform_train_data_prior_to_standard_preprocessing(self, X, y):
+        return X, y  # by default, no alterations are made, of course. Overwrite this function to do so.
 
     def _fit_model_after_transformation(self, X, y, X_valid, y_valid, X_test, y_test, metadata):
         raise NotImplementedError

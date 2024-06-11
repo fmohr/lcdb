@@ -12,7 +12,7 @@ NP_ARRAY = np.ndarray
 
 class BaseWorkflow(abc.ABC):
 
-    def __init__(self, timer=None, **kwargs) -> None:
+    def __init__(self, timer=None) -> None:
         super().__init__()
         self.timer = Timer() if timer is None else timer
         self.infos = {}

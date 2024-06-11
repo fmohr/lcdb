@@ -1,4 +1,5 @@
 import keras
+from keras.src.backend import convert_to_numpy
 import pandas as pd
 import numpy as np
 from ConfigSpace import Categorical, ConfigurationSpace, Float, Integer
@@ -7,7 +8,7 @@ from ...timer import Timer
 from ...utils import get_schedule, filter_keys_with_prefix
 from .._base_workflow import BaseWorkflow
 from .._preprocessing_workflow import PreprocessedWorkflow
-from ._augmentation import augment_with_mixup
+from ._augmentation import MixUpAugmentation, CutMixAugmentation, CutOutAugmentation
 from .utils import (
     ACTIVATIONS,
     INITIALIZERS,
@@ -16,13 +17,7 @@ from .utils import (
     count_params,
 )
 
-from sklearn.preprocessing import (
-    FunctionTransformer,
-    MinMaxScaler,
-    OneHotEncoder,
-    OrdinalEncoder,
-    StandardScaler,
-)
+from keras.src.backend import convert_to_numpy
 
 # regularization techniques
 from ._lookahead import Lookahead
@@ -45,11 +40,9 @@ CONFIG_SPACE = ConfigurationSpace(
             "learning_rate", bounds=(1e-5, 10.0), log=True, default=1e-4
         ),
         "batch_size": Integer("batch_size", bounds=(1, 512), log=True, default=32),
-        # "num_epochs": Integer("num_epochs", bounds=(1, 100), log=True, default=10),
         "shuffle_each_epoch": Categorical(
             "shuffle_each_epoch", items=[True, False], default=True
         ),
-        # TODO: add regularization hyperparameters
         "kernel_regularizer": Categorical(
             "kernel_regularizer", list(REGULARIZERS.keys()), default="none"
         ),
@@ -71,22 +64,31 @@ CONFIG_SPACE = ConfigurationSpace(
         "lookahead": Categorical(
             "lookahead", items=[True, False], default=False
         ),
-        "snapshot_ensembles": Categorical(
-            "snapshot_ensembles", items=[False, True], default=False
+        "lookahead_learning_rate": Float(
+            "lookahead_learning_rate", bounds=(0.2, 0.8), default=0.2
+        ),
+        "lookahead_num_steps": Integer(
+            "lookahead_num_steps", bounds=(2, 10), default=5
+        ),
+        "snapshot_ensemble": Categorical(
+            "snapshot_ensemble", items=[False, True], default=False
         ),
         # TODO: The following snapshot parameters should be made conditional and only appear if snapshot_ensembles=True
-        "snapshot_ensembles_period": Integer(
-            "snapshot_ensembles_period", bounds=(2, 100), default=20
+        "snapshot_ensemble_period_init": Integer(
+            "snapshot_ensemble_period_init", bounds=(2, 100), default=20
         ),
-        "snapshot_ensembles_reset_weights": Categorical(
-            "snapshot_ensembles_reset_weights", items=[False, True], default=False
+        "snapshot_ensemble_period_increase": Integer(
+            "snapshot_ensemble_period_increase", bounds=(0, 5), default=0
         ),
-        # TODO: refine preprocessing
-        "transform_real": Categorical(
-            "transform_real", ["minmax", "std", "none"], default="none"
+        "snapshot_ensemble_reset_weights": Categorical(
+            "snapshot_ensemble_reset_weights", items=[False, True], default=False
         ),
-        "transform_cat": Categorical(
-            "transform_cat", ["onehot", "ordinal"], default="onehot"
+        "data_augmentation": Categorical(
+            "data_augmentation", items=["none", "cutout", "mixup", "cutmix"], default="none"
+        ),
+        # TODO: The following data augmentation parameters should be made conditional and only appear if snapshot_ensembles=True
+        "data_augmentation_cutout_patch_ratio": Float(
+            "data_augmentation_cutout_patch_ratio", bounds=(0.0, 1.0), default=0.1
         ),
     },
 )
@@ -123,8 +125,11 @@ class IterationCurveCallback(keras.callbacks.Callback):
         super().on_epoch_begin(epoch, logs=logs)
         self.epoch = epoch
         self.epoch_timer_id = self.timer.start(
-            "epoch", metadata={"value": self.epoch + 1}
-        )
+            "epoch",
+            metadata={
+                "epoch_cnt": self.epoch + 1,
+                "learning_rate": round(float(convert_to_numpy(self.workflow.learner.optimizer._learning_rate)), 8)
+            })
         self.train_timer_id = self.timer.start("epoch_train")
 
     def on_epoch_end(self, epoch, logs=None):
@@ -144,7 +149,7 @@ class IterationCurveCallback(keras.callbacks.Callback):
             return
         self.schedule.pop()
 
-        with self.timer.time("epoch_test"):
+        with self.timer.time("epoch_test") as timer:
             with self.timer.time("metrics"):
                 for label_split, data_split in self.data.items():
                     with self.timer.time(label_split):
@@ -187,7 +192,8 @@ class DenseNNWorkflow(PreprocessedWorkflow):
         optimizer="Adam",
         learning_rate=0.001,
         batch_size=32,
-        num_epochs=1000,
+        num_epochs=100,
+        num_epochs_patience=100,
         kernel_regularizer="none",
         bias_regularizer="none",
         activity_regularizer="none",
@@ -195,14 +201,18 @@ class DenseNNWorkflow(PreprocessedWorkflow):
         kernel_initializer="glorot_uniform",
         stochastic_weight_averaging=False,
         lookahead=False,
-        snapshot_ensembles=False,
-        snapshot_ensembles_period=20,
-        snapshot_ensembles_reset_weights=False,
+        lookahead_learning_rate: float = 0.5,
+        lookahead_num_steps: int = 5,
+        snapshot_ensemble=False,
+        snapshot_ensemble_period_init=20,
+        snapshot_ensemble_period_increase=0,
+        snapshot_ensemble_reset_weights=False,
+        data_augmentation="none",
+        data_augmentation_cutout_patch_ratio: float = 0.1,
         shuffle_each_epoch=True,
-        transform_real="none",
-        transform_cat="onehot",
         verbose=2,
-        epoch_schedule: str = "power",
+        epoch_schedule: str = "full",
+        random_state=None,
         **kwargs,
     ):
         """Dense Neural Network Workflow implements the class of multi-layer fully connected neural networks.
@@ -233,6 +243,11 @@ class DenseNNWorkflow(PreprocessedWorkflow):
             epoch_schedule (str, optional): _description_. Defaults to "power".
         """
 
+        # check kwargs
+        for k in kwargs.keys():
+            if not k.startswith("pp@"):
+                raise ValueError(f"Unsupported hyperparameter for DenseNNWorkflow: {k} (with value ({kwargs[k]}).")
+
         super().__init__(timer, **filter_keys_with_prefix(kwargs, prefix="pp@"))
         self.requires_valid_to_fit = True
         self.requires_test_to_fit = True
@@ -247,6 +262,7 @@ class DenseNNWorkflow(PreprocessedWorkflow):
         self.learning_rate = learning_rate
         self.batch_size = batch_size
         self.num_epochs = num_epochs
+        self.num_epochs_patience = num_epochs_patience
         self.shuffle_each_epoch = shuffle_each_epoch
         self.kernel_regularizer = kernel_regularizer
         self.bias_regularizer = bias_regularizer
@@ -255,19 +271,24 @@ class DenseNNWorkflow(PreprocessedWorkflow):
         self.kernel_initializer = kernel_initializer
         self.stochastic_weight_averaging = stochastic_weight_averaging
         self.lookahead = lookahead
-        self.snapshot_ensembles = snapshot_ensembles
-        self.snapshot_ensembles_period = snapshot_ensembles_period
-        self.snapshot_ensembles_reset_weights = snapshot_ensembles_reset_weights
+        self.lookahead_learning_rate = lookahead_learning_rate
+        self.lookahead_num_steps = lookahead_num_steps
+
+        self.snapshot_ensemble = snapshot_ensemble
+        self.snapshot_ensemble_period_init = snapshot_ensemble_period_init
+        self.snapshot_ensemble_period_increase = snapshot_ensemble_period_increase
+        self.snapshot_ensemble_reset_weights = snapshot_ensemble_reset_weights
         self.snapshot_callback = None
 
-        self.transform_real = transform_real
-        self.transform_cat = transform_cat
+        self.data_augmentation = None if data_augmentation == "none" else data_augmentation
+        self.data_augmentation_cutout_patch_ratio = data_augmentation_cutout_patch_ratio
 
         self.verbose = verbose
         self.epoch_schedule = epoch_schedule
 
         # state variables
         self.use_snapshot_models_for_prediction = False  # this variable is modified by the Snapshot callback
+        self.random_state = random_state
 
         keras.backend.clear_session()
 
@@ -277,6 +298,8 @@ class DenseNNWorkflow(PreprocessedWorkflow):
 
     def build_model(self, input_shape, num_classes):
         inputs = out = keras.Input(shape=input_shape)
+
+        print(f"Building model with input layer size {input_shape}")
 
         prev = None
 
@@ -317,25 +340,50 @@ class DenseNNWorkflow(PreprocessedWorkflow):
         return model
 
     def _encode_label_vector(self, y):
-        return np.array([
+        int_encoded_labels = np.array([
             self.infos["classes_train"].index(self.infos["classes_overall"][label])
             for label in y
         ])
+        one_hot_encoded_labels = keras.utils.to_categorical(
+            int_encoded_labels,
+            num_classes=len(self.infos["classes_train"])
+        )
+        return one_hot_encoded_labels
 
     def _decode_label_vector(self, y):
-        return np.array([
+        out = np.array([
             self.infos["classes_overall"].index(self.infos["classes_train"][i])
             for i in y
         ])
+        return out
+
+    def _transform_train_data_prior_to_standard_preprocessing(self, X, y):
+
+        # apply data augmentation to the one-hot encoded training data
+        y_one_hot = self._encode_label_vector(y)
+        data_augmenters = []
+        if self.data_augmentation == "cutout":
+            data_augmenters.append(CutOutAugmentation(
+                probability_of_cut=self.data_augmentation_cutout_patch_ratio,
+                random_state=self.random_state
+            ))
+        elif self.data_augmentation == "mixup":
+            data_augmenters.append(MixUpAugmentation(random_state=self.random_state))
+        elif self.data_augmentation == "cutmix":
+            data_augmenters.append(CutMixAugmentation(random_state=self.random_state))
+
+        # apply data augmenter(s). In fact there can only be one currently, but we keep the code generic
+        for data_augmenter in data_augmenters:
+            X, y_one_hot = data_augmenter.augment(X, y_one_hot)
+
+        return X, y_one_hot
 
     def _fit_model_after_transformation(self, X, y, X_valid, y_valid, X_test, y_test, metadata):
         self.metadata = metadata
+        print("START FIT")
 
         # create internal labels for keras ordered from 0 to k-1 where, k is the number of labels *known* to the NN
         mask_valid = np.isin(y_valid, self.infos["classes_train"])
-        self.y_valid_label_encoded_keras = np.array([
-            self.infos["classes_train"].index(label) for label in y_valid[mask_valid]
-        ])
 
         # build skeleton of neural network
         self.learner = self.build_model(X.shape[1:], len(self.infos["classes_train"]))
@@ -355,7 +403,7 @@ class DenseNNWorkflow(PreprocessedWorkflow):
             workflow=self,
             timer=self.timer,
             data=dict(
-                train=dict(X=X, y=y),
+                train=dict(X=X, y=np.argmax(y, axis=1)),  # assign the class with the highest true probability (1 except for if data augmentation is used)
                 val=dict(X=X_valid, y=y_valid),
                 test=dict(X=X_test, y=y_test),
             ),
@@ -366,36 +414,43 @@ class DenseNNWorkflow(PreprocessedWorkflow):
         callbacks = [
             keras.callbacks.TerminateOnNaN(),
             keras.callbacks.ReduceLROnPlateau(),
-            keras.callbacks.EarlyStopping(patience=100),
-            iteration_curve_callback,
+            keras.callbacks.EarlyStopping(patience=self.num_epochs_patience),
         ]
 
         base_optimizer = optimizer
         if self.lookahead:
-            optimizer = Lookahead(optimizer, learning_rate=0.5, la_steps=10)
+            optimizer = Lookahead(
+                optimizer,
+                learning_rate=self.lookahead_learning_rate,
+                la_steps=self.lookahead_num_steps
+            )
 
         if self.stochastic_weight_averaging:
-            callbacks.append(SWA(start_epoch=2))
+            callbacks.append(SWA(start_epoch=2, batch_size=self.batch_size))
 
-        if self.snapshot_ensembles:
+        if self.snapshot_ensemble:
             self.snapshot_callback = Snapshot(
                 workflow=self,
                 optimizer=base_optimizer,
-                reset_weights=self.snapshot_ensembles_reset_weights,
-                period=self.snapshot_ensembles_period
+                reset_weights=self.snapshot_ensemble_reset_weights,
+                period_init=self.snapshot_ensemble_period_init,
+                period_increase=self.snapshot_ensemble_period_increase
             )
             callbacks.append(self.snapshot_callback)
 
+        # the callback for the iteration curve should be the last one
+        callbacks.append(iteration_curve_callback)
+
         self.learner.compile(
             optimizer=optimizer,
-            loss="sparse_categorical_crossentropy",
+            loss="categorical_crossentropy",
             metrics=["accuracy"],
         )
 
         # now fit model
         self.learner.fit(
             X,
-            self._encode_label_vector(y),
+            y,
             batch_size=min(len(X), self.batch_size),
             epochs=self.num_epochs,
             shuffle=self.shuffle_each_epoch,
@@ -425,7 +480,7 @@ class DenseNNWorkflow(PreprocessedWorkflow):
 
         # average probabilities
         y_pred_proba = np.array(y_pred_proba)
-        assert not np.any(np.isnan(y_pred_proba)), "There are NAN values in the NN prediction!"
+        assert not np.any(np.isnan(y_pred_proba)), f"There are NAN values in the NN prediction!\n{y_pred_proba}. Input was:\n{X}"
         return y_pred_proba.mean(axis=0)
 
     def _predict_with_proba_after_transform(self, X, use_snapshot_ensemble=False):

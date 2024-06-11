@@ -2,6 +2,7 @@ import keras.ops as ops
 from keras.optimizers import Optimizer
 from keras.src.backend import convert_to_numpy
 from .utils import serialize_object, deserialize_object
+import tensorflow as tf
 
 
 class Lookahead(Optimizer):
@@ -47,10 +48,17 @@ class Lookahead(Optimizer):
             self.assign(phi, variable)
             self.phis.append(phi)
 
+    def _backend_update_step(self, grads, trainable_variables, learning_rate):
+        self.optimizer._backend_update_step(grads, trainable_variables, learning_rate)
+        super()._backend_update_step(grads, trainable_variables, learning_rate)
+
     def update_step(self, gradient, variable, learning_rate):
 
         # update the actual parameters (inner loop, update of thetas)
         self.optimizer.update_step(gradient, variable, self.optimizer.learning_rate)
+
+        tf.print("VAR after update is")
+        tf.print(variable)
 
         # create condition to check whether this iteration is one in which the outer loop logic should be executed
         local_step = self.iterations + 1
