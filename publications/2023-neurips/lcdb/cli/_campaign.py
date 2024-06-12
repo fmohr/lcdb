@@ -1,6 +1,7 @@
 """Command line to run experiments."""
 
 import os
+from ._utils import parse_comma_separated_strs, parse_comma_separated_ints
 
 # Avoid Tensorflow Warnings
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = str(3)
@@ -10,24 +11,33 @@ def add_subparser(subparsers):
     """
     :meta private:
     """
-    subparser_name = "run"
+    subparser_name = "campaign"
     function_to_call = main
 
     subparser = subparsers.add_parser(
-        subparser_name, help="Run experiments with DeepHyper."
+        subparser_name, help="Run sets of experiments in the LCDB 2.0 layout."
+    )
+
+    subparser.add_argument(
+        "-c",
+        "--campaign-dir",
+        type=str,
+        required=True,
+        help="The folder where workflow configs reside and results will be stored.",
     )
 
     subparser.add_argument(
         "-id",
-        "--openml-id",
-        type=int,
+        "--openml-ids",
+        type=parse_comma_separated_ints,
         required=True,
-        help="The identifier of the OpenML dataset.",
+        help="The identifiers of the OpenML datasets.",
     )
+
     subparser.add_argument(
         "-w",
-        "--workflow-class",
-        type=str,
+        "--workflow-classes",
+        type=parse_comma_separated_strs,
         required=True,
         help="The 'path' of the workflow to train.",
     )
@@ -50,27 +60,27 @@ def add_subparser(subparsers):
     )
     subparser.add_argument(
         "-vs",
-        "--valid-seed",
-        type=int,
-        default=42,
+        "--valid-seeds",
+        type=parse_comma_separated_ints,
+        default=[42],
         required=False,
-        help="Random state seed of train/validation split.",
+        help="comma separated random seeds of train/validation split.",
     )
     subparser.add_argument(
         "-ts",
-        "--test-seed",
-        type=int,
-        default=42,
+        "--test-seeds",
+        type=parse_comma_separated_ints,
+        default=[42],
         required=False,
-        help="Random state seed of train+validation/test split.",
+        help="comma separated random seeds of train+validation/test split.",
     )
     subparser.add_argument(
         "-ws",
-        "--workflow-seed",
-        type=int,
-        default=42,
+        "--workflow-seeds",
+        type=parse_comma_separated_ints,
+        default=[42],
         required=False,
-        help="Random state seed of the workflow.",
+        help="comma separated random seeds of the workflow.",
     )
     subparser.add_argument(
         "-vp",
@@ -104,13 +114,6 @@ def add_subparser(subparsers):
         help="Directory where to store the outputs/logs.",
     )
     subparser.add_argument(
-        "--max-evals",
-        type=int,
-        default=100,
-        required=False,
-        help="Number of configurations to run.",
-    )
-    subparser.add_argument(
         "-t",
         "--timeout",
         type=int,
@@ -124,13 +127,6 @@ def add_subparser(subparsers):
         default=1750.0,
         required=False,
         help="Memory limit per config (MBs).",
-    )
-    subparser.add_argument(
-        "--initial-configs",
-        type=str,
-        required=False,
-        default=None,
-        help="Path to a CSV file containing initial configurations.",
     )
     subparser.add_argument(
         "-v",
@@ -171,5 +167,5 @@ def add_subparser(subparsers):
 def main(**kwargs):
 
     """Entry point for the command line interface."""
-    from ..controller import LCDB  # lazy import to avoid slow-down
-    LCDB.run_single_setup(**kwargs)
+    from ..experiments._experiments import LCDB  # lazy import to avoid slow down of the CLI
+    LCDB.run_campaign(**kwargs)

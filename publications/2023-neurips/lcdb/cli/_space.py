@@ -1,10 +1,5 @@
 """Command line to create a list of hyperparameter configurations to be evaluated later."""
-import logging
-import os
-import pathlib
-
-import pandas as pd
-from lcdb.utils import import_attr_from_module
+from ..experiments.utils import import_attr_from_module
 
 
 def add_subparser(subparsers):

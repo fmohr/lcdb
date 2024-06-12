@@ -203,7 +203,7 @@ def decision_fun_to_proba(decision_fun_vals):
     sigmoid = lambda z: 1/(1 + np.exp(-z))
     if len(decision_fun_vals.shape) == 2:
         return softmax(decision_fun_vals, axis=1)
-    else:
+    else:  # if the decision function values is only a vector, then these are the probs of the positive class
         a = sigmoid(decision_fun_vals)
-        return np.column_stack([a, 1 - a])
+        return np.column_stack([1 - a, a])
 

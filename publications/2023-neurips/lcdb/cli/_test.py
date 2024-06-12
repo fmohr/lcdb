@@ -7,9 +7,9 @@ import logging
 
 import lcdb.json
 from deephyper.evaluator import RunningJob
-from lcdb.utils import import_attr_from_module, terminate_on_memory_exceeded
+from ..experiments.utils import import_attr_from_module, terminate_on_memory_exceeded
 
-from ._run import run
+from ..experiments._experiments import run
 
 # Avoid Tensorflow Warnings
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = str(3)
@@ -109,6 +109,7 @@ def add_subparser(subparsers):
         type=str,
         default=None,
         required=False,
+        help="JSON-parsable string with a dictionary that maps parameter names to their values."
     )
     subparser.add_argument(
         "--verbose",
@@ -158,9 +159,9 @@ def main(
     if parameters is None:
         WorkflowClass = import_attr_from_module(workflow_class)
         config_space = WorkflowClass.config_space()
-        config_default = dict(config_space.get_default_configuration())
+        config = dict(config_space.get_default_configuration())
     else:
-        config_default = json.loads(parameters)
+        config = json.loads(parameters)
 
     # create controller
     if task_type not in ["classification", "regression"]:
@@ -183,7 +184,7 @@ def main(
     )
 
     output = run_function(
-        RunningJob(id=0, parameters=config_default),
+        RunningJob(id=0, parameters=config),
         openml_id=openml_id,
         workflow_class=workflow_class,
         task_type=task_type,

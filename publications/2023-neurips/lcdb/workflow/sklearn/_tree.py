@@ -1,12 +1,10 @@
 from ConfigSpace import (
-    Constant,
     Categorical,
     ConfigurationSpace,
     Float,
     Integer,
 )
 
-from ...utils import filter_keys_with_prefix
 from ._base import SklearnWorkflow
 
 from sklearn.tree import DecisionTreeClassifier

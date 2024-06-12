@@ -6,12 +6,11 @@ from ConfigSpace import (
     Float,
     Integer,
 )
-from lcdb.scorer import ClassificationScorer
-from lcdb.utils import get_schedule
+from ...experiments.scorer import ClassificationScorer
+from ...experiments.utils import get_schedule, filter_keys_with_prefix
 
 import numpy as np
 
-from ...utils import filter_keys_with_prefix
 from ._base import SklearnWorkflow
 
 CONFIG_SPACE = ConfigurationSpace(

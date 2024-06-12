@@ -1,10 +1,9 @@
 """Command line to create a list of hyperparameter configurations to be evaluated later."""
-import logging
 import os
 import pathlib
 
 import pandas as pd
-from lcdb.utils import import_attr_from_module
+from ..experiments.utils import import_attr_from_module
 
 
 def add_subparser(subparsers):
@@ -21,11 +20,15 @@ def add_subparser(subparsers):
     subparser.add_argument("-w", "--workflow-class", type=str, required=True)
     subparser.add_argument("-n", "--num-configs", type=int, required=True)
     subparser.add_argument(
+        "-c", "--campaign", type=str, required=False, default=None
+    )
+    subparser.add_argument(
         "-o", "--output-file", type=str, required=False, default="configs.csv"
     )
     subparser.add_argument(
         "-v", "--verbose", action="store_true", default=False, required=False
     )
+    subparser.add_argument("-s", "--seed", type=int, required=False, default=0)
 
     subparser.set_defaults(func=function_to_call)
 
@@ -34,7 +37,9 @@ def main(
     workflow_class,
     num_configs,
     output_file,
-    verbose,
+    seed=0,
+    verbose=False,
+    campaign=None
 ):
     """
     :meta private:
@@ -56,7 +61,7 @@ def main(
 
     # Sample the configurations
     # TODO: LHS should be done here
-    configs = skopt_space.rvs(n_samples=num_configs - 1)
+    configs = skopt_space.rvs(n_samples=num_configs - 1, random_state=seed)
 
     # Add the default configuration
     config_default = config_space.get_default_configuration()
@@ -71,6 +76,14 @@ def main(
             val = skopt_space.dimensions[i].bounds[0]
         x.append(val)
     configs.insert(0, x)  # at the beginning
+
+    # modify output file
+    if campaign is not None:
+        if output_file != "configs.csv":
+            raise ValueError("You must specify *either* a campaign *or* an output file; in a campaign, the file is always called 'configs.csv' in the respective workflow folder.")
+        output_folder = f"{campaign.rstrip('/')}/{workflow_class}"
+        pathlib.Path(output_folder).mkdir(parents=True, exist_ok=True)
+        output_file = f"{output_folder}/configs.csv"
 
     pd.DataFrame(configs, columns=skopt_space.dimension_names).to_csv(
         output_file, index=False

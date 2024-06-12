@@ -1,7 +1,7 @@
 """Command line to create a list of hyperparameter configurations to be evaluated later."""
 import numpy as np
-from lcdb.data import load_task
-from lcdb.data.split import train_valid_test_split
+from ..data import load_task
+from ..data.split import train_valid_test_split
 
 
 def add_subparser(subparsers):

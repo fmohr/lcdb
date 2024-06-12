@@ -1,21 +1,17 @@
 from ConfigSpace import (
     Categorical,
     ConfigurationSpace,
-    Constant,
-    EqualsCondition,
     Float,
     Integer,
-    OrConjunction,
 )
 from sklearn.svm import SVC
 
-from ...utils import filter_keys_with_prefix
 from ._svm import SVMWorkflow
 
 CONFIG_SPACE = ConfigurationSpace(
     name="libsvm",
     space={
-        "C": Float("C", bounds=(1e-12, 1e12), default=10**4, log=True),
+        "C": Float("C", bounds=(1e-12, 1e12), default=1.0, log=True),
         "shrinking": Categorical("shrinking", [True, False], default=True),
         "tol": Float("tol", bounds=(4.5e-5, 2), default=1e-3, log=True),
         "cap_max_iter": Categorical("cap_max_iter", [True, False], default=False),

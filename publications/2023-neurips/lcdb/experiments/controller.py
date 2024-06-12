@@ -1,20 +1,147 @@
 import functools
-import itertools as it
+import numpy as np
+import copy
 import logging
-import pprint
+
+try:
+    # Avoid some errors on some MPI implementations
+    import mpi4py
+
+    mpi4py.rc.initialize = False
+    mpi4py.rc.threads = True
+    mpi4py.rc.thread_level = "multiple"
+    mpi4py.rc.recv_mprobe = False
+    MPI4PY_IMPORTED = True
+except ModuleNotFoundError:
+    MPI4PY_IMPORTED = False
+
+from deephyper.evaluator import Evaluator, RunningJob
+from ..data import load_task
+from .utils import import_attr_from_module, terminate_on_memory_exceeded
+
+
 import traceback
 import warnings
 
-import numpy as np
-from lcdb.data.split import train_valid_test_split
-from lcdb.timer import Timer
-from lcdb.utils import (
+from tqdm import tqdm
+
+from ..data.split import train_valid_test_split
+from .timer import Timer
+from .utils import (
     FunctionCallTimeoutError,
     get_schedule,
     terminate_on_timeout,
 )
-from lcdb.scorer import ClassificationScorer, RegressionScorer
+from .scorer import ClassificationScorer, RegressionScorer
 from sklearn.preprocessing import FunctionTransformer, OneHotEncoder
+
+
+def run(
+    job: RunningJob,
+    openml_id: int = 3,
+    task_type: str = "classification",
+    workflow_class: str = "lcdb.workflow.sklearn.LibLinearWorkflow",
+    monotonic: bool = True,
+    valid_seed: int = 42,
+    test_seed: int = 42,
+    workflow_seed: int = 42,
+    valid_prop: float = 0.1,
+    test_prop: float = 0.1,
+    timeout_on_fit=-1,
+    known_categories: bool = True,
+    raise_errors: bool = False,
+    anchor_schedule: str = "power",
+    epoch_schedule: str = "power",
+):
+    """This function trains the workflow on a dataset and returns performance metrics.
+
+    Args:
+        job (RunningJob): A running job passed by DeepHyper (represent an instance of the function).
+        openml_id (int, optional): The identifier of the OpenML dataset. Defaults to 3.
+        workflow_class (str, optional): The "path" of the workflow to train. Defaults to "lcdb.workflow.sklearn.LibLinearWorkflow".
+        monotonic (bool, optional): A boolean indicating if the sample-wise learning curve should be monotonic (i.e., sample set at smaller anchors are always included in sample sets at larger anchors) or not. Defaults to True.
+        valid_seed (int, optional): Random state seed of train/validation split. Defaults to 42.
+        test_seed (int, optional): Random state seed of train+validation/test split. Defaults to 42.
+        workflow_seed (int, optional): Random state seed of the workflow. Defaults to 42.
+        valid_prop (float, optional): Ratio of validation/(train+validation). Defaults to 0.1.
+        test_prop (float, optional): Ratio of test/data . Defaults to 0.1.
+        timeout_on_fit (int, optional): Timeout in seconds for the fit method. Defaults to -1 for infinite time.
+        known_categories (bool, optional): If all the possible categories are assumed to be known in advance. Defaults to True.
+        raise_errors (bool, optional): If `True`, then errors are risen to the outside. Otherwise, just a log message is generated. Defaults to False.
+        anchor_schedule (str, optional): A type of schedule for anchors (over samples of the dataset). Defaults to "power".
+        epoch_schedule (str, optional): A type of schedule for epochs (over epochs of the dataset). Defaults to "power".
+
+    Returns:
+        dict: a dictionary with 2 keys (objective, metadata) where objective is the objective maximized by deephyper (if used) and metadata is a JSON serializable sub-dictionnary which are complementary information about the workflow.
+    """
+    logging.info(f"Running job {job.id} with parameters: {job.parameters}")
+
+    timer = Timer(precision=4)
+    run_timer_id = timer.start("run")
+
+    # Load the raw dataset
+    with timer.time("load_task"):
+        logging.info("Loading the dataset...")
+        (X, y), dataset_metadata = load_task(f"openml.{openml_id}")
+
+    # Create and fit the workflow
+    logging.info("Importing the workflow...")
+    WorkflowClass = import_attr_from_module(workflow_class)
+    workflow_kwargs = copy.deepcopy(job.parameters)
+    workflow_kwargs["epoch_schedule"] = epoch_schedule
+    workflow_kwargs["random_state"] = workflow_seed
+    workflow_factory = lambda: WorkflowClass(timer=timer, **workflow_kwargs)
+
+    # Initialize information to be returned
+    infos = {
+        "openmlid": openml_id,
+        "workflow_seed": workflow_seed,
+        "workflow": workflow_class,
+    }
+
+    # create controller
+    if task_type not in ["classification", "regression"]:
+        raise ValueError(
+            f"Task type must be 'classification' or 'regression' but is {task_type}."
+        )
+    is_classification = task_type == "classification"
+    stratify = is_classification
+
+    controller = LCController(
+        timer=timer,
+        workflow_factory=workflow_factory,
+        is_classification=is_classification,
+        X=X,
+        y=y,
+        dataset_metadata=dataset_metadata,
+        test_seed=test_seed,
+        valid_seed=valid_seed,
+        monotonic=monotonic,
+        test_prop=test_prop,
+        valid_prop=valid_prop,
+        timeout_on_fit=timeout_on_fit,
+        known_categories=known_categories,
+        stratify=stratify,
+        raise_errors=raise_errors,
+        anchor_schedule=anchor_schedule,
+    )
+
+    # build the curves
+    controller.build_curves()
+
+    assert (
+        timer.active_node.id == run_timer_id
+    ), f"Timer is not at the right place: {timer.active_node}"
+    timer.stop()
+
+    # update infos based on report
+    infos.update(controller.report)
+
+    infos["json"] = timer.as_json()
+
+    results = {"objective": controller.objective, "metadata": infos}
+
+    return results
 
 
 class LCController:
@@ -133,7 +260,7 @@ class LCController:
         # Build sample-wise learning curve
 
         with self.timer.time("build_curves"):
-            for anchor in self.anchors:
+            for anchor in tqdm(self.anchors):
                 self.set_anchor(anchor)
 
                 with self.timer.time("anchor", {"value": anchor}) as anchor_timer:

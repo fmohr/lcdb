@@ -315,7 +315,6 @@ class PreprocessedWorkflow(BaseWorkflow):
         X_train_transformed = self.transform(X=X, y=y, metadata=metadata, timer_suffix="_train").astype(np.float32)  # create + fit pp pipeline
         X_valid_transformed = self.transform(X_valid, y_valid, metadata, timer_suffix="_valid").astype(np.float32)
         X_test_transformed = self.transform(X_test, y_test, metadata, timer_suffix="_test").astype(np.float32)
-        print(f"Transformed. New shape: {X_train_transformed.shape}")
 
         self._fit_model_after_transformation(X_train_transformed, y, X_valid_transformed, y_valid, X_test_transformed, y_test, metadata)
 

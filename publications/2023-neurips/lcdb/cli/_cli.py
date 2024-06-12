@@ -5,7 +5,7 @@ $ lcdb run ...
 """
 import argparse
 
-from lcdb.cli import _create, _run, _space, _fetch, _test, _plot
+from . import _space, _create, _fetch, _results, _run, _test, _campaign, _plot
 
 
 def create_parser():
@@ -17,19 +17,26 @@ def create_parser():
     subparsers = parser.add_subparsers()
 
     # print the hyperparameter space
+
     _space.add_subparser(subparsers)
 
     # generation of hyperparameter configurations
     _create.add_subparser(subparsers)
-
-    # execution of experiments
-    _run.add_subparser(subparsers)
 
     # fetch data
     _fetch.add_subparser(subparsers)
 
     # test workflow
     _test.add_subparser(subparsers)
+
+    # execution of experiments
+    _run.add_subparser(subparsers)
+
+    # execution of experiments
+    _campaign.add_subparser(subparsers)
+
+    # plot results
+    _results.add_subparser(subparsers)
 
     # plot results
     _plot.add_subparser(subparsers)

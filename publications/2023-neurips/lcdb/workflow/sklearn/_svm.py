@@ -1,17 +1,11 @@
 from ConfigSpace import (
     Categorical,
     ConfigurationSpace,
-    Float,
-    ForbiddenAndConjunction,
-    ForbiddenEqualsClause,
-    Integer,
 )
 from sklearn.multiclass import OneVsOneClassifier
 from sklearn.svm import LinearSVC, SVC
-import numpy as np
-from scipy.special import softmax
 
-from ...utils import filter_keys_with_prefix, decision_fun_to_proba
+from ...experiments.utils import decision_fun_to_proba
 from ._base import SklearnWorkflow
 
 CONFIG_SPACE = ConfigurationSpace(

@@ -1,17 +1,8 @@
 from ConfigSpace import (
-    Categorical,
     ConfigurationSpace,
-    Float,
-    ForbiddenAndConjunction,
-    ForbiddenEqualsClause,
-    Integer,
 )
-from sklearn.multiclass import OneVsOneClassifier
-from sklearn.svm import LinearSVC
-import numpy as np
-from scipy.special import softmax
 
-from ...utils import filter_keys_with_prefix
+from ...experiments.utils import filter_keys_with_prefix
 from .._preprocessing_workflow import PreprocessedWorkflow
 
 
@@ -39,6 +30,7 @@ class SklearnWorkflow(PreprocessedWorkflow):
     ):
         super().__init__(timer, **filter_keys_with_prefix(kwargs, prefix="pp@"))
         self.learner = learner
+        self._internal_class_mapping = None
 
     @classmethod
     def config_space(cls):
@@ -47,17 +39,14 @@ class SklearnWorkflow(PreprocessedWorkflow):
     def _fit_model_after_transformation(self, X, y, X_valid, y_valid, X_test, y_test, metadata):
         self.metadata = metadata
         self.learner.fit(X, y)
-        self.infos["classes"] = list(self.learner.classes_)
 
     def _predict_after_transform(self, X):
         return self.learner.predict(X)
 
     def _predict_proba_after_transform(self, X):
-        return self.learner.predict_proba(X)
+        return self.learner.predict_proba(X)[self._internal_class_mapping]
 
     def _predict_with_proba_without_transform(self, X):
         y_pred_proba = self._predict_proba_after_transform(X)
-        y_pred = y_pred_proba.argmax(axis=1)
-        classes = self.learner.classes_
-        y_pred = [classes[i] for i in y_pred]
+        y_pred = y_pred_proba.argmax(axis=1)  # is based on the internal convention that labels are 0 to k-1
         return y_pred, y_pred_proba

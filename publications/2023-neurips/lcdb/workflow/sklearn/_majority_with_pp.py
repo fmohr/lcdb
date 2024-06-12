@@ -4,7 +4,7 @@ from ConfigSpace import (
 from sklearn.dummy import DummyClassifier
 
 from .._preprocessing_workflow import PreprocessedWorkflow
-from ...utils import filter_keys_with_prefix
+from ...experiments.utils import filter_keys_with_prefix
 
 CONFIG_SPACE = ConfigurationSpace(
     name="sklearn.MajorityWorkflow"

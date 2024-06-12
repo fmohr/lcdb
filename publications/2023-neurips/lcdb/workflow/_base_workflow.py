@@ -1,7 +1,7 @@
 import abc
 
 from typing import Any, Tuple, Dict
-from lcdb.timer import Timer
+from ..experiments.timer import Timer
 import ConfigSpace
 
 import numpy as np
@@ -46,6 +46,7 @@ class BaseWorkflow(abc.ABC):
         self.infos["classes_test_orig"] = np.unique(y_test).tolist()
 
         # replace labels
+        y_old = y
         y = self.label_encoder.transform(y)
         y_valid = self.label_encoder.transform(y_valid)
         y_test = self.label_encoder.transform(y_test)

@@ -1,5 +1,4 @@
 import keras
-from keras.src.backend import convert_to_numpy
 import pandas as pd
 import numpy as np
 from ConfigSpace import Categorical, ConfigurationSpace, Float, Integer
@@ -380,7 +379,6 @@ class DenseNNWorkflow(PreprocessedWorkflow):
 
     def _fit_model_after_transformation(self, X, y, X_valid, y_valid, X_test, y_test, metadata):
         self.metadata = metadata
-        print("START FIT")
 
         # create internal labels for keras ordered from 0 to k-1 where, k is the number of labels *known* to the NN
         mask_valid = np.isin(y_valid, self.infos["classes_train"])

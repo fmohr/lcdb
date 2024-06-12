@@ -1,14 +1,10 @@
-import ConfigSpace
 from ConfigSpace import (
-    Categorical,
     ConfigurationSpace,
-    Integer,
-    EqualsCondition,
 )
 from sklearn.linear_model import LogisticRegression, PassiveAggressiveClassifier, RidgeClassifier, Perceptron
 
 from ._base import SklearnWorkflow
-from ...utils import decision_fun_to_proba
+from ...experiments.utils import decision_fun_to_proba
 
 
 CONFIG_SPACE_LR = ConfigurationSpace(

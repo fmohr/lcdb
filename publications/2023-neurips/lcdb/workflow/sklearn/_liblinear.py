@@ -8,7 +8,6 @@ from ConfigSpace import (
 )
 from sklearn.svm import LinearSVC
 
-from ...utils import filter_keys_with_prefix
 from ._svm import SVMWorkflow
 
 CONFIG_SPACE = ConfigurationSpace(

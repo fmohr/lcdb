@@ -1,18 +1,8 @@
-import sklearn
 from ConfigSpace import (
-    Constant,
-    Categorical,
     ConfigurationSpace,
-    Float,
-    Integer,
 )
-from lcdb.scorer import ClassificationScorer
 from sklearn.ensemble import ExtraTreesClassifier
-from lcdb.utils import get_schedule
 
-import numpy as np
-
-from ...utils import filter_keys_with_prefix
 from ._forest import ForestWorkflow
 
 CONFIG_SPACE = ConfigurationSpace(

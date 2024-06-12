@@ -1,7 +1,7 @@
 from itertools import combinations, product
 
 import numpy as np
-from lcdb.timer import Timer
+from .timer import Timer
 
 from sklearn.metrics import (
     brier_score_loss,
