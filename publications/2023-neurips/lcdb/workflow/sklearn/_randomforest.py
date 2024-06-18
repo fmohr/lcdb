@@ -7,7 +7,7 @@ from ConfigSpace import (
 )
 from sklearn.ensemble import RandomForestClassifier
 
-from ._forest import ForestWorkflow
+from ._bagging import BaggingWorkflow
 
 CONFIG_SPACE = ConfigurationSpace(
     name="sklearn.RandomForestWorkflow",
@@ -15,13 +15,13 @@ CONFIG_SPACE = ConfigurationSpace(
 )
 
 
-class RandomForestWorkflow(ForestWorkflow):
+class RandomForestWorkflow(BaggingWorkflow):
     # Static Attribute
     _config_space = CONFIG_SPACE
     _config_space.add_configuration_space(
         prefix="",
         delimiter="",
-        configuration_space=ForestWorkflow.config_space(),
+        configuration_space=BaggingWorkflow.config_space(),
     )
 
     def __init__(
@@ -67,7 +67,7 @@ class RandomForestWorkflow(ForestWorkflow):
         )
 
         super().__init__(
-            forest=RandomForestClassifier(**learner_kwargs),
+            bagging=RandomForestClassifier(**learner_kwargs),
             n_estimators=n_estimators,
             timer=timer,
             **kwargs

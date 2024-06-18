@@ -51,7 +51,8 @@ def run(
     known_categories: bool = True,
     raise_errors: bool = False,
     anchor_schedule: str = "power",
-    epoch_schedule: str = "power",
+    epoch_schedule: str = "full",
+    logger=None
 ):
     """This function trains the workflow on a dataset and returns performance metrics.
 
@@ -74,18 +75,18 @@ def run(
     Returns:
         dict: a dictionary with 2 keys (objective, metadata) where objective is the objective maximized by deephyper (if used) and metadata is a JSON serializable sub-dictionnary which are complementary information about the workflow.
     """
-    logging.info(f"Running job {job.id} with parameters: {job.parameters}")
+    logger.info(f"Running job {job.id} with parameters: {job.parameters}")
 
     timer = Timer(precision=4)
     run_timer_id = timer.start("run")
 
     # Load the raw dataset
     with timer.time("load_task"):
-        logging.info("Loading the dataset...")
+        logger.info("Loading the dataset...")
         (X, y), dataset_metadata = load_task(f"openml.{openml_id}")
 
     # Create and fit the workflow
-    logging.info("Importing the workflow...")
+    logger.info("Importing the workflow...")
     WorkflowClass = import_attr_from_module(workflow_class)
     workflow_kwargs = copy.deepcopy(job.parameters)
     workflow_kwargs["epoch_schedule"] = epoch_schedule
@@ -163,7 +164,11 @@ class LCController:
         known_categories: bool = True,
         raise_errors: bool = False,
         anchor_schedule: str = "power",
+        logger=None
     ):
+
+        self.logger = logger if logger is not None else logging.getLogger("LCDB")
+
         self.timer = timer
         self.workflow_factory = workflow_factory
         self.workflow = None
@@ -264,8 +269,8 @@ class LCController:
                 self.set_anchor(anchor)
 
                 with self.timer.time("anchor", {"value": anchor}) as anchor_timer:
-                    logging.info(
-                        f"Running anchor {anchor} which is {anchor / self.X_train.shape[0] * 100:.2f}% of the dataset."
+                    self.logger.info(
+                        f"Fitting workflow {self.workflow.__class__.__name__} on sample anchor {anchor} which is {anchor / self.X_train.shape[0] * 100:.2f}% of the dataset."
                     )
 
                     error_code = self.fit_workflow_on_current_anchor()
@@ -283,7 +288,7 @@ class LCController:
                         break
 
                     # Predict and Score
-                    logging.info("Predicting and scoring...")
+                    self.logger.info("Predicting and scoring...")
                     try:
                         self.compute_metrics_for_workflow()
                     except Exception as exception:
@@ -293,7 +298,7 @@ class LCController:
                         # Collect traceback
                         self.report["traceback"] = traceback.format_exc()
 
-                        logging.error(
+                        self.logger.error(
                             f"Error while fitting the workflow: \n{self.report['traceback']}"
                         )
 
@@ -346,7 +351,7 @@ class LCController:
         except Exception as exception:
             self.report["traceback"] = traceback.format_exc()
 
-            logging.error(
+            self.logger.error(
                 f"Error while fitting the workflow: \n{self.report['traceback']}"
             )
 

@@ -5,8 +5,12 @@ import numpy as np
 from deephyper.analysis import rank
 from matplotlib.colors import LinearSegmentedColormap
 
-from .json import QueryAnchorValues
-from .json import QueryMetricValuesFromAnchors
+from .json import (
+    QueryAnchorValues,
+    QueryEpochValues,
+    QueryMetricValuesFromAnchors,
+    QueryMetricValuesFromEpochs
+)
 from .score import balanced_accuracy_from_confusion_matrix
 
 
@@ -130,6 +134,84 @@ def plot_observation_curves(df_results):
     ax.set_yscale("log")
     return fig, ax
     #plt.savefig(os.path.join(os.path.dirname(output_path), "val_balanced_error_rate_vs_samples.jpg"), dpi=300, bbox_inches="tight")
+
+
+def plot_observation_curves(df_results):
+    l = []
+    hp_columns = [c for c in df_results.columns if c.startswith("p:")]
+
+    for hp_config, df_hp_config in df_results.groupby(hp_columns):
+        source = df_hp_config["m:json"]
+        query_anchor_values = QueryAnchorValues()
+        anchor_values = source.apply(query_anchor_values).to_list()
+
+        query_confusion_matrix_values = QueryMetricValuesFromAnchors("confusion_matrix", split_name="val")
+        out = source.apply(query_confusion_matrix_values)
+
+        balanced_error_rate_values = np.array(out.apply(lambda x: list(map(lambda x: 1 - balanced_accuracy_from_confusion_matrix(x), x))).to_list())
+        l.append(np.mean(balanced_error_rate_values, axis=0))
+        print(l[-1].round(2))
+
+    balanced_error_rate_values = np.array(l)
+
+    for i, (xi, yi) in enumerate(zip(anchor_values, l)):
+        anchor_values[i] = xi[:len(yi)]
+
+    fig, ax = plt.subplots()
+    plot_learning_curves(anchor_values, balanced_error_rate_values, metric_value_baseline=balanced_error_rate_values[0][-1], ax=ax)
+    ax.axhline(y=balanced_error_rate_values[0][-1], color="lime", linestyle="--")
+    ax.set_xlabel(f"Number of Samples")
+    ax.set_ylabel(f"Validation Balanced Error Rate")
+    ax.set_xscale("log")
+    ax.set_yscale("log")
+    return fig, ax
+
+
+def plot_iteration_curves_dataset(df_results, metric="balanced_accuracy", sample_anchor=-1, log_x=False, log_y=True):
+
+    # throw-out
+    df_results = df_results[df_results["m:json"].notna()]
+
+    l = []
+    hp_columns = [c for c in df_results.columns if c.startswith("p:")]
+
+    epoch_values_per_config = []
+    for hp_config, df_hp_config in df_results.groupby(hp_columns):
+        source = df_hp_config["m:json"]
+        query_epoch_values = QueryEpochValues()
+        epoch_values = np.array(source.apply(query_epoch_values).to_list())
+        epoch_values_per_config.append(epoch_values[0][sample_anchor])  # should be the same for all repetitions of this config
+
+        if metric in ["brier_score", "log_loss"]:
+            query_metric = metric
+            metric_map = lambda x: x
+        else:
+            query_metric = "confusion_matrix"
+            metric_map = lambda val: 1 - balanced_accuracy_from_confusion_matrix(val),
+        base_values = source.apply(QueryMetricValuesFromEpochs(query_metric, split_name="val"))
+
+        # extract epoch-wise balanced error rate (this cannot generally be translated to an array due to different epoch counts)
+        balanced_error_rate_values = base_values.apply(
+            lambda sample_wise_values: list(map(
+                metric_map,
+                sample_wise_values[sample_anchor]  # this is the list of epoch-wise values for this sample anchor
+            ))
+        ).to_list()  # only get values from desired sample anchor
+        l.append(np.mean(balanced_error_rate_values, axis=0))
+
+    balanced_error_rate_values = np.array(l)
+
+    fig, ax = plt.subplots()
+    plot_learning_curves(epoch_values_per_config, balanced_error_rate_values, metric_value_baseline=balanced_error_rate_values[0][-1], ax=ax)
+    ax.axhline(y=balanced_error_rate_values[0][-1], color="lime", linestyle="--")
+    ax.set_xlabel(f"Number of Iterations")
+    ax.set_ylabel(f"Validation Balanced Error Rate")
+    if log_x:
+        ax.set_xscale("log")
+    if log_y:
+        ax.set_yscale("log")
+    return fig, ax
+
 
 def pad_with_last(x, max_len):
     if len(x) < max_len:

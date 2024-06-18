@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 from sys import getsizeof
 from ConfigSpace import (
+    Constant,
     Categorical,
     ConfigurationSpace,
     Float,
@@ -72,7 +73,7 @@ CONFIG_SPACE = ConfigurationSpace(
         "selectp_percentile": Integer(
             "selectp_percentile", bounds=(25, 100), default=100
         ),
-        "poly_degree": Integer("poly_degree", bounds=(2, 3), default=2),
+        "poly_degree": Constant("poly_degree", 2),#Integer("poly_degree", bounds=(2, 2), default=2),
         "std_with_std": Categorical("std_with_std", [True, False], default=True),
     },
 )

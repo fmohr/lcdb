@@ -131,6 +131,24 @@ def add_subparser(subparsers):
         help="The identifier of the OpenML dataset.",
     )
 
+    subparser.add_argument(
+        "-a",
+        "--anchor",
+        type=int,
+        required=False,
+        default=-1,
+        help="sample-wise anchor (index); -1 for last.",
+    )
+
+    subparser.add_argument(
+        "-m",
+        "--metric",
+        type=str,
+        required=False,
+        default="brier_score",
+        help="Metric for which to show performances.",
+    )
+
     subparser.add_argument("-o", "--output-path", type=str, default="plot.png", required=False)
     
     subparser.add_argument("-t", "--plot-type", type=str, default="observation-wise")
@@ -143,11 +161,17 @@ def main(
     workflow_classes,
     openml_id,
     output_path,
-    plot_type
+    plot_type,
+    anchor,
+    metric
 ):
 
     from ..analysis.results import ResultAggregator
-    from ..analysis.plot import plot_learning_curves, plot_observation_curves
+    from ..analysis.plot import (
+        plot_learning_curves,
+        plot_observation_curves,
+        plot_iteration_curves_dataset
+    )
 
     results_aggregator = ResultAggregator(repositories)
 
@@ -158,8 +182,18 @@ def main(
         )
         df_results = df_results[df_results["m:traceback"].isna()]
 
-        fig, ax = plot_observation_curves(df_results)
-        fig.suptitle(f"Performance of {workflow_class} on {openml_id}")
-        plt.draw()
+        with open("out.json", "w") as f:
+            json.dump(df_results.iloc[0]["m:json"], f, indent=4)
+
+        if plot_type == "observation-wise":
+            fig, ax = plot_observation_curves(df_results)
+            fig.suptitle(f"Performance of {workflow_class} on {openml_id}")
+            plt.draw()
+        elif plot_type == "iteration-wise":
+            fig, ax = plot_iteration_curves_dataset(df_results, metric=metric, sample_anchor=anchor)
+            fig.suptitle(f"Performance of {workflow_class} on {openml_id}")
+            plt.draw()
+        else:
+            raise ValueError(f"Unsupported plot type {plot_type}")
 
     plt.show()

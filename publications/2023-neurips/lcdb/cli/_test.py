@@ -125,7 +125,7 @@ def add_subparser(subparsers):
     )
     subparser.add_argument(
         "--epoch-schedule",
-        default="power",
+        default="full",
         type=str,
         help="The type of schedule for anchors (over learning iterations of the workflow). Value in ['linear', 'last', 'power'].",
     )
@@ -148,12 +148,15 @@ def main(
     anchor_schedule,
     epoch_schedule,
 ):
-    if verbose:
-        logging.basicConfig(
-            level=logging.INFO,
-            format="%(asctime)s - %(levelname)s - %(filename)s:%(funcName)s - %(message)s",
-            force=True,
-        )
+
+    # define stream handler
+    ch = logging.StreamHandler()
+    ch.setLevel(logging.DEBUG)
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    ch.setFormatter(formatter)
+
+    logger = logging.getLogger("LCDB")
+    logger.addHandler(ch)
 
     # No parameters are given the default configuration is used
     if parameters is None:
@@ -197,6 +200,7 @@ def main(
         timeout_on_fit=timeout_on_fit,
         anchor_schedule=anchor_schedule,
         epoch_schedule=epoch_schedule,
+        logger=logger
     )
 
     # check that the output can indeed be compiled into a string using JSON

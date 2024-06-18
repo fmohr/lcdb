@@ -2,6 +2,7 @@
 
 import os
 from ._utils import parse_comma_separated_strs, parse_comma_separated_ints
+import logging
 
 # Avoid Tensorflow Warnings
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = str(3)
@@ -157,15 +158,30 @@ def add_subparser(subparsers):
     )
     subparser.add_argument(
         "--epoch-schedule",
-        default="power",
+        default="full",
         type=str,
         help="The type of schedule for anchors (over learning iterations of the workflow). Value in ['linear', 'last', 'power'].",
     )
     subparser.set_defaults(func=function_to_call)
 
 
-def main(**kwargs):
+def main(verbose, **kwargs):
 
     """Entry point for the command line interface."""
     from ..experiments._experiments import LCDB  # lazy import to avoid slow down of the CLI
-    LCDB.run_campaign(**kwargs)
+
+    # define stream handler
+    ch = logging.StreamHandler()
+    ch.setLevel(logging.DEBUG)
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    ch.setFormatter(formatter)
+
+    logger = logging.getLogger("LCDB")
+    kwargs["logger"] = logger
+    if verbose:
+
+        logger.setLevel(logging.DEBUG)
+        logger.addHandler(ch)
+
+
+    LCDB.run_campaign(verbose=verbose, **kwargs)

@@ -30,7 +30,6 @@ class SklearnWorkflow(PreprocessedWorkflow):
     ):
         super().__init__(timer, **filter_keys_with_prefix(kwargs, prefix="pp@"))
         self.learner = learner
-        self._internal_class_mapping = None
 
     @classmethod
     def config_space(cls):
@@ -44,7 +43,7 @@ class SklearnWorkflow(PreprocessedWorkflow):
         return self.learner.predict(X)
 
     def _predict_proba_after_transform(self, X):
-        return self.learner.predict_proba(X)[self._internal_class_mapping]
+        return self.learner.predict_proba(X)
 
     def _predict_with_proba_without_transform(self, X):
         y_pred_proba = self._predict_proba_after_transform(X)

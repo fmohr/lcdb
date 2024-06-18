@@ -15,9 +15,9 @@ def deserialize_dataframe(df: pd.DataFrame) -> pd.DataFrame:
 
     # Convert the string to JSON
     str_to_json = (
-        lambda x: x.replace("'", '"').replace("nan", "NaN").replace("inf", "Infinity")
+        lambda x: x.replace("'", '"').replace("nan", "NaN").replace("inf", "Infinity") if type(x) == str else x
     )
-    load_json = lambda x: lcdb.json.loads(str_to_json(x))
+    load_json = lambda x: lcdb.json.loads(str_to_json(x)) if type(x) == str else x
     load_array = lambda x: np.array(load_json(x))
 
     # Load the arrays

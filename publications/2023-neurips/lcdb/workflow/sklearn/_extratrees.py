@@ -3,7 +3,7 @@ from ConfigSpace import (
 )
 from sklearn.ensemble import ExtraTreesClassifier
 
-from ._forest import ForestWorkflow
+from ._bagging import BaggingWorkflow
 
 CONFIG_SPACE = ConfigurationSpace(
     name="sklearn.RandomForestWorkflow",
@@ -11,13 +11,13 @@ CONFIG_SPACE = ConfigurationSpace(
 )
 
 
-class ExtraTreesWorkflow(ForestWorkflow):
+class ExtraTreesWorkflow(BaggingWorkflow):
     # Static Attribute
     _config_space = CONFIG_SPACE
     _config_space.add_configuration_space(
         prefix="",
         delimiter="",
-        configuration_space=ForestWorkflow.config_space(),
+        configuration_space=BaggingWorkflow.config_space(),
     )
 
     def __init__(
@@ -42,6 +42,11 @@ class ExtraTreesWorkflow(ForestWorkflow):
         **kwargs,
     ):
 
+        if max_features == "none":
+            max_features = None
+        if not bootstrap:
+            max_samples = None
+
         learner_kwargs = dict(
             n_estimators=1,
             criterion=criterion,
@@ -63,7 +68,7 @@ class ExtraTreesWorkflow(ForestWorkflow):
         )
 
         super().__init__(
-            forest=ExtraTreesClassifier(**learner_kwargs),
+            bagging=ExtraTreesClassifier(**learner_kwargs),
             n_estimators=n_estimators,
             timer=timer,
             **kwargs

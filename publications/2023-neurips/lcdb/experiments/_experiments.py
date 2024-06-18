@@ -28,6 +28,7 @@ class LCDB:
             timeout,
             initial_configs,
             verbose,
+            logger,
             evaluator,
             num_workers,
             anchor_schedule,
@@ -155,6 +156,7 @@ class LCDB:
             "timeout_on_fit": timeout_on_fit,
             "anchor_schedule": anchor_schedule,
             "epoch_schedule": epoch_schedule,
+            "logger": logger
         }
 
         method_kwargs["run_function_kwargs"] = run_function_kwargs
@@ -211,6 +213,7 @@ class LCDB:
             log_dir,
             timeout,
             verbose,
+            logger,
             evaluator,
             num_workers,
             anchor_schedule,
@@ -288,6 +291,7 @@ class LCDB:
                                 timeout=timeout,
                                 initial_configs=config_file,
                                 verbose=verbose,
+                                logger=logger,
                                 evaluator=evaluator,
                                 num_workers=num_workers,
                                 anchor_schedule=anchor_schedule,
