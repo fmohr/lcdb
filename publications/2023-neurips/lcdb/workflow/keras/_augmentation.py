@@ -1,3 +1,4 @@
+import tensorflow as tf
 from tensorflow import data as tf_data
 from keras.random import gamma as tf_random_gamma
 import keras.ops as ops
@@ -58,13 +59,15 @@ class MixUpAugmentation(RandomnessBasedAugmenter):
     def augment(self, X, y):
         indices = list(range(X.shape[0]))
         random_partner_indices = self.random_state.choice(indices, size=len(indices), replace=False)
-        cross_over = np.array(self.split_point_distribution(size=len(indices))).reshape(-1, 1)
+        cross_over = tf.convert_to_tensor(self.split_point_distribution(size=len(indices))).reshape(-1, 1)
 
         # mix up X
+        X = tf.convert_to_tensor(X)
         X_right = X[random_partner_indices]
         X_after = X * cross_over + X_right * (1 - cross_over)
 
         # mix up y
+        y = tf.convert_to_tensor(y)
         y_right = y[random_partner_indices]
         y_after = y * cross_over + y_right * (1 - cross_over)
 
@@ -92,13 +95,15 @@ class CutMixAugmentation(RandomnessBasedAugmenter):
         n_cells = n_instances * X.shape[1]
         random_partner_indices = self.random_state.choice(indices, size=n_instances, replace=False)
         random_binary_mask = self.random_state.randint(low=0, high=2, size=n_cells).reshape((n_instances, -1))
-        lambdas = np.array(self.split_point_distribution(size=n_instances)).reshape(-1, 1)
+        lambdas = tf.convert_to_tensor(self.split_point_distribution(size=n_instances)).reshape(-1, 1)
 
         # cut mix X
+        X = tf.convert_to_tensor(X)
         X_right = X[random_partner_indices]
         X_after = X * random_binary_mask + X_right * (1 - random_binary_mask)
 
         # mix up y
+        y = tf.convert_to_tensor(y)
         y_right = y[random_partner_indices]
         y_after = y * lambdas + y_right * (1 - lambdas)
 

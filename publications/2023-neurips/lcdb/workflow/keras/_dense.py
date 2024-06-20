@@ -1,6 +1,8 @@
 import keras
 import pandas as pd
 import numpy as np
+import tensorflow as tf
+from tensorflow.keras.utils import Sequence
 from ConfigSpace import Categorical, ConfigurationSpace, Float, Integer
 from ...scorer import ClassificationScorer
 from ...timer import Timer
@@ -168,6 +170,35 @@ class IterationCurveCallback(keras.callbacks.Callback):
                             y_pred_proba=y_pred_proba,
                         )
                         print(scores)
+
+
+class AugmentDataGenerator(Sequence):
+    def __init__(self, X, y, batch_size, augmenters, encode_label_vector, shuffle=True):
+        self.X = tf.convert_to_tensor(X)
+        self.y = tf.convert_to_tensor(encode_label_vector(y))
+        self.batch_size = batch_size
+        self.augmenters = augmenters
+        self.shuffle = shuffle
+        self.on_epoch_end()
+        
+    def __len__(self):
+        return int(np.ceil(len(self.X) / self.batch_size))
+    
+    def __getitem__(self, index):
+        batch_indices = self.indices[index * self.batch_size:(index + 1) * self.batch_size]
+        X_batch = tf.gather(self.X, batch_indices)
+        y_batch = tf.gather(self.y, batch_indices)
+
+        for augmenter in self.augmenters:
+            X_batch, y_batch = augmenter.augment(X_batch, y_batch)
+        
+        return X_batch, y_batch
+    
+    def on_epoch_end(self):
+        self.indices = np.arange(len(self.X))
+        if self.shuffle:
+            np.random.shuffle(self.indices)
+
 
 
 class DenseNNWorkflow(PreprocessedWorkflow):
@@ -356,26 +387,26 @@ class DenseNNWorkflow(PreprocessedWorkflow):
         ])
         return out
 
-    def _transform_train_data_prior_to_standard_preprocessing(self, X, y):
+    # def _transform_train_data_prior_to_standard_preprocessing(self, X, y):
 
-        # apply data augmentation to the one-hot encoded training data
-        y_one_hot = self._encode_label_vector(y)
-        data_augmenters = []
-        if self.data_augmentation == "cutout":
-            data_augmenters.append(CutOutAugmentation(
-                probability_of_cut=self.data_augmentation_cutout_patch_ratio,
-                random_state=self.random_state
-            ))
-        elif self.data_augmentation == "mixup":
-            data_augmenters.append(MixUpAugmentation(random_state=self.random_state))
-        elif self.data_augmentation == "cutmix":
-            data_augmenters.append(CutMixAugmentation(random_state=self.random_state))
+    #     # apply data augmentation to the one-hot encoded training data
+    #     y_one_hot = self._encode_label_vector(y)
+    #     data_augmenters = []
+    #     if self.data_augmentation == "cutout":
+    #         data_augmenters.append(CutOutAugmentation(
+    #             probability_of_cut=self.data_augmentation_cutout_patch_ratio,
+    #             random_state=self.random_state
+    #         ))
+    #     elif self.data_augmentation == "mixup":
+    #         data_augmenters.append(MixUpAugmentation(random_state=self.random_state))
+    #     elif self.data_augmentation == "cutmix":
+    #         data_augmenters.append(CutMixAugmentation(random_state=self.random_state))
 
-        # apply data augmenter(s). In fact there can only be one currently, but we keep the code generic
-        for data_augmenter in data_augmenters:
-            X, y_one_hot = data_augmenter.augment(X, y_one_hot)
+    #     # apply data augmenter(s). In fact there can only be one currently, but we keep the code generic
+    #     for data_augmenter in data_augmenters:
+    #         X, y_one_hot = data_augmenter.augment(X, y_one_hot)
 
-        return X, y_one_hot
+    #     return X, y_one_hot
 
     def _fit_model_after_transformation(self, X, y, X_valid, y_valid, X_test, y_test, metadata):
         self.metadata = metadata
@@ -401,7 +432,8 @@ class DenseNNWorkflow(PreprocessedWorkflow):
             workflow=self,
             timer=self.timer,
             data=dict(
-                train=dict(X=X, y=np.argmax(y, axis=1)),  # assign the class with the highest true probability (1 except for if data augmentation is used)
+                # train=dict(X=X, y=np.argmax(y, axis=1)),  # assign the class with the highest true probability (1 except for if data augmentation is used)
+                train=dict(X=X, y=y),
                 val=dict(X=X_valid, y=y_valid),
                 test=dict(X=X_test, y=y_test),
             ),
@@ -445,11 +477,28 @@ class DenseNNWorkflow(PreprocessedWorkflow):
             metrics=["accuracy"],
         )
 
+        # Prepare data augmenters
+        data_augmenters = []
+        if self.data_augmentation == "cutout":
+            data_augmenters.append(CutOutAugmentation(
+                probability_of_cut=self.data_augmentation_cutout_patch_ratio,
+                random_state=self.random_state
+            ))
+        elif self.data_augmentation == "mixup":
+            data_augmenters.append(MixUpAugmentation(random_state=self.random_state))
+        elif self.data_augmentation == "cutmix":
+            data_augmenters.append(CutMixAugmentation(random_state=self.random_state))
+
+        # data generator for augmentation
+        train_generator = AugmentDataGenerator(
+                            X, y, batch_size=self.batch_size, 
+                            augmenters=data_augmenters,
+                            encode_label_vector=self._encode_label_vector,
+                            shuffle=self.shuffle_each_epoch
+                        )
         # now fit model
         self.learner.fit(
-            X,
-            y,
-            batch_size=min(len(X), self.batch_size),
+            train_generator,
             epochs=self.num_epochs,
             shuffle=self.shuffle_each_epoch,
             validation_data=(X_valid[mask_valid], self._encode_label_vector(y_valid[mask_valid])),
