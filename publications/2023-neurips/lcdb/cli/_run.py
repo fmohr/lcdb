@@ -1,5 +1,5 @@
 """Command line to run experiments."""
-
+import logging
 import os
 
 # Avoid Tensorflow Warnings
@@ -171,5 +171,10 @@ def add_subparser(subparsers):
 def main(**kwargs):
 
     """Entry point for the command line interface."""
-    from ..controller import LCDB  # lazy import to avoid slow-down
+    from ..experiments._experiments import LCDB  # lazy import to avoid slow-down
+
+    # there is no point in making the logger configurable at the CLI, the log level maybe
+    logger = logging.getLogger("lcdb.run")
+    kwargs["logger"] = logger
+
     LCDB.run_single_setup(**kwargs)
