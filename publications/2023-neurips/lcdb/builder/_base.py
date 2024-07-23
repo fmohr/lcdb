@@ -108,7 +108,7 @@ def run(
     is_classification = task_type == "classification"
     stratify = is_classification
 
-    controller = LCController(
+    controller = LearningCurveBuilder(
         timer=timer,
         workflow_factory=workflow_factory,
         is_classification=is_classification,
@@ -145,7 +145,8 @@ def run(
     return results
 
 
-class LCController:
+class LearningCurveBuilder:
+
     def __init__(
         self,
         timer: Timer,
