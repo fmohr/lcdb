@@ -8,7 +8,7 @@
 
 module load 2023
 module load OpenMPI/4.1.5-GCC-12.3.0
-source /home/jvanrijn/projects/lcdb/publications/2023-neurips/build/activate-dhenv.sh
+source /home/$USER/lcdb/publications/2023-neurips/build/activate-dhenv.sh
 
 #!!! CONFIGURATION - START
 source config.sh

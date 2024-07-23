@@ -23,7 +23,7 @@ fi
 echo "'$LCDB_WORKFLOW' and '$LCDB_OUTPUT_WORKFLOW'"
 
 # Default setting 128
-CPUS_PER_TASK=32
+CPUS_PER_TASK=32    # 1-128 maybe GPU
 # Total memory in GB
 TOTAL_MEMORY_GB=224
 # Calculate initial memory limit per task in MB (multiply by 1024 to convert GB to MB)
