@@ -5,14 +5,10 @@ from ConfigSpace import (
     ConfigurationSpace,
     Float,
     Integer,
-    ForbiddenAndConjunction,
-    ForbiddenEqualsClause,
-    ForbiddenGreaterThanRelation,
-    ForbiddenInClause,
-    EqualsCondition
+    EqualsCondition,
 )
 from ...experiments.scorer import ClassificationScorer
-from ...experiments.utils import get_schedule, filter_keys_with_prefix
+from ...experiments.utils import get_schedule 
 
 import numpy as np
 import time
@@ -29,13 +25,15 @@ CONFIG_SPACE = ConfigurationSpace(
         "min_samples_split": Integer("min_samples_split", bounds=(2, 50), default=2),
         "min_samples_leaf": Integer("min_samples_leaf", bounds=(1, 25), default=2),
         "max_features": Categorical(
-            "max_features", items=["none", "sqrt", "log2"], default="sqrt"
+            "max_features", items=["all", "sqrt", "log2"], default="sqrt"
         ),
         "min_impurity_decrease": Float(
             "min_impurity_decrease", bounds=(0.0, 1.0), default=0.0
         ),
         "bootstrap": Categorical("bootstrap", items=[True, False], default=True),
-        "max_samples": Float("max_samples", bounds=(10**-3, 1.0), default=1.0),  # cannot be 0
+        "max_samples": Float(
+            "max_samples", bounds=(10**-3, 1.0), default=1.0
+        ),  # cannot be 0
     },
 )
 
@@ -69,22 +67,20 @@ class BaggingWorkflow(SklearnWorkflow):
         self.iterations_to_wait_for_update = iterations_to_wait_for_update
         self.last_recorded_iteration = None
 
-        super().__init__(
-            learner=bagging,
-            timer=timer,
-            **kwargs
-        )
+        super().__init__(learner=bagging, timer=timer, **kwargs)
 
         # Scoring Schedule for Sub-fidelity
         self.schedule = get_schedule(
-            name=epoch_schedule, n=self.max_n_estimators #, base=2, power=0.5, delay=0
+            name=epoch_schedule, n=self.max_n_estimators  # , base=2, power=0.5, delay=0
         )
 
     @classmethod
     def config_space(cls):
         return cls._config_space
 
-    def _fit_model_after_transformation(self, X, y, X_valid, y_valid, X_test, y_test, metadata):
+    def _fit_model_after_transformation(
+        self, X, y, X_valid, y_valid, X_test, y_test, metadata
+    ):
         self.metadata = metadata
 
         # first train full bagging ensemble. This is because training them iteratively is highly inefficient in sklearn
@@ -92,7 +88,11 @@ class BaggingWorkflow(SklearnWorkflow):
         self.learner.set_params(n_estimators=self.max_n_estimators)
         self.learner.fit(X, y)
         ts_train_stop = time.time()
-        avg_fit_time_per_learner = (ts_train_stop - ts_train_start) / self.learner.n_estimators
+
+        # TODO: UNUSED VARIABLE?
+        avg_fit_time_per_learner = (
+            ts_train_stop - ts_train_start
+        ) / self.learner.n_estimators
 
         data = dict(
             train=dict(X=X, y=y),
@@ -117,7 +117,7 @@ class BaggingWorkflow(SklearnWorkflow):
         scorer = ClassificationScorer(
             classes_learner=list(self.learner.classes_),
             classes_overall=self.infos["classes_overall"],
-            timer=self.timer
+            timer=self.timer,
         )
         y_pred_proba_oob = np.zeros((n_samples, len(np.unique(y))))
 
@@ -141,8 +141,7 @@ class BaggingWorkflow(SklearnWorkflow):
                                         y_pred,
                                         y_pred_proba,
                                     ) = self._predict_with_proba_without_transform(
-                                        data_split["X"],
-                                        n_estimators=n_estimators
+                                        data_split["X"], n_estimators=n_estimators
                                     )
 
                                 # TODO: This could be optimized to only get predictions for the last tree. As for OOB
@@ -168,7 +167,8 @@ class BaggingWorkflow(SklearnWorkflow):
                                         X[val_indices]
                                     )
                                     y_pred_proba_oob[val_indices] = (
-                                        y_pred_proba_oob[val_indices] * counters[val_indices]
+                                        y_pred_proba_oob[val_indices]
+                                        * counters[val_indices]
                                         + y_pred_oob_tree
                                     ) / (counters[val_indices] + 1)
                                     counters[val_indices] += 1
@@ -186,7 +186,9 @@ class BaggingWorkflow(SklearnWorkflow):
                                 mask = sum_of_probs > 0.0
                                 num_samples = np.sum(mask)
                                 oob_timer["num_samples"] = float(num_samples)
-                                assert np.allclose(1, sum_of_probs[mask]), f"NOT A DISTRIBUTION: {y_pred_proba_oob[mask]}"
+                                assert np.allclose(
+                                    1, sum_of_probs[mask]
+                                ), f"NOT A DISTRIBUTION: {y_pred_proba_oob[mask]}"
 
                                 scorer.score(
                                     y_true=y_true[mask],
@@ -211,14 +213,14 @@ class BaggingWorkflow(SklearnWorkflow):
         if n_estimators is not None:
             self.learner.set_params(n_estimators=n_estimators_before)
             self.learner.estimators_.extend(estimators_tmp)
-            assert (
-                    (len(self.learner.estimators_) == n_estimators_before) and
-                    (self.learner.get_params()["n_estimators"] == n_estimators_before)
+            assert (len(self.learner.estimators_) == n_estimators_before) and (
+                self.learner.get_params()["n_estimators"] == n_estimators_before
             )
         return proba
 
     def _predict_with_proba_without_transform(self, X, n_estimators=None):
         y_pred_proba = self._predict_proba_after_transform(X, n_estimators=n_estimators)
-        y_pred = y_pred_proba.argmax(axis=1)  # is based on the internal convention that labels are 0 to k-1
+        y_pred = y_pred_proba.argmax(
+            axis=1
+        )  # is based on the internal convention that labels are 0 to k-1
         return y_pred, y_pred_proba
-

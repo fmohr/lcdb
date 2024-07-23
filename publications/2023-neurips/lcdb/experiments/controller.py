@@ -52,7 +52,7 @@ def run(
     raise_errors: bool = False,
     anchor_schedule: str = "power",
     epoch_schedule: str = "full",
-    logger=None
+    logger=None,
 ):
     """This function trains the workflow on a dataset and returns performance metrics.
 
@@ -164,7 +164,7 @@ class LCController:
         known_categories: bool = True,
         raise_errors: bool = False,
         anchor_schedule: str = "power",
-        logger=None
+        logger=None,
     ):
 
         self.logger = logger if logger is not None else logging.getLogger("LCDB")
@@ -265,7 +265,7 @@ class LCController:
         # Build sample-wise learning curve
 
         with self.timer.time("build_curves"):
-            for anchor in tqdm(self.anchors):
+            for anchor in tqdm(self.anchors, disable=True):
                 self.set_anchor(anchor)
 
                 with self.timer.time("anchor", {"value": anchor}) as anchor_timer:
@@ -378,7 +378,9 @@ class LCController:
 
     def get_predictions(self):
         keys = {}
-        labels = self.workflow.infos["classes_overall"] if self.is_classification else None
+        labels = (
+            self.workflow.infos["classes_overall"] if self.is_classification else None
+        )
 
         with self.timer.time("get_predictions"):
             for X_split, label_split in [
@@ -394,7 +396,11 @@ class LCController:
                         if self.is_classification
                         else None
                     )
-                    keys[f"y_pred_{label_split}"] = self.workflow.get_predictions_from_probas(keys[f"y_pred_proba_{label_split}"])
+                    keys[f"y_pred_{label_split}"] = (
+                        self.workflow.get_predictions_from_probas(
+                            keys[f"y_pred_proba_{label_split}"]
+                        )
+                    )
 
         return keys, labels
 
@@ -411,7 +417,7 @@ class LCController:
             scorer = ClassificationScorer(
                 classes_learner=self.workflow.infos["classes_train_orig"],
                 classes_overall=self.workflow.infos["classes_overall_orig"],
-                timer=self.timer
+                timer=self.timer,
             )
         else:
             scorer = RegressionScorer(timer=self.timer)

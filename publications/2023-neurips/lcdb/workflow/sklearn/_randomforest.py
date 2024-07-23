@@ -1,9 +1,5 @@
 from ConfigSpace import (
-    Constant,
-    Categorical,
     ConfigurationSpace,
-    Float,
-    Integer,
 )
 from sklearn.ensemble import RandomForestClassifier
 
@@ -53,7 +49,7 @@ class RandomForestWorkflow(BaggingWorkflow):
             min_samples_split=min_samples_split,
             min_samples_leaf=min_samples_leaf,
             min_weight_fraction_leaf=min_weight_fraction_leaf,
-            max_features=max_features,
+            max_features=1.0 if max_features == "all" else max_features,
             max_leaf_nodes=max_leaf_nodes,
             min_impurity_decrease=min_impurity_decrease,
             bootstrap=bootstrap,
@@ -62,7 +58,7 @@ class RandomForestWorkflow(BaggingWorkflow):
             warm_start=True,
             class_weight=class_weight,
             ccp_alpha=ccp_alpha,
-            max_samples=max_samples,
+            max_samples=max_samples if bootstrap else None,
             random_state=random_state,
         )
 
@@ -70,7 +66,7 @@ class RandomForestWorkflow(BaggingWorkflow):
             bagging=RandomForestClassifier(**learner_kwargs),
             n_estimators=n_estimators,
             timer=timer,
-            **kwargs
+            **kwargs,
         )
 
     @classmethod
