@@ -1,5 +1,5 @@
 """Command line to create a list of hyperparameter configurations to be evaluated later."""
-from ..experiments.utils import import_attr_from_module
+from ..builder.utils import import_attr_from_module
 
 
 def add_subparser(subparsers):

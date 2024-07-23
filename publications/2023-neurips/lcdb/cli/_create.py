@@ -3,7 +3,7 @@ import os
 import pathlib
 
 import pandas as pd
-from ..experiments.utils import import_attr_from_module
+from ..builder.utils import import_attr_from_module
 
 
 def add_subparser(subparsers):

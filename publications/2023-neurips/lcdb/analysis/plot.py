@@ -27,6 +27,13 @@ def plot_learning_curves(
     cmap=None,
     **kwargs,
 ):
+
+    if len(fidelity_values) != metric_values.shape[1]:
+        raise ValueError(
+            f"metric_values has {metric_values.shape[1]} fidelities, "
+            f"but {len(fidelity_values)} values are given in fidelity_values."
+        )
+
     if ax is None:
         fig, ax = plt.subplots()
     else:
@@ -83,14 +90,14 @@ def plot_learning_curves(
         cmap = cmap
 
     ranking_max = ranking.max()
-    for i, (x, y) in enumerate(zip(fidelity_values, metric_values)):
+    for i, y in enumerate(metric_values):
         if not plot_worse_than_baseline:
             # if mode == "min" and metric_value_baseline and all(map(lambda yi: yi > metric_value_baseline , y)):
             if mode == "min" and metric_value_baseline is not None and y[-1] > metric_value_baseline:
                 continue
             elif mode == "max" and metric_value_baseline is not None and -y[-1] > metric_value_baseline:
                 continue
-        ax.plot(x, y, color=cmap(ranking[i] / ranking_max), alpha=alpha)
+        ax.plot(fidelity_values, y, color=cmap(ranking[i] / ranking_max), alpha=alpha)
 
     ax.grid()
 
@@ -140,22 +147,24 @@ def plot_observation_curves(df_results):
     l = []
     hp_columns = [c for c in df_results.columns if c.startswith("p:")]
 
+    anchor_values = None
     for hp_config, df_hp_config in df_results.groupby(hp_columns):
         source = df_hp_config["m:json"]
         query_anchor_values = QueryAnchorValues()
-        anchor_values = source.apply(query_anchor_values).to_list()
+        _anchor_values = source.apply(query_anchor_values).to_list()[0]
+        if anchor_values is None:
+            anchor_values = _anchor_values
+        else:
+            if len(anchor_values) != len(_anchor_values):
+                raise ValueError(f"Inconsistent number of anchors across configurations.")
 
         query_confusion_matrix_values = QueryMetricValuesFromAnchors("confusion_matrix", split_name="val")
         out = source.apply(query_confusion_matrix_values)
 
         balanced_error_rate_values = np.array(out.apply(lambda x: list(map(lambda x: 1 - balanced_accuracy_from_confusion_matrix(x), x))).to_list())
         l.append(np.mean(balanced_error_rate_values, axis=0))
-        print(l[-1].round(2))
 
     balanced_error_rate_values = np.array(l)
-
-    for i, (xi, yi) in enumerate(zip(anchor_values, l)):
-        anchor_values[i] = xi[:len(yi)]
 
     fig, ax = plt.subplots()
     plot_learning_curves(anchor_values, balanced_error_rate_values, metric_value_baseline=balanced_error_rate_values[0][-1], ax=ax)

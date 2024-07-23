@@ -7,9 +7,9 @@ import logging
 
 import lcdb.json
 from deephyper.evaluator import RunningJob
-from ..experiments.utils import import_attr_from_module, terminate_on_memory_exceeded
+from ..builder.utils import import_attr_from_module, terminate_on_memory_exceeded
 
-from ..experiments._experiments import run
+#from ._experiments import run
 
 # Avoid Tensorflow Warnings
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = str(3)
