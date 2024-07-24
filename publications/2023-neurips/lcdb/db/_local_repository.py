@@ -12,6 +12,9 @@ class LocalRepository(Repository):
         super().__init__()
         self.repo_dir = repo_dir
 
+    def exists(self):
+        return pathlib.Path(self.repo_dir).exists()
+
     def read_result_file(self, file):
         if file.endswith((".gz", ".gzip")):
             with gzip.GzipFile(file, "rb") as f:
@@ -28,7 +31,6 @@ class LocalRepository(Repository):
             ):
                 folder = f"{self.repo_dir}/{workflow}/{campaign}/{openmlid}"
                 pathlib.Path(folder).mkdir(exist_ok=True, parents=True)
-                print(f"made {folder}")
                 filename = f"{folder}/{workflow_seed}-{test_seed}-{valid_seed}.csv.gz"
                 group.to_csv(filename, index=False, compression='gzip')
 

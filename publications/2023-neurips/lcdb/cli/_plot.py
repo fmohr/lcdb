@@ -79,36 +79,32 @@ def main(
     metric
 ):
 
-    from ..db import get_repository_paths, Repository
+    from ..db import LCDB
     from ..analysis.plot import (
         plot_learning_curves,
         plot_observation_curves,
         plot_iteration_curves_dataset
     )
 
-    dfs = []
-    for repository_name, repository_dir in get_repository_paths().items():
-        if repositories is not None and repository_name not in repositories:
-            continue
-        repository = Repository.get(repository_dir)
-        dfs.append(repository.get_results(workflows=workflow_classes, openmlids=[openml_id]))
-    df = pd.concat(dfs)
+    df = LCDB().get_results(repositories=repositories, workflows=workflow_classes, openmlids=[openml_id])
+    if df is not None:
+        for workflow_class, df_results in df.groupby("m:workflow"):
+            df_results = df_results[df_results["m:traceback"].isna()]
 
-    for workflow_class, df_results in df.groupby("m:workflow"):
-        df_results = df_results[df_results["m:traceback"].isna()]
+            with open("out.json", "w") as f:
+                json.dump(df_results.iloc[0]["m:json"], f, indent=4)
 
-        with open("out.json", "w") as f:
-            json.dump(df_results.iloc[0]["m:json"], f, indent=4)
+            if plot_type == "observation-wise":
+                fig, ax = plot_observation_curves(df_results)
+                fig.suptitle(f"Performance of {workflow_class} on {openml_id}")
+                plt.draw()
+            elif plot_type == "iteration-wise":
+                fig, ax = plot_iteration_curves_dataset(df_results, metric=metric, sample_anchor=anchor)
+                fig.suptitle(f"Performance of {workflow_class} on {openml_id}")
+                plt.draw()
+            else:
+                raise ValueError(f"Unsupported plot type {plot_type}")
 
-        if plot_type == "observation-wise":
-            fig, ax = plot_observation_curves(df_results)
-            fig.suptitle(f"Performance of {workflow_class} on {openml_id}")
-            plt.draw()
-        elif plot_type == "iteration-wise":
-            fig, ax = plot_iteration_curves_dataset(df_results, metric=metric, sample_anchor=anchor)
-            fig.suptitle(f"Performance of {workflow_class} on {openml_id}")
-            plt.draw()
-        else:
-            raise ValueError(f"Unsupported plot type {plot_type}")
-
-    plt.show()
+        plt.show()
+    else:
+        print("No data found in the database that could be plotted.")

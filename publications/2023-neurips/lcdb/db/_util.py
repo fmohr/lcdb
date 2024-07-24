@@ -13,17 +13,22 @@ def get_database_location():
         return lcdb_folder
 
     # If it does not exist  we fall back to ~/.lcdb
-    if pathlib.Path(f"~/{lcdb_folder}").exists():
-        return f"~/{lcdb_folder}"
+    default_lcdb_folder = f"~/{lcdb_folder}"
+    default_lcdb_path = pathlib.Path(os.path.expanduser(default_lcdb_folder))
 
-    raise Exception(
-        "LCDB has not been properly initialized on this system. There should be an .lcdb directory in your home folder."
-    )
+    # automatically create folder in home directory if it does not exist
+    if not default_lcdb_path.exists():
+        init_database(path=default_lcdb_path)
+
+    return default_lcdb_path.absolute()
 
 
-def init_database(config=None):
-    path = pathlib.Path(lcdb_folder)
-    path.mkdir(exist_ok=True)
+def init_database(path=None, config=None):
+
+    if path is None:
+        path = pathlib.Path(lcdb_folder)
+    path.mkdir(exist_ok=True, parents=True)
+    print(f"Made {path}")
 
     default_config = {
         "repositories": {
@@ -47,6 +52,4 @@ def get_repository_paths(database_location=None):
     with open(f"{database_location}/config.json", "r") as f:
         cfg = json.load(f)
         candidate_folders = {k: os.path.expanduser(p) for k, p in cfg["repositories"].items()}
-        candidate_folders = {k: p for k, p in candidate_folders.items() if pathlib.Path(p).exists()}
         return candidate_folders
-

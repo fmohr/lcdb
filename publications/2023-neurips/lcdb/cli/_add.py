@@ -47,7 +47,6 @@ def main(**kwargs):
     repositories = get_repository_paths(db_folder)
 
     repository_folder = os.path.expanduser(repositories[kwargs["repository"]])
-    print(repository_folder)
     r = LocalRepository(repository_folder)
     r.add_results(
         kwargs["campaign"],
