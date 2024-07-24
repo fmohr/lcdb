@@ -5,7 +5,7 @@ $ lcdb run ...
 """
 import argparse
 
-from . import _space, _create, _fetch, _results, _run, _test, _campaign, _plot
+from . import _init, _space, _create, _fetch, _results, _run, _test, _add, _plot
 
 
 def create_parser():
@@ -15,6 +15,8 @@ def create_parser():
     parser = argparse.ArgumentParser(description="LCDB command line.")
 
     subparsers = parser.add_subparsers()
+
+    _init.add_subparser(subparsers)
 
     # print the hyperparameter space
 
@@ -33,7 +35,7 @@ def create_parser():
     _run.add_subparser(subparsers)
 
     # execution of experiments
-    _campaign.add_subparser(subparsers)
+    _add.add_subparser(subparsers)
 
     # plot results
     _results.add_subparser(subparsers)

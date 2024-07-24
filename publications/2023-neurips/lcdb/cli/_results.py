@@ -1,4 +1,5 @@
 """Command line to fetch and aggregate results from LCDB 2.0 repositories"""
+import pandas as pd
 
 
 def add_subparser(subparsers):
@@ -45,7 +46,18 @@ def main(
     repositories
 ):
 
-    from ..analysis.results import ResultAggregator  # lazy import
+    from ..db import Repository, get_repository_paths  # lazy import
+
+
+    dfs = []
+    for repository_name, repository_path in get_repository_paths().items():
+        print(f"Accessing {repository_path}")
+        repository = Repository.get(repository_path)
+        dfs.append(repository.get_results(openmlids=[openml_id]))
+    df = pd.concat(dfs)
+    print(df)
+
+    """
     agg = ResultAggregator(
         repos=[s.strip().rstrip("/") for s in repositories.split(",")]
     )
@@ -55,3 +67,4 @@ def main(
     )
 
     print(df)
+    """

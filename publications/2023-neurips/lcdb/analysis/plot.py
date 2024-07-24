@@ -1,6 +1,7 @@
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 
 from deephyper.analysis import rank
 from matplotlib.colors import LinearSegmentedColormap
@@ -27,6 +28,13 @@ def plot_learning_curves(
     cmap=None,
     **kwargs,
 ):
+
+    if len(fidelity_values) != len(metric_values[0]):
+        raise ValueError(
+            f"metric_values has {len(metric_values[0])} fidelities, "
+            f"but {len(fidelity_values)} values are given in fidelity_values."
+        )
+
     if ax is None:
         fig, ax = plt.subplots()
     else:
@@ -83,14 +91,14 @@ def plot_learning_curves(
         cmap = cmap
 
     ranking_max = ranking.max()
-    for i, (x, y) in enumerate(zip(fidelity_values, metric_values)):
+    for i, y in enumerate(metric_values):
         if not plot_worse_than_baseline:
             # if mode == "min" and metric_value_baseline and all(map(lambda yi: yi > metric_value_baseline , y)):
             if mode == "min" and metric_value_baseline is not None and y[-1] > metric_value_baseline:
                 continue
             elif mode == "max" and metric_value_baseline is not None and -y[-1] > metric_value_baseline:
                 continue
-        ax.plot(x, y, color=cmap(ranking[i] / ranking_max), alpha=alpha)
+        ax.plot(fidelity_values, y, color=cmap(ranking[i] / ranking_max), alpha=alpha)
 
     ax.grid()
 
@@ -99,12 +107,10 @@ def plot_learning_curves(
     cb = plt.colorbar(norm, ax=plt.gca(), label="Rank")
     if metric_value_baseline is not None:
         cb.ax.axhline(ranking_baseline, c="lime", linewidth=2, linestyle="--")
-    # plt.xlim(0, fidelities.max())
-
     return fig, ax
 
 
-def plot_observation_curves(df_results):
+def plot_observation_curves(df_results, ax=None):
     l = []
     hp_columns = [c for c in df_results.columns if c.startswith("p:")]
 
@@ -118,14 +124,16 @@ def plot_observation_curves(df_results):
 
         balanced_error_rate_values = np.array(out.apply(lambda x: list(map(lambda x: 1 - balanced_accuracy_from_confusion_matrix(x), x))).to_list())
         l.append(np.mean(balanced_error_rate_values, axis=0))
-        print(l[-1].round(2))
 
     balanced_error_rate_values = np.array(l)
 
     for i, (xi, yi) in enumerate(zip(anchor_values, l)):
         anchor_values[i] = xi[:len(yi)]
 
-    fig, ax = plt.subplots()
+    if ax is None:
+        fig, ax = plt.subplots()
+    else:
+        fig = ax.get_figure()
     plot_learning_curves(anchor_values, balanced_error_rate_values, metric_value_baseline=balanced_error_rate_values[0][-1], ax=ax)
     ax.axhline(y=balanced_error_rate_values[0][-1], color="lime", linestyle="--")
     ax.set_xlabel(f"Number of Samples")
@@ -133,33 +141,44 @@ def plot_observation_curves(df_results):
     ax.set_xscale("log")
     ax.set_yscale("log")
     return fig, ax
-    #plt.savefig(os.path.join(os.path.dirname(output_path), "val_balanced_error_rate_vs_samples.jpg"), dpi=300, bbox_inches="tight")
 
 
 def plot_observation_curves(df_results):
-    l = []
+    mean_balanced_error_rates_of_configs = []
     hp_columns = [c for c in df_results.columns if c.startswith("p:")]
 
+    if len(pd.unique(df_results["m:openmlid"])) > 1:
+        raise ValueError(
+            "Given dataframe has results for more than one dataset, which is not allowed for observation curves."
+        )
+
+    anchor_values = None
     for hp_config, df_hp_config in df_results.groupby(hp_columns):
         source = df_hp_config["m:json"]
-        query_anchor_values = QueryAnchorValues()
-        anchor_values = source.apply(query_anchor_values).to_list()
 
+        # get anchors (and check that they are consistent)
+        query_anchor_values = QueryAnchorValues()
+        _anchor_values = source.apply(query_anchor_values).to_list()[0]
+        if anchor_values is None:
+            anchor_values = _anchor_values
+        else:
+            if len(anchor_values) != len(_anchor_values):
+                raise ValueError(f"Inconsistent number of anchors across configurations.")
+
+        # get confusion matrix for config and compute balanced error rate
         query_confusion_matrix_values = QueryMetricValuesFromAnchors("confusion_matrix", split_name="val")
         out = source.apply(query_confusion_matrix_values)
-
-        balanced_error_rate_values = np.array(out.apply(lambda x: list(map(lambda x: 1 - balanced_accuracy_from_confusion_matrix(x), x))).to_list())
-        l.append(np.mean(balanced_error_rate_values, axis=0))
-        print(l[-1].round(2))
-
-    balanced_error_rate_values = np.array(l)
-
-    for i, (xi, yi) in enumerate(zip(anchor_values, l)):
-        anchor_values[i] = xi[:len(yi)]
+        balanced_error_rate_values_for_config = np.array(out.apply(lambda x: list(map(lambda x: 1 - balanced_accuracy_from_confusion_matrix(x), x))).to_list())
+        mean_balanced_error_rates_of_configs.append(balanced_error_rate_values_for_config.mean(axis=0))
 
     fig, ax = plt.subplots()
-    plot_learning_curves(anchor_values, balanced_error_rate_values, metric_value_baseline=balanced_error_rate_values[0][-1], ax=ax)
-    ax.axhline(y=balanced_error_rate_values[0][-1], color="lime", linestyle="--")
+    plot_learning_curves(
+        anchor_values,
+        mean_balanced_error_rates_of_configs,
+        metric_value_baseline=mean_balanced_error_rates_of_configs[0][-1],
+        ax=ax
+    )
+    ax.axhline(y=mean_balanced_error_rates_of_configs[0][-1], color="lime", linestyle="--")
     ax.set_xlabel(f"Number of Samples")
     ax.set_ylabel(f"Validation Balanced Error Rate")
     ax.set_xscale("log")
