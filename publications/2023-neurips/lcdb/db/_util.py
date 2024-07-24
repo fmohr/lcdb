@@ -18,38 +18,8 @@ def get_database_location():
 
     # automatically create folder in home directory if it does not exist
     if not default_lcdb_path.exists():
-        init_database(path=default_lcdb_path)
+        from ._database import LCDB
+        LCDB().create(path=default_lcdb_path)
 
     return default_lcdb_path.absolute()
 
-
-def init_database(path=None, config=None):
-
-    if path is None:
-        path = pathlib.Path(lcdb_folder)
-    path.mkdir(exist_ok=True, parents=True)
-    print(f"Made {path}")
-
-    default_config = {
-        "repositories": {
-            "home": "~/.lcdb/data",
-            "local": ".lcdb/data"
-        }
-    }
-    if config is not None:
-        default_config.update(config)
-    config = default_config
-
-    with open(f"{path}/config.json", "w") as f:
-        json.dump(config, f)
-
-
-def get_repository_paths(database_location=None):
-
-    if database_location is None:
-        database_location = get_database_location()
-
-    with open(f"{database_location}/config.json", "r") as f:
-        cfg = json.load(f)
-        candidate_folders = {k: os.path.expanduser(p) for k, p in cfg["repositories"].items()}
-        return candidate_folders

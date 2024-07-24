@@ -50,6 +50,10 @@ class LocalRepository(Repository):
             validation_seeds=None
     ):
         folder = f"{self.repo_dir}/{workflow}/{campaign}/{openmlid}"
+
+        if not pathlib.Path(folder).exists():
+            return []
+
         result_files_unfiltered = [
             f.name
             for f in os.scandir(folder)

@@ -42,12 +42,10 @@ def add_subparser(subparsers):
 def main(**kwargs):
 
     """Entry point for the command line interface."""
-    from ..db import get_database_location, LocalRepository, get_repository_paths
-    db_folder = get_database_location()
-    repositories = get_repository_paths(db_folder)
+    from ..db import LCDB
 
-    repository_folder = os.path.expanduser(repositories[kwargs["repository"]])
-    r = LocalRepository(repository_folder)
+    r = LCDB().repositories[kwargs["repository"]]
+
     r.add_results(
         kwargs["campaign"],
         *kwargs["result_files"]
