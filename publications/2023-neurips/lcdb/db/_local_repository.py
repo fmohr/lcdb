@@ -15,12 +15,12 @@ class LocalRepository(Repository):
     def exists(self):
         return pathlib.Path(self.repo_dir).exists()
 
-    def read_result_file(self, file):
+    def read_result_file(self, file, usecols=None):
         if file.endswith((".gz", ".gzip")):
             with gzip.GzipFile(file, "rb") as f:
-                df = pd.read_csv(f)  # , usecols=["p:bootstrap", "job_id", "m:traceback"])
+                df = pd.read_csv(f, usecols=usecols)
         else:
-            df = pd.read_csv(file)
+            df = pd.read_csv(file, usecols=usecols)
         return df
 
     def add_results(self, campaign, *result_files):
@@ -34,11 +34,26 @@ class LocalRepository(Repository):
                 filename = f"{folder}/{workflow_seed}-{test_seed}-{valid_seed}.csv.gz"
                 group.to_csv(filename, index=False, compression='gzip')
 
-    def get_workflows(self, campaign=None):
-        raise NotImplementedError
+    def get_workflows(self):
+        base_folder = self.repo_dir
+        if not pathlib.Path(base_folder).exists():
+            return []
+        else:
+            return [f.name for f in os.scandir(base_folder) if f.is_dir()]
 
-    def get_datasets(self, campaign, workflow):
-        raise NotImplementedError
+    def get_campaigns(self, workflow):
+        base_folder = f"{self.repo_dir}/{workflow}"
+        if not pathlib.Path(base_folder).exists():
+            return []
+        else:
+            return [f.name for f in os.scandir(base_folder) if f.is_dir()]
+
+    def get_datasets(self, workflow, campaign):
+        base_folder = f"{self.repo_dir}/{workflow}/{campaign}"
+        if not pathlib.Path(base_folder).exists():
+            return []
+        else:
+            return [f.name for f in os.scandir(base_folder) if f.is_dir()]
 
     def get_result_files_of_workflow_and_dataset_in_campaign(
             self,
@@ -83,12 +98,9 @@ class LocalRepository(Repository):
             test_seeds=None,
             validation_seeds=None
     ):
-        base_folder = f"{self.repo_dir}/{workflow}/{campaign}"
-        if not pathlib.Path(base_folder).exists():
-            return []
 
         if openmlids is None:
-            openmlids = [f.name for f in os.scandir(base_folder) if f.is_dir()]
+            openmlids = self.get_datasets(workflow=workflow, campaign=campaign)
 
         filenames = []
         for openmlid in openmlids:
@@ -111,10 +123,9 @@ class LocalRepository(Repository):
             test_seeds=None,
             validation_seeds=None
     ):
-        base_folder = f"{self.repo_dir}/{workflow}"
         filenames = []
         if campaigns is None:
-            campaigns = [f.name for f in os.scandir(base_folder) if f.is_dir()]
+            campaigns = self.get_campaigns(workflow)
         for campaign in campaigns:
             filenames.extend(self.get_result_files_of_workflow_in_campaign(
                 workflow=workflow,
@@ -126,22 +137,19 @@ class LocalRepository(Repository):
             ))
         return filenames
 
-    def get_results(
+    def get_result_files(
             self,
-            campaigns=None,
             workflows=None,
+            campaigns=None,
             openmlids=None,
             workflow_seeds=None,
             test_seeds=None,
             validation_seeds=None
     ):
-
-        # get all result files
-        result_files = []
-
         if workflows is None:
-            workflows = [f.name for f in os.scandir(self.repo_dir) if f.is_dir()]
+            workflows = self.get_workflows()
 
+        result_files = []
         for workflow in workflows:
             result_files.extend(self.get_result_files_of_workflow(
                 workflow=workflow,
@@ -151,6 +159,60 @@ class LocalRepository(Repository):
                 test_seeds=test_seeds,
                 validation_seeds=validation_seeds
             ))
+        return result_files
+
+    def get_num_results(
+            self,
+            campaigns=None,
+            workflows=None,
+            openmlids=None,
+            workflow_seeds=None,
+            test_seeds=None,
+            validation_seeds=None,
+            result_files=None,
+            max_cnt=10**6
+    ):
+
+        # get all files
+        if result_files is None:
+            result_files = self.get_result_files(
+                workflows=workflows,
+                campaigns=campaigns,
+                openmlids=openmlids,
+                workflow_seeds=workflow_seeds,
+                test_seeds=test_seeds,
+                validation_seeds=validation_seeds
+            )
+
+        cnt = 0
+        for f in result_files:
+            cnt += len(self.read_result_file(f, usecols=["m:openmlid"]))
+            if cnt >= max_cnt:
+                return cnt
+        return cnt
+
+    def get_results(
+            self,
+            workflows=None,
+            campaigns=None,
+            openmlids=None,
+            workflow_seeds=None,
+            test_seeds=None,
+            validation_seeds=None
+    ):
+
+        # get all result files
+        result_files = self.get_result_files(
+            workflows=workflows,
+            campaigns=campaigns,
+            openmlids=openmlids,
+            workflow_seeds=workflow_seeds,
+            test_seeds=test_seeds,
+            validation_seeds=validation_seeds
+        )
+
+        if self.get_num_results(result_files=result_files) > 10**6:
+            raise ValueError(f"Cannot read in more than 10**6 results.")
 
         # read in all result files
         dfs = []

@@ -17,11 +17,15 @@ class Repository(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def get_workflows(self, campaign=None):
+    def get_workflows(self):
         raise NotImplementedError
 
     @abstractmethod
-    def get_datasets(self, campaign, workflow):
+    def get_campaigns(self, workflow):
+        raise NotImplementedError
+
+    @abstractmethod
+    def get_datasets(self, workflow, campaign):
         raise NotImplementedError
 
     @abstractmethod
