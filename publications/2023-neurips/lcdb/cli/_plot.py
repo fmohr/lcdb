@@ -91,9 +91,6 @@ def main(
         for workflow_class, df_results in df.groupby("m:workflow"):
             df_results = df_results[df_results["m:traceback"].isna()]
 
-            with open("out.json", "w") as f:
-                json.dump(df_results.iloc[0]["m:json"], f, indent=4)
-
             if plot_type == "observation-wise":
                 fig, ax = plot_observation_curves(df_results)
                 fig.suptitle(f"Performance of {workflow_class} on {openml_id}")
