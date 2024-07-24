@@ -19,10 +19,10 @@ class LCDB:
 
     def create(self, config=None):
 
-        if path is None:
-            path = pathlib.Path(lcdb_folder)
-        path.mkdir(exist_ok=True, parents=True)
+        # create directory
+        self.path.mkdir(exist_ok=True, parents=True)
 
+        # create default config file
         default_config = {
             "repositories": {
                 "home": "~/.lcdb/data",
@@ -33,14 +33,14 @@ class LCDB:
             default_config.update(config)
         config = default_config
 
-        with open(f"{path}/config.json", "w") as f:
+        with open(f"{self.path}/config.json", "w") as f:
             json.dump(config, f)
 
     def _load(self):
 
         # check whether it exists
         if not self.path.exists():
-            raise Exception(f"Cannot load LCDB at path {self.path.absolute()}, which does not exist.")
+            self.create()
 
         config_path = f"{self.path}/config.json"
         if not pathlib.Path(config_path).exists():
@@ -53,9 +53,7 @@ class LCDB:
 
         self._repositories = {}
         for repository_name, repository_dir in repository_paths.items():
-            repository = Repository.get(repository_dir)
-            if repository.exists():
-                self._repositories[repository_name] = repository
+            self._repositories[repository_name] = Repository.get(repository_dir)
 
         self.loaded = True
 
@@ -92,16 +90,17 @@ class LCDB:
 
         dfs = []
         for repository in repositories:
-            results_in_repo = repository.get_results(
-                campaigns=campaigns,
-                workflows=workflows,
-                openmlids=openmlids,
-                workflow_seeds=workflow_seeds,
-                test_seeds=test_seeds,
-                validation_seeds=validation_seeds
-            )
-            if results_in_repo is not None:
-                dfs.append(results_in_repo)
+            if repository.exists():
+                results_in_repo = repository.get_results(
+                    campaigns=campaigns,
+                    workflows=workflows,
+                    openmlids=openmlids,
+                    workflow_seeds=workflow_seeds,
+                    test_seeds=test_seeds,
+                    validation_seeds=validation_seeds
+                )
+                if results_in_repo is not None:
+                    dfs.append(results_in_repo)
         if dfs:
             return pd.concat(dfs)
         else:
