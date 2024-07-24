@@ -83,7 +83,10 @@ class LocalRepository(Repository):
             test_seeds=None,
             validation_seeds=None
     ):
-        base_folder = f"{self.repo_dir}/{campaign}/{workflow}"
+        base_folder = f"{self.repo_dir}/{workflow}/{campaign}"
+        if not pathlib.Path(base_folder).exists():
+            return []
+
         if openmlids is None:
             openmlids = [f.name for f in os.scandir(base_folder) if f.is_dir()]
 

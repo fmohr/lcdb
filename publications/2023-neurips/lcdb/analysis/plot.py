@@ -1,6 +1,7 @@
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 
 from deephyper.analysis import rank
 from matplotlib.colors import LinearSegmentedColormap
@@ -145,6 +146,11 @@ def plot_observation_curves(df_results, ax=None):
 def plot_observation_curves(df_results):
     mean_balanced_error_rates_of_configs = []
     hp_columns = [c for c in df_results.columns if c.startswith("p:")]
+
+    if len(pd.unique(df_results["m:openmlid"])) > 1:
+        raise ValueError(
+            "Given dataframe has results for more than one dataset, which is not allowed for observation curves."
+        )
 
     anchor_values = None
     for hp_config, df_hp_config in df_results.groupby(hp_columns):
