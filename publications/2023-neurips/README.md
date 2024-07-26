@@ -49,3 +49,28 @@ lcdb run --openml-id 3 -w lcdb.workflow.keras.DenseNNWorkflow --monotonic --max-
 ```
 
 The experiment results are saved to `results.csv`. This file contains the evaluation results for each configuration on the task, including scores, times, and fidelity values. We can load and analyze this file to study how the configurations performed.
+
+## Adding Results to your LCDB
+
+Once you got a result file via `lcdb run` with one row per evaluation, say, `results.csv.gz`, you can add these results to your learning curve data base as follows:
+```console
+lcdb add -c <campaign_name> results.csv.gz
+```
+
+The campaign name is only to give a label to the runs (*todo: probably replace or complement by a file that describes the execution conditions*)
+
+By default, the data will be stored in `~/.lcdb/data`. However, you can add a flag `-r <repository_name>` to change the repository to which it will be added. Here `<repository_name>` must be one of the keys of the `repositories` dictionary in your `config.json`, which is looked up by default in `~/.lcdb`. If you have a `.lcdb` folder in the working directory where you place the prompt, then `.lcdb/config.json` is used instead. By default, `<repository_name>` is `home`, which is why `~/.lcdb/data` is used to store results by default.
+
+## Extracting LCDB results in Python
+The general logic is to retrieve a dataframe with one row for every evaluation of any hyperparameter configuration contained in the database:
+```python
+from lcdb.db import LCDB
+df = LCDB().get_results()
+```
+which will fetch all learning curves in the system (there is a protection mechanism that makes sure that no more than 10 million curves will be retrieved).
+
+It is generally recommendable to filter results by workflow, datasets, or both, which can be done by passing those parameters to the `get_results` function:
+
+```python
+df = LCDB().get_results(workflows=["lcdb.workflow.sklearn.LibLinearWorkflow"], openmlids=[3, 6])
+```
