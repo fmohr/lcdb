@@ -74,3 +74,7 @@ It is generally recommendable to filter results by workflow, datasets, or both, 
 ```python
 df = LCDB().get_results(workflows=["lcdb.workflow.sklearn.LibLinearWorkflow"], openmlids=[3, 6])
 ```
+
+The results dataframe has a field `m:json`, which contains a dictionary with all the information about the curve of the evaluation. if there are iteration curves, they are also contained in that dictionary.
+
+We use [https://jmespath.org/] to conveniently access and retrieve information from this dictionary. Example can be found in `analysis/json.py`.
