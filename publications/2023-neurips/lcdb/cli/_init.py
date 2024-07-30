@@ -1,4 +1,4 @@
-"""Command line to initialize an LCDB in the current folder."""
+"""Command line to initialize an LCDB in the current folder (or another given one)."""
 
 import os
 
@@ -14,13 +14,29 @@ def add_subparser(subparsers):
     function_to_call = main
 
     subparser = subparsers.add_parser(
-        subparser_name, help="Run sets of experiments in the LCDB 2.0 layout."
+        subparser_name, help="To initialize a new LCDB config."
     )
+
+    subparser.add_argument(
+        'path',
+        nargs='?',
+        default=None,
+        help='The path where to initialize the LCDB.'
+    )
+
     subparser.set_defaults(func=function_to_call)
 
 
-def main():
+def main(path=None):
 
     """Entry point for the command line interface."""
-    from ..db import init_database
-    init_database()
+    from ..db import LCDB
+
+    if path is None:
+        path = os.getcwd()
+
+    lcdb = LCDB(path=path)
+    if lcdb.exists():
+        print(f"An LCDB is already initialized at path {path}.")
+    else:
+        lcdb.create()

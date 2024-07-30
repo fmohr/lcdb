@@ -23,7 +23,7 @@ def add_subparser(subparsers):
         "--repository",
         type=str,
         required=False,
-        default="home",
+        default=None,
         help="The repository to which the results should be added.",
     )
 
@@ -44,7 +44,10 @@ def main(**kwargs):
     """Entry point for the command line interface."""
     from ..db import LCDB
 
-    r = LCDB().repositories[kwargs["repository"]]
+    lcdb = LCDB()
+    repository_name = kwargs["repository"] if kwargs["repository"] is not None else list(lcdb.repositories.keys())[0]
+
+    r = lcdb.repositories[repository_name]
 
     r.add_results(
         kwargs["campaign"],

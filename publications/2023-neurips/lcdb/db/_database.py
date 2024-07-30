@@ -1,4 +1,4 @@
-from ._util import get_database_location
+from ._util import get_path_to_lcdb_config
 from ._repository import Repository
 import pandas as pd
 import json
@@ -10,17 +10,26 @@ class LCDB:
     """Used to represent the LCDB database.
 
         Args:
-            path (str, optional): Path to the database folder that in principle should be named ``.lcdb``. Defaults to ``None`` that will first (1) check if in the current working directory there exists an `.lcdb`` folder, if not it will (2) look if it exists in the home directory, if it is not in the home directory (3) it will create it.
+            path (str, optional): Path to the database folder that contains the LCDB config file. The config file is assumed to be name `.lcdb_config.json` by default, but this can be changed with the respective argument. In principle, this folder should be named ``.lcdb``, but this is not a requirement.
+            Defaults to ``None`` that will first (1) check if a file with the name `config_filename` exists in the current working directory
+            folder, if not it will (2) look if it exists in `~/.lcdb` where `~` is the home directory,
+            if it is not in `~/.lcdb` (3) it will create it there as soon as an operation on the object is conducted (retrieval or aggregation of data).
+
+            config_filename (str, optional): Name of the configuration file that is looked for.
     """
 
-    def __init__(self, path: str=None):
-        
+    def __init__(self, path: str = None, config_filename: str = ".lcdb_config.json"):
 
         # get path of LCDB
-        self.path = pathlib.Path(get_database_location() if path is None else path)
-        self.loaded = False
+        self.path_to_config = pathlib.Path(
+            get_path_to_lcdb_config(lcdb_config_filename=config_filename)
+            if path is None
+            else f"{path}/{config_filename}"
+        )
+        self.path = self.path_to_config.parent
 
         # state vars
+        self.loaded = False
         self._repositories = None
 
     def create(self, config=None):
@@ -31,26 +40,31 @@ class LCDB:
         # create default config file
         default_config = {
             "repositories": {
-                "home": "~/.lcdb/data",
-                "local": ".lcdb/data"
+                "local": ".lcdb_data"
             }
         }
         if config is not None:
             default_config.update(config)
         config = default_config
 
-        with open(f"{self.path}/config.json", "w") as f:
+        with open(f"{self.path_to_config}", "w") as f:
             json.dump(config, f)
+
+    def exists(self):
+        config_file = pathlib.Path(f"{self.path_to_config}")
+        return config_file.exists()
 
     def _load(self):
 
         # check whether it exists
-        if not self.path.exists():
+        if not self.exists():
             self.create()
 
-        config_path = f"{self.path}/config.json"
+        config_path = f"{self.path_to_config}"
         if not pathlib.Path(config_path).exists():
-            raise Exception(f"LCDB at path {self.path.absolute()} seems corrupt. At least, it has no config.json")
+            raise Exception(
+                f"LCDB at path {self.path.absolute()} seems corrupt. At least, it has no {self.config_filename}"
+            )
 
         # read in config
         with open(config_path, "r") as f:
