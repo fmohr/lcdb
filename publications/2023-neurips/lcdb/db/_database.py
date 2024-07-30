@@ -1,4 +1,4 @@
-from ._util import get_path_to_lcdb_config
+from ._util import get_path_to_lcdb
 from ._repository import Repository
 import pandas as pd
 import json
@@ -18,15 +18,11 @@ class LCDB:
             config_filename (str, optional): Name of the configuration file that is looked for.
     """
 
-    def __init__(self, path: str = None, config_filename: str = ".lcdb_config.json"):
+    def __init__(self, path: str = None, config_filename: str = "config.json", lcdb_folder: str = ".lcdb"):
 
         # get path of LCDB
-        self.path_to_config = pathlib.Path(
-            get_path_to_lcdb_config(lcdb_config_filename=config_filename)
-            if path is None
-            else f"{path}/{config_filename}"
-        )
-        self.path = self.path_to_config.parent
+        self.path = pathlib.Path(get_path_to_lcdb() if path is None else f"{path}/{lcdb_folder}")
+        self.path_to_config = f"{self.path}/{config_filename}"
 
         # state vars
         self.loaded = False
@@ -40,7 +36,7 @@ class LCDB:
         # create default config file
         default_config = {
             "repositories": {
-                "local": ".lcdb_data"
+                "local": ".lcdb/data"
             }
         }
         if config is not None:
