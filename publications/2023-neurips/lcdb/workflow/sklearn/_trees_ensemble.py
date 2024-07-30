@@ -7,8 +7,9 @@ from ConfigSpace import (
     Integer,
     EqualsCondition,
 )
+from sklearn.ensemble import RandomForestClassifier, ExtraTreesClassifier
 from lcdb.builder.scorer import ClassificationScorer
-from lcdb.builder.utils import get_schedule 
+from lcdb.builder.utils import get_schedule
 
 import numpy as np
 import time
@@ -16,12 +17,13 @@ import time
 from ._base import SklearnWorkflow
 
 CONFIG_SPACE = ConfigurationSpace(
-    name="sklearn.BaggingWorkflow",
+    name="sklearn.TreesEnsembleWorkflow",
     space={
-        "n_estimators": Constant("n_estimators", value=32),
+        "n_estimators": Constant("n_estimators", value=512),
         "criterion": Categorical(
             "criterion", items=["gini", "entropy", "log_loss"], default="gini"
         ),
+        "max_depth": Integer("max_depth", bounds=(0, 100), default=0),
         "min_samples_split": Integer("min_samples_split", bounds=(2, 50), default=2),
         "min_samples_leaf": Integer("min_samples_leaf", bounds=(1, 25), default=2),
         "max_features": Categorical(
@@ -34,6 +36,7 @@ CONFIG_SPACE = ConfigurationSpace(
         "max_samples": Float(
             "max_samples", bounds=(10**-3, 1.0), default=1.0
         ),  # cannot be 0
+        "splitter": Categorical("splitter", items=["random", "best"], default="best"),
     },
 )
 
@@ -42,7 +45,7 @@ CONFIG_SPACE.add_condition(
 )
 
 
-class BaggingWorkflow(SklearnWorkflow):
+class TreesEnsembleWorkflow(SklearnWorkflow):
     # Static Attribute
     _config_space = CONFIG_SPACE
     _config_space.add_configuration_space(
@@ -53,9 +56,21 @@ class BaggingWorkflow(SklearnWorkflow):
 
     def __init__(
         self,
-        bagging,
-        n_estimators,
         timer=None,
+        n_estimators=1,
+        criterion="gini",
+        max_depth=None,
+        min_samples_split=2,
+        min_samples_leaf=1,
+        min_weight_fraction_leaf=0.0,
+        max_features="sqrt",
+        max_leaf_nodes=None,
+        min_impurity_decrease=0.0,
+        bootstrap=True,
+        ccp_alpha=0.0,
+        max_samples=None,
+        splitter="best",
+        random_state=None,
         epoch_schedule: str = "full",
         iterations_to_wait_for_update=4,
         **kwargs,
@@ -67,7 +82,46 @@ class BaggingWorkflow(SklearnWorkflow):
         self.iterations_to_wait_for_update = iterations_to_wait_for_update
         self.last_recorded_iteration = None
 
-        super().__init__(learner=bagging, timer=timer, **kwargs)
+        max_depth = max_depth if max_depth > 0 else None
+        max_samples = max_samples if bootstrap else None
+        max_features = 1.0 if max_features == "all" else max_features
+
+        if splitter == "best":
+            learner = RandomForestClassifier(
+                criterion=criterion,
+                max_depth=max_depth,
+                min_samples_split=min_samples_split,
+                min_samples_leaf=min_samples_leaf,
+                min_weight_fraction_leaf=min_weight_fraction_leaf,
+                max_features=max_features,
+                max_leaf_nodes=max_leaf_nodes,
+                min_impurity_decrease=min_impurity_decrease,
+                bootstrap=bootstrap,
+                ccp_alpha=ccp_alpha,
+                max_samples=max_samples,
+                random_state=random_state,
+            )
+        elif splitter == "random":
+            learner = ExtraTreesClassifier(
+                criterion=criterion,
+                max_depth=max_depth,
+                min_samples_split=min_samples_split,
+                min_samples_leaf=min_samples_leaf,
+                min_weight_fraction_leaf=min_weight_fraction_leaf,
+                max_features=max_features,
+                max_leaf_nodes=max_leaf_nodes,
+                min_impurity_decrease=min_impurity_decrease,
+                bootstrap=bootstrap,
+                ccp_alpha=ccp_alpha,
+                max_samples=max_samples,
+                random_state=random_state,
+            )
+        else:
+            raise ValueError(
+                f"The splitter is '{splitter}' when it should be in ['random', 'best']."
+            )
+
+        super().__init__(learner=learner, timer=timer, **kwargs)
 
         # Scoring Schedule for Sub-fidelity
         self.schedule = get_schedule(

@@ -10,8 +10,7 @@ from ._median import MedianWorkflow
 from ._knn import KNNWorkflow
 from ._libsvm import LibSVMWorkflow
 from ._liblinear import LibLinearWorkflow
-from ._randomforest import RandomForestWorkflow
-from ._extratrees import ExtraTreesWorkflow
+from ._trees_ensemble import TreesEnsembleWorkflow
 from ._random import RandomWorkflow
 from ._tree import DTWorkflow
 
@@ -31,7 +30,6 @@ __all__ = [
     "LibSVMWorkflow",
     "LibLinearWorkflow",
     "DTWorkflow",
-    "RandomForestWorkflow",
-    "ExtraTreesWorkflow",
+    "TreesEnsembleWorkflow",
     "RandomWorkflow"
 ]

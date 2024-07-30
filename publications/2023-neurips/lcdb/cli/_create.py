@@ -70,7 +70,7 @@ def main(
         # Check if hyperparameter k is active
         # If it is not active we attribute the "lower bound value" of the space
         # To avoid duplication of the same "entity" in the list of configurations
-        if k in config_default.keys():
+        if k in dict(config_default):
             val = config_default[k]
         else:
             val = skopt_space.dimensions[i].bounds[0]
