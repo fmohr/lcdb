@@ -2,7 +2,7 @@ from ConfigSpace import (
     ConfigurationSpace,
 )
 
-from ...experiments.utils import filter_keys_with_prefix
+from lcdb.builder.utils import filter_keys_with_prefix
 from .._preprocessing_workflow import PreprocessedWorkflow
 
 

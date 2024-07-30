@@ -5,7 +5,7 @@ from ConfigSpace import (
 from sklearn.multiclass import OneVsOneClassifier
 from sklearn.svm import LinearSVC, SVC
 
-from ...experiments.utils import decision_fun_to_proba
+from lcdb.builder.utils import decision_fun_to_proba
 from ._base import SklearnWorkflow
 
 CONFIG_SPACE = ConfigurationSpace(

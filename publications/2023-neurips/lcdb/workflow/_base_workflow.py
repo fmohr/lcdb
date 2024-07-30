@@ -1,7 +1,7 @@
 import abc
 
-from typing import Any, Tuple, Dict
-from ..experiments.timer import Timer
+from typing import Any
+from lcdb.builder.timer import Timer
 import ConfigSpace
 
 import numpy as np

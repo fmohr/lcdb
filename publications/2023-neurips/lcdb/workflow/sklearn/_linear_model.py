@@ -4,7 +4,7 @@ from ConfigSpace import (
 from sklearn.linear_model import LogisticRegression, PassiveAggressiveClassifier, RidgeClassifier, Perceptron
 
 from ._base import SklearnWorkflow
-from ...experiments.utils import decision_fun_to_proba
+from lcdb.builder.utils import decision_fun_to_proba
 
 
 CONFIG_SPACE_LR = ConfigurationSpace(

@@ -7,8 +7,14 @@ import pathlib
 
 
 class LCDB:
+    """Used to represent the LCDB database.
 
-    def __init__(self, path=None):
+        Args:
+            path (str, optional): Path to the database folder that in principle should be named ``.lcdb``. Defaults to ``None`` that will first (1) check if in the current working directory there exists an `.lcdb`` folder, if not it will (2) look if it exists in the home directory, if it is not in the home directory (3) it will create it.
+    """
+
+    def __init__(self, path: str=None):
+        
 
         # get path of LCDB
         self.path = pathlib.Path(get_database_location() if path is None else path)

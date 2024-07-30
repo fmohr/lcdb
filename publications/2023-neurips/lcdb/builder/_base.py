@@ -3,22 +3,9 @@ import numpy as np
 import copy
 import logging
 
-try:
-    # Avoid some errors on some MPI implementations
-    import mpi4py
-
-    mpi4py.rc.initialize = False
-    mpi4py.rc.threads = True
-    mpi4py.rc.thread_level = "multiple"
-    mpi4py.rc.recv_mprobe = False
-    MPI4PY_IMPORTED = True
-except ModuleNotFoundError:
-    MPI4PY_IMPORTED = False
-
-from deephyper.evaluator import Evaluator, RunningJob
+from deephyper.evaluator import RunningJob
 from ..data import load_task
-from .utils import import_attr_from_module, terminate_on_memory_exceeded
-
+from .utils import import_attr_from_module
 
 import traceback
 import warnings
@@ -36,7 +23,7 @@ from .scorer import ClassificationScorer, RegressionScorer
 from sklearn.preprocessing import FunctionTransformer, OneHotEncoder
 
 
-def run(
+def run_learning_workflow(
     job: RunningJob,
     openml_id: int = 3,
     task_type: str = "classification",

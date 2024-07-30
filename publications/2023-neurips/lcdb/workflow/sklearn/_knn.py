@@ -7,7 +7,7 @@ from ConfigSpace import (
 from sklearn.neighbors import KNeighborsClassifier
 
 from ._base import SklearnWorkflow
-from ...experiments.utils import filter_keys_with_prefix
+from lcdb.builder.utils import filter_keys_with_prefix
 
 
 CONFIG_SPACE = ConfigurationSpace(

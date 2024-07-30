@@ -7,8 +7,8 @@ from ConfigSpace import (
     Integer,
     EqualsCondition,
 )
-from ...experiments.scorer import ClassificationScorer
-from ...experiments.utils import get_schedule 
+from lcdb.builder.scorer import ClassificationScorer
+from lcdb.builder.utils import get_schedule 
 
 import numpy as np
 import time
