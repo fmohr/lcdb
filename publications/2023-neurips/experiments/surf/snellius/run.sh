@@ -1,5 +1,4 @@
 #!/bin/bash
-#SBATCH --nodes=1
 #SBATCH --partition=rome
 #SBATCH --time=24:00:00
 #SBATCH --threads-per-core=1
@@ -8,7 +7,7 @@
 
 module load 2023
 module load OpenMPI/4.1.5-GCC-12.3.0
-source /home/$USER/lcdb/publications/2023-neurips/build/activate-dhenv.sh
+source /home/$USER/projects/lcdb/publications/2023-neurips/build/activate-dhenv.sh
 
 #!!! CONFIGURATION - START
 source config.sh
@@ -42,7 +41,7 @@ srun -n ${NTOTRANKS} -N ${SLURM_JOB_NUM_NODES} \
 gzip --best results.csv 
 
 
-srun -n 1 lcdb plot \
-    --results-path $LCDB_OUTPUT_RUN \
-    --output-path $LCDB_OUTPUT_RUN \
-    --plot-type $PLOT_TYPE
+# srun -n 1 lcdb plot \
+#     --results-path $LCDB_OUTPUT_RUN \
+#     --output-path $LCDB_OUTPUT_RUN \
+#     --plot-type $PLOT_TYPE

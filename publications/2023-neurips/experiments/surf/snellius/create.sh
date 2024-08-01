@@ -3,7 +3,7 @@
 # set -e
 
 # Load Python Environment
-source /home/$USER/lcdb/publications/2023-neurips/build/activate-dhenv.sh
+source /home/$USER/projects/lcdb/publications/2023-neurips/build/activate-dhenv.sh
 
 # Load Experiment Configuration
 source config.sh
