@@ -43,7 +43,7 @@ for val_seed in "${val_seeds[@]}"; do
         export LCDB_VALID_SEED=$val_seed
         export LCDB_TEST_SEED=$test_seed
 
-        export LCDB_OUTPUT_RUN=$LCDB_OUTPUT_DATASET/$LCDB_VALID_SEED-$LCDB_TEST_SEED-$LCDB_WORKFLOW_SEED/"results.csv.gz"
+        # export LCDB_OUTPUT_RUN=$LCDB_OUTPUT_DATASET/$LCDB_VALID_SEED-$LCDB_TEST_SEED-$LCDB_WORKFLOW_SEED/"results.csv.gz"
 
         # Get the size of the array of datasets
         array_size=$((${#LCDB_OPENML_ID_ARRAY[@]} - 1))

@@ -9,7 +9,7 @@ module load 2023
 module load OpenMPI/4.1.5-GCC-12.3.0
 source /home/$USER/projects/lcdb/publications/2023-neurips/build/activate-dhenv.sh
 
-echo $LCDB_OUTPUT_RUN
+source config.sh
 
 # Run experiment
-srun lcdb add -c snellius $LCDB_OUTPUT_RUN
+srun lcdb add -c snellius $LCDB_OUTPUT_RUN/"results.csv.gz"
