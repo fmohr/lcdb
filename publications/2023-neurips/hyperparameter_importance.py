@@ -15,6 +15,7 @@ def parse_args():
     parser.add_argument('--workflow_name', type=str, default="lcdb.workflow.sklearn.LibLinearWorkflow")
     parser.add_argument('--openml_taskid_name', type=str, default="m:openmlid")
     parser.add_argument('--output_directory', type=str, default=os.path.expanduser('~/experiments/lcdb'))
+    parser.add_argument('--output_filetype', type=str, choices=['pdf', 'png'], default='png')
     return parser.parse_args()
 
 
@@ -81,7 +82,7 @@ def run(args):
     plt.tight_layout()
 
     # save plot to file
-    output_file = args.output_directory + '/fanova_%s.pdf' % args.workflow_name
+    output_file = args.output_directory + '/fanova_%s.%s' % (args.workflow_name, args.output_filetype)
     os.makedirs(args.output_directory, exist_ok=True)
     plt.savefig(output_file)
     logging.info('saved to %s' % output_file)
