@@ -1,4 +1,6 @@
 import os
+import time
+
 from ._repository import Repository
 import gzip
 import pandas as pd
@@ -16,11 +18,14 @@ class LocalRepository(Repository):
         return pathlib.Path(self.repo_dir).exists()
 
     def read_result_file(self, file, usecols=None):
+        t_start = time.time()
         if file.endswith((".gz", ".gzip")):
             with gzip.GzipFile(file, "rb") as f:
                 df = pd.read_csv(f, usecols=usecols)
         else:
             df = pd.read_csv(file, usecols=usecols)
+        t_end = time.time()
+        print(f"Reading {len(df)} lines with {df.shape[1]} cols from {file} took {int(1000 * (t_end - t_start))}ms.")
         return df
 
     def add_results(self, campaign, *result_files):
@@ -218,5 +223,8 @@ class LocalRepository(Repository):
         dfs = []
         for file in result_files:
             df = self.read_result_file(file)
+            t_before = time.time()
             dfs.append(deserialize_dataframe(df))
+            t_after = time.time()
+            print(f"Appending deserialized dataframe took {int(1000 * (t_after - t_before))}ms")
         return pd.concat(dfs) if dfs else None
