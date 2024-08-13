@@ -59,7 +59,11 @@ lcdb add -c <campaign_name> results.csv.gz
 
 The campaign name is only to give a label to the runs (*todo: probably replace or complement by a file that describes the execution conditions*)
 
-By default, the data will be stored in `~/.lcdb/data`. However, you can add a flag `-r <repository_name>` to change the repository to which it will be added. Here `<repository_name>` must be one of the keys of the `repositories` dictionary in your `config.json`, which is looked up by default in `~/.lcdb`. If you have a `.lcdb` folder in the working directory where you place the prompt, then `.lcdb/config.json` is used instead. By default, `<repository_name>` is `home`, which is why `~/.lcdb/data` is used to store results by default.
+By default, the data will be stored in `~/.lcdb/data`. However, there are two ways to change this:
+
+1. you can create an alternative LCDB that does not reside in `~/.lcdb`. For this, simply run `lcdb init <path>` with a folder in which you want to use LCDB from the CLI. This may be an existing or unexisting directory name. In either case, the folder `<path>` will not be modified except that a hidden subfolder `.lcdb` is being added, so it will not be flooded with LCDB data, and you can safely apply it to a research working directory of yours.
+
+2. you can add a flag `-r <repository_name>` to change the repository to which it will be added. Here `<repository_name>` must be one of the keys of the `repositories` dictionary in your `config.json`, which is looked up by default in `./lcdb` (in the current working directory) and, if it is not found there, in `~/.lcdb`. So depending on whether you have a local LCDB created with the first option or not, you need to modify `.lcdb/config.json` or `~/.lcdb/config.json` to add the repository.
 
 ## Extracting LCDB results in Python
 The general logic is to retrieve a dataframe with one row for every evaluation of any hyperparameter configuration contained in the database:
