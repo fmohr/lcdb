@@ -3,6 +3,7 @@ import fanova
 import lcdb.db
 import logging
 import matplotlib.pyplot as plt
+import os
 import pandas as pd
 import seaborn as sns
 
@@ -13,6 +14,7 @@ def parse_args():
     parser.add_argument('--openml_ids', type=int, nargs='+', default=[3, 6])
     parser.add_argument('--workflow_name', type=str, default="lcdb.workflow.sklearn.LibLinearWorkflow")
     parser.add_argument('--openml_taskid_name', type=str, default="m:openmlid")
+    parser.add_argument('--output_directory', type=str, default=os.path.expanduser('~/experiments/lcdb/'))
     return parser.parse_args()
 
 
@@ -40,7 +42,7 @@ def run(args):
         columns = [
             c
             for c in list(task_results)
-            if len(task_results[c].unique()) > 1
+            if len(task_results[c].unique()) > 1 and c != performance_column
         ]
         evaluator = fanova.fanova.fANOVA(
             X=task_results[columns].to_numpy(),
@@ -71,7 +73,10 @@ def run(args):
     ax.set_ylabel("Variance Contribution")
     ax.set_xlabel(None)
     plt.tight_layout()
-    plt.show()
+    output_file = args.output_directory + '/fanova_%s.png' % args.workflow_name
+    os.makedirs(args.output_directory, exist_ok=True)
+    plt.savefig(output_file)
+    logging.info('saved to %s' % output_file)
 
 
 if __name__ == '__main__':
