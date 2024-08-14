@@ -110,6 +110,121 @@ def plot_learning_curves(
     return fig, ax
 
 
+def get_observation_curve_data_numpy(df_results):
+
+    res = get_observation_curve_data_nonaveraged(df_results)
+
+    df_processed = pd.DataFrame(res)
+
+    config_ids = df_processed['config_id'].unique()
+    val_seeds = df_processed['val_seed'].unique()
+    test_seeds = df_processed['test_seed'].unique()
+    anchor_ids = df_processed['anchor_id'].unique()
+    splits = df_processed['split'].unique()
+
+    assert(len(splits) == 3)
+
+    results_array = np.full((len(config_ids), len(val_seeds), len(test_seeds), len(anchor_ids), 3), fill_value=np.nan)
+
+    for row_id in range(len(df_processed)):
+
+        row = df_processed.iloc[row_id]
+        
+        config_id = row['config_id']
+        val_seed = row['val_seed']
+        test_seed = row['test_seed']
+        anchor_id = row['anchor_id']
+
+        split = row['split']
+        if split == 'train':
+            split_id = 0
+        if split == 'val':
+            split_id = 1
+        if split == 'test':
+            split_id = 2
+
+        results_array[config_id, val_seed, test_seed, anchor_id, split_id] = row['error_rate']
+
+    return results_array
+
+
+def get_observation_curve_data(df_results, split='val'):
+    l = []
+    hp_columns = [c for c in df_results.columns if c.startswith("p:")]
+
+    for hp_config, df_hp_config in df_results.groupby(hp_columns):
+        source = df_hp_config["m:json"]
+        query_anchor_values = QueryAnchorValues()
+        anchor_values = source.apply(query_anchor_values).to_list()
+
+        query_confusion_matrix_values = QueryMetricValuesFromAnchors("confusion_matrix", split_name=split)
+        out = source.apply(query_confusion_matrix_values)
+
+        balanced_error_rate_values = np.array(out.apply(lambda x: list(map(lambda x: 1 - balanced_accuracy_from_confusion_matrix(x), x))).to_list())
+        l.append(np.mean(balanced_error_rate_values, axis=0))
+
+    balanced_error_rate_values = np.array(l)
+
+    for i, (xi, yi) in enumerate(zip(anchor_values, l)):
+        anchor_values[i] = xi[:len(yi)]
+
+    return (anchor_values, balanced_error_rate_values)
+
+def get_observation_curve_data_nonaveraged(df_results):
+    hp_columns = [c for c in df_results.columns if c.startswith("p:")]
+
+    anchor_values_total = []
+
+    for i in range(len(df_results)):
+
+        row = df_results.iloc[i]
+        source = row["m:json"]
+        query_anchor_values = QueryAnchorValues()
+        anchor_values = query_anchor_values(source)
+        for anchor in anchor_values:
+            anchor_values_total.append(anchor)
+
+    anchor_values_total = set(anchor_values_total)
+    anchor_values_total = list(anchor_values_total)
+    anchor_values_total.sort()
+    print(anchor_values_total)
+
+    res = []
+
+    config_id = 0
+    for hp_config, df_hp_config in df_results.groupby(hp_columns):
+        for i in range(len(df_hp_config)):
+
+            row = df_hp_config.iloc[i]
+            source = row["m:json"]
+            query_anchor_values = QueryAnchorValues()
+            anchor_values = query_anchor_values(source)
+
+            for split in ['train', 'val', 'test']:
+
+                query_confusion_matrix_values = QueryMetricValuesFromAnchors("confusion_matrix", split_name=split)
+                out = query_confusion_matrix_values(source)
+
+                val_seed = row['m:valid_seed']
+                test_seed = row['m:test_seed']
+
+                get_error_rate = lambda x: 1 - balanced_accuracy_from_confusion_matrix(x)
+                error_rates = []
+                for cm in out:
+                    error_rates.append(get_error_rate(cm))
+
+                assert(len(error_rates) == len(anchor_values))
+
+                for anchor_id in range(len(error_rates)):
+                    actual_anchor = anchor_values[anchor_id]
+                    anchor_index = anchor_values_total.index(actual_anchor)
+                    res.append({"config_id": config_id, "val_seed": val_seed, "test_seed": test_seed, "anchor_id": anchor_index, "split": split, "error_rate": error_rates[anchor_id]})
+
+        config_id = config_id + 1
+
+    return res
+
+
 def plot_observation_curves(df_results, ax=None):
     l = []
     hp_columns = [c for c in df_results.columns if c.startswith("p:")]
