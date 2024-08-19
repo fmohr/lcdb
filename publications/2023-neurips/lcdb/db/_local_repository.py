@@ -1,11 +1,14 @@
+import gzip
+import logging
 import os
+import pathlib
 import time
 
-from ._repository import Repository
-import gzip
 import pandas as pd
+from tqdm import tqdm
+
 from ._dataframe import deserialize_dataframe
-import pathlib
+from ._repository import Repository
 
 
 class LocalRepository(Repository):
@@ -25,7 +28,7 @@ class LocalRepository(Repository):
         else:
             df = pd.read_csv(file, usecols=usecols)
         t_end = time.time()
-        print(f"Reading {len(df)} lines with {df.shape[1]} cols from {file} took {int(1000 * (t_end - t_start))}ms.")
+        logging.info(f"Reading {len(df)} lines with {df.shape[1]} cols from {file} took {int(1000 * (t_end - t_start))}ms.")
         return df
 
     def add_results(self, campaign, *result_files):
@@ -203,7 +206,8 @@ class LocalRepository(Repository):
             openmlids=None,
             workflow_seeds=None,
             test_seeds=None,
-            validation_seeds=None
+            validation_seeds=None,
+            verbose=0,
     ):
 
         # get all result files
@@ -221,10 +225,10 @@ class LocalRepository(Repository):
 
         # read in all result files
         dfs = []
-        for file in result_files:
+        for file in tqdm(result_files, disable=not verbose):
             df = self.read_result_file(file)
             t_before = time.time()
             dfs.append(deserialize_dataframe(df))
             t_after = time.time()
-            print(f"Appending deserialized dataframe took {int(1000 * (t_after - t_before))}ms")
+            logging.info(f"Appending deserialized dataframe took {int(1000 * (t_after - t_before))}ms")
         return pd.concat(dfs) if dfs else None

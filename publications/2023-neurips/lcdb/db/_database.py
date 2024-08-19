@@ -9,19 +9,26 @@ import pathlib
 class LCDB:
     """Used to represent the LCDB database.
 
-        Args:
-            path (str, optional): Path to the database folder that contains the LCDB config file. The config file is assumed to be name `.lcdb_config.json` by default, but this can be changed with the respective argument. In principle, this folder should be named ``.lcdb``, but this is not a requirement.
-            Defaults to ``None`` that will first (1) check if a file with the name `config_filename` exists in the current working directory
-            folder, if not it will (2) look if it exists in `~/.lcdb` where `~` is the home directory,
-            if it is not in `~/.lcdb` (3) it will create it there as soon as an operation on the object is conducted (retrieval or aggregation of data).
+    Args:
+        path (str, optional): Path to the database folder that contains the LCDB config file. The config file is assumed to be name `.lcdb_config.json` by default, but this can be changed with the respective argument. In principle, this folder should be named ``.lcdb``, but this is not a requirement. Defaults to ``None`` that will first (1) check if a file with the name `config_filename` exists in the current working directory
+        folder, if not it will (2) look if it exists in `~/.lcdb` where `~` is the home directory,
+        if it is not in `~/.lcdb` (3) it will create it there as soon as an operation on the object is conducted (retrieval or aggregation of data).
 
-            config_filename (str, optional): Name of the configuration file that is looked for.
+        config_filename (str, optional): Name of the configuration file that is looked for.
     """
 
-    def __init__(self, path: str = None, config_filename: str = "config.json", lcdb_folder: str = ".lcdb"):
+    def __init__(
+        self,
+        path: str = None,
+        config_filename: str = "config.json",
+        lcdb_folder: str = ".lcdb",
+    ):
+        # TODO: config_filename and lcdb_folder should not be parameters but rather constants
 
         # get path of LCDB
-        self.path = pathlib.Path(get_path_to_lcdb() if path is None else f"{path}/{lcdb_folder}")
+        self.path = pathlib.Path(
+            get_path_to_lcdb() if path is None else f"{path}/{lcdb_folder}"
+        )
         self.path_to_config = f"{self.path}/{config_filename}"
 
         # state vars
@@ -34,11 +41,7 @@ class LCDB:
         self.path.mkdir(exist_ok=True, parents=True)
 
         # create default config file
-        default_config = {
-            "repositories": {
-                "local": ".lcdb/data"
-            }
-        }
+        default_config = {"repositories": {"local": ".lcdb/data"}}
         if config is not None:
             default_config.update(config)
         config = default_config
@@ -85,15 +88,34 @@ class LCDB:
         return self._repositories
 
     def get_results(
-            self,
-            repositories=None,
-            campaigns=None,
-            workflows=None,
-            openmlids=None,
-            workflow_seeds=None,
-            test_seeds=None,
-            validation_seeds=None
-    ):
+        self,
+        repositories=None,
+        campaigns=None,
+        workflows=None,
+        openmlids=None,
+        workflow_seeds=None,
+        test_seeds=None,
+        validation_seeds=None,
+        verbose=0,
+    ) -> pd.DataFrame:
+        """Query the database for results.
+
+        Args:
+            repositories (_type_, optional): _description_. Defaults to None.
+            campaigns (_type_, optional): _description_. Defaults to None.
+            workflows (_type_, optional): _description_. Defaults to None.
+            openmlids (_type_, optional): _description_. Defaults to None.
+            workflow_seeds (_type_, optional): _description_. Defaults to None.
+            test_seeds (_type_, optional): _description_. Defaults to None.
+            validation_seeds (_type_, optional): _description_. Defaults to None.
+            verbose (int, optional): _description_. Defaults to 0.
+
+        Raises:
+            Exception: _description_
+
+        Returns:
+            _type_: _description_
+        """
         if not self.loaded:
             self._load()
 
@@ -102,7 +124,10 @@ class LCDB:
         else:
             requested_repository_names = set(repositories)
             existing_repository_names = set(self.repositories.keys())
-            if len(requested_repository_names.difference(existing_repository_names)) > 0:
+            if (
+                len(requested_repository_names.difference(existing_repository_names))
+                > 0
+            ):
                 raise Exception(
                     f"The following repositories were included in the query but do not exist in this LCDB: "
                     f"{requested_repository_names.difference(existing_repository_names)}"
@@ -118,7 +143,8 @@ class LCDB:
                     openmlids=openmlids,
                     workflow_seeds=workflow_seeds,
                     test_seeds=test_seeds,
-                    validation_seeds=validation_seeds
+                    validation_seeds=validation_seeds,
+                    verbose=verbose,
                 )
                 if results_in_repo is not None:
                     dfs.append(results_in_repo)
@@ -126,3 +152,6 @@ class LCDB:
             return pd.concat(dfs)
         else:
             return None
+
+    def query(self, *args, **kwargs) -> pd.DataFrame:
+        return self.get_results(*args, **kwargs)
