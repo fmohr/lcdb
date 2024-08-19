@@ -7,8 +7,9 @@ import time
 import pandas as pd
 from tqdm import tqdm
 
-from ._dataframe import deserialize_dataframe
-from ._repository import Repository
+from lcdb.db._dataframe import deserialize_dataframe
+from lcdb.db._repository import Repository
+from lcdb.analysis.json import JsonQuery
 
 
 class LocalRepository(Repository):
@@ -207,7 +208,8 @@ class LocalRepository(Repository):
             workflow_seeds=None,
             test_seeds=None,
             validation_seeds=None,
-            verbose=0,
+            json_query: JsonQuery=None,
+            verbose: bool=0,
     ):
 
         # get all result files
@@ -220,15 +222,29 @@ class LocalRepository(Repository):
             validation_seeds=validation_seeds
         )
 
+        # TODO: this should be removed as it depends a lot on the machine where the function is run
         if self.get_num_results(result_files=result_files) > 10**6:
             raise ValueError(f"Cannot read in more than 10**6 results.")
 
         # read in all result files
         dfs = []
-        for file in tqdm(result_files, disable=not verbose):
-            df = self.read_result_file(file)
-            t_before = time.time()
-            dfs.append(deserialize_dataframe(df))
-            t_after = time.time()
-            logging.info(f"Appending deserialized dataframe took {int(1000 * (t_after - t_before))}ms")
+        if json_query is None:
+            for file in tqdm(result_files, disable=not verbose):
+                df = self.read_result_file(file)
+                t_before = time.time()
+                dfs.append(deserialize_dataframe(df))
+                t_after = time.time()
+                logging.info(f"Appending deserialized dataframe took {int(1000 * (t_after - t_before))}ms")
+        
+        else:
+            for file in tqdm(result_files, disable=not verbose):
+                df = self.read_result_file(file)
+                t_before = time.time()
+                df = deserialize_dataframe(df)
+                json_query_output = df["m:json"].apply(json_query)
+                df.drop(columns="m:json", inplace=True)
+                df["JSON_QUERY"] = json_query_output
+                dfs.append(df)
+                t_after = time.time()
+                logging.info(f"Appending deserialized and filtered dataframe took {int(1000 * (t_after - t_before))}ms")
         return pd.concat(dfs) if dfs else None

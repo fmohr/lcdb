@@ -1,9 +1,29 @@
+import abc
 from typing import List, Any
 
 import jmespath
 
 
-class JsonQuery:
+class JsonQuery(abc.ABC):
+
+    @abc.abstractmethod
+    def apply(self, x: dict) -> Any:
+        """Query data from a dictionnary."""
+
+    def __call__(self, x) -> Any:
+        return self.apply(x)
+
+
+class FullQuery(JsonQuery):
+    def apply(self, x: dict):
+        return x
+    
+class NoneQuery(JsonQuery):
+    def apply(self, x: dict):
+        return None
+
+
+class JMESExpressionQuery(JsonQuery):
     def __init__(self, expression: str) -> None:
         self.expression = jmespath.compile(expression)
 
@@ -16,7 +36,7 @@ class JsonQuery:
         return self.apply(x)
 
 
-class QueryAnchorValues(JsonQuery):
+class QueryAnchorValues(JMESExpressionQuery):
     """Extract the anchor values."""
 
     def __init__(self):
@@ -26,7 +46,8 @@ class QueryAnchorValues(JsonQuery):
             f".metadata.value"
         )
 
-class QueryAnchorKeys(JsonQuery):
+
+class QueryAnchorKeys(JMESExpressionQuery):
     """Extract the key values for all anchors."""
 
     def __init__(self, key):
@@ -37,7 +58,7 @@ class QueryAnchorKeys(JsonQuery):
         )
 
 
-class QueryAnchorsChildren(JsonQuery):
+class QueryAnchorsChildren(JMESExpressionQuery):
     """Extract children data from all anchors."""
 
     def __init__(self):
@@ -48,7 +69,7 @@ class QueryAnchorsChildren(JsonQuery):
         )
 
 
-class QueryMetricValuesFromAnchors(JsonQuery):
+class QueryMetricValuesFromAnchors(JMESExpressionQuery):
     """Extract a metric for all anchors."""
 
     def __init__(self, metric_name: str, split_name: str = "val"):
@@ -62,7 +83,7 @@ class QueryMetricValuesFromAnchors(JsonQuery):
         )
 
 
-class QueryEpochValues(JsonQuery):
+class QueryEpochValues(JMESExpressionQuery):
     """Extract the epoch values for all anchors."""
 
     def __init__(self, with_epoch_test: bool = True):
@@ -84,7 +105,7 @@ class QueryEpochValues(JsonQuery):
             )
 
 
-class QueryMetricValuesFromEpochs(JsonQuery):
+class QueryMetricValuesFromEpochs(JMESExpressionQuery):
     """Extract the anchor children."""
 
     def __init__(self, metric_name: str, split_name: str = "val"):

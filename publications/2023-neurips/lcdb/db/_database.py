@@ -1,9 +1,11 @@
-from ._util import get_path_to_lcdb
-from ._repository import Repository
-import pandas as pd
 import json
 import os
 import pathlib
+
+import pandas as pd
+from lcdb.db._repository import Repository
+from lcdb.db._util import get_path_to_lcdb
+from lcdb.analysis.json import JsonQuery, FullQuery
 
 
 class LCDB:
@@ -96,7 +98,8 @@ class LCDB:
         workflow_seeds=None,
         test_seeds=None,
         validation_seeds=None,
-        verbose=0,
+        json_query: JsonQuery = None,
+        verbose: bool = 0,
     ) -> pd.DataFrame:
         """Query the database for results.
 
@@ -144,6 +147,7 @@ class LCDB:
                     workflow_seeds=workflow_seeds,
                     test_seeds=test_seeds,
                     validation_seeds=validation_seeds,
+                    json_query=json_query,
                     verbose=verbose,
                 )
                 if results_in_repo is not None:
