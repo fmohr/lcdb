@@ -66,19 +66,80 @@ By default, the data will be stored in `~/.lcdb/data`. However, there are two wa
 2. you can add a flag `-r <repository_name>` to change the repository to which it will be added. Here `<repository_name>` must be one of the keys of the `repositories` dictionary in your `config.json`, which is looked up by default in `./lcdb` (in the current working directory) and, if it is not found there, in `~/.lcdb`. So depending on whether you have a local LCDB created with the first option or not, you need to modify `.lcdb/config.json` or `~/.lcdb/config.json` to add the repository.
 
 ## Extracting LCDB results in Python
-The general logic is to retrieve a dataframe with one row for every evaluation of any hyperparameter configuration contained in the database:
+
+### Retrieving Raw Results
+The general logic is to retrieve a dataframe with one row for every evaluation of any hyperparameter configuration contained in the database.
+To prevent from memory explosion, these are read in through a generator, once at a time:
 ```python
 from lcdb.db import LCDB
-df = LCDB().get_results()
-```
-which will fetch all learning curves in the system (there is a protection mechanism that makes sure that no more than 10 million curves will be retrieved).
+from tqdm import tqdm
 
-It is generally recommendable to filter results by workflow, datasets, or both, which can be done by passing those parameters to the `get_results` function:
+for df in tqdm(LCDB().query()):
+  # do something with the result dataframe
+```
+Every result dataframe contains data for exclusively one workflow (but usually not all results available for this workflow). This is because the columns of the dataframe depend on the workflow hyperparameters, and since these are different for different workflows, results are not merged across different workflows by default.
+
+Because of potentially large retrieval times (due to large and compressed amounts of data), results are returned through generators by default.
+These generators have a `__len__` attribute so that a progress bar can be used to estimate the retrieval time.
+
+Every result dataframe contains *one column for every hyperparameter of the workflow* (all of these columns begin with an `p:`), and the following workflow-independent columns:
+
+| Column Name    | Description |
+| -------- | ------- |
+| objective | ?? |
+| job_id | ?? |
+| m:timestamp_submit | ?? |
+| m:timestamp_gather | ?? |
+| m:timestamp_start  | ?? | 
+| m:timestamp_end    | ?? |
+| m:memory           | ?? |
+| m:openmlid         | Dataset ID at openml.org for the dataset |
+| m:workflow         | Name of the workflow |
+| m:workflow_seed    | Seed used to configure the workflow |
+| m:valid_prop       | Portion of data separated for validation fold |
+| m:test_prop        | Portion of data separated for test fold |
+| m:monotonic        | Boolean that indicates whether training folds of higher size are supersets of training sets of lower size (with same validation and test seeds) |
+| m:valid_seed       | Seed used to separate training data from validation data (inner split) |
+| m:test_seed        | Seed used to separate test data from rest (outer split) |
+| m:traceback        | Traceback of the error in case of failure |
+| m:json             | Detailed learning curve results as a Python *dictionary* (see below) |
+
+Because of the amount of data available with LCDB, it is generally recommendable to filter results by workflow, datasets, or both, which can be done by passing those parameters to the `get_results` function:
 
 ```python
-df = LCDB().get_results(workflows=["lcdb.workflow.sklearn.LibLinearWorkflow"], openmlids=[3, 6])
+generator = LCDB().get_results(workflows=["lcdb.workflow.sklearn.LibLinearWorkflow"], openmlids=[3, 6])
 ```
 
-The results dataframe has a field `m:json`, which contains a dictionary with all the information about the curve of the evaluation. if there are iteration curves, they are also contained in that dictionary.
+Even this way, query times are generally high, and you probably want to avoid many of these queries.
+It is therefore highly recommended to retrieve the information you are interested in from the dataframes and only store the important information.
+Most applications only need a fraction of the stored information (often less than 10%), so storing the relevant information locally will drastically speed up your research activity.
 
-We use [https://jmespath.org/] to conveniently access and retrieve information from this dictionary. Example can be found in `analysis/json.py`.
+### Processing Result Dictionaries
+The dictionaries stored inside `m:json` contain a potentially deep tree structure. The dictionary itself is the root node of this tree, and for any node, children can be obtained through the `children` key. Each node has the following entries:
+| Key    | Type of value  | Description of the value |
+| -------- | ------- | ------- |
+| timestamp_start | float | The (relative) timestamp indicating at which time the computation for the entries inside the node started. |
+| timestamp_stop | float | The (relative) timestamp indicating at which time the computation for the entries inside the node ended. |
+| tag (optional) | str | Name tag of the node (not unique, comparable to `class` in CSS) |
+| metadata (optional) | dict | Information associated with the node. Content depends on the tag |
+| children (optional) | dict | children of the node |
+
+One can use [https://jmespath.org/] to conveniently access and retrieve information from this dictionary. Example can be found in `analysis/json.py`.
+
+The learning curve data is contained in the second child, which has the tag `build_curves`. Below this node, the structure is generally like this (in terms of tag names):
+
+```
+├── root
+│   ├── branch1
+│   │   ├── leaf1
+│   │   │   └── value1
+│   │   └── leaf2
+│   │       └── value2
+│   └── branch2
+│       ├── subbranch1
+│       │   ├── leaf3
+│       │   │   └── value3
+│       └── leaf4
+│           └── value4
+
+```
