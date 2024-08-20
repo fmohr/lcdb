@@ -126,20 +126,70 @@ The dictionaries stored inside `m:json` contain a potentially deep tree structur
 
 One can use [https://jmespath.org/] to conveniently access and retrieve information from this dictionary. Example can be found in `analysis/json.py`.
 
-The learning curve data is contained in the second child, which has the tag `build_curves`. Below this node, the structure is generally like this (in terms of tag names):
+The learning curve data is contained in the second child, which has the tag `build_curves`. The general structure of the tree is as follows, where there is one anchor for every $\ceil{2^{\frac{i}{2}}}$ with $i \geq 8$, i.e., starting at 16, up to the maximum size allowed by dataset and `valid_prop` and `test_prop`. The respective values of the anchors can be found in the meta-data of the node. Most nodes are only needed to know the runtimes (everything in `fit` and `get_predictions`). In `metrics`, one can find both the runtimes to compute the metric values as the metric values themselves. They are computed for train, validation, and test data. `confusion_matrix` is the basis for all metrics that are derived from definite predictions such as accuracy, error rate, precision, recall, f1, etc. For space reasons, no probabilistic predictions are memorized, but the values of AUC, log_loss and brier_score are memorized and made explicit. The concrete values are obtained via `["metadata"]["value"]` inside those nodes.
 
 ```
-├── root
-│   ├── branch1
-│   │   ├── leaf1
-│   │   │   └── value1
-│   │   └── leaf2
-│   │       └── value2
-│   └── branch2
-│       ├── subbranch1
-│       │   ├── leaf3
-│       │   │   └── value3
-│       └── leaf4
-│           └── value4
-
+├── load_task
+└── build_curves
+    ├── anchor
+    │   ├── create_workflow
+    │   ├── fit
+    │   │   ├── transform_train
+    │   │   ├── transform_valid
+    │   │   └── transform_test
+    │   ├── get_predictions
+    │   │   ├── train
+    │   │   │   ├── predict_proba
+    │   │   ├── val
+    │   │   │   ├── predict_proba
+    │   │   └── test
+    │   │       ├── predict_proba
+    │   └── metrics
+    │       ├── train
+    │       │   ├── confusion_matrix
+    │       │   ├── auc
+    │       │   ├── log_loss
+    │       │   └── brier_score
+    │       ├── val
+    │       │   ├── confusion_matrix
+    │       │   ├── auc
+    │       │   ├── log_loss
+    │       │   └── brier_score
+    │       └── test
+    │           ├── confusion_matrix
+    │           ├── auc
+    │           ├── log_loss
+    │           └── brier_score
+    .
+    .
+    .
+    └── anchor
+        ├── create_workflow
+        ├── fit
+        │   ├── transform_train
+        │   ├── transform_valid
+        │   └── transform_test
+        ├── get_predictions
+        │   ├── train
+        │   │   ├── predict_proba
+        │   ├── val
+        │   │   ├── predict_proba
+        │   └── test
+        │       ├── predict_proba
+        └── metrics
+            ├── train
+            │   ├── confusion_matrix
+            │   ├── auc
+            │   ├── log_loss
+            │   └── brier_score
+            ├── val
+            │   ├── confusion_matrix
+            │   ├── auc
+            │   ├── log_loss
+            │   └── brier_score
+            └── test
+                ├── confusion_matrix
+                ├── auc
+                ├── log_loss
+                └── brier_score
 ```
