@@ -104,10 +104,10 @@ Every result dataframe contains *one column for every hyperparameter of the work
 | m:traceback        | Traceback of the error in case of failure |
 | m:json             | Detailed learning curve results as a Python *dictionary* (see below) |
 
-Because of the amount of data available with LCDB, it is generally recommendable to filter results by workflow, datasets, or both, which can be done by passing those parameters to the `get_results` function:
+Because of the amount of data available with LCDB, it is generally recommendable to filter results by workflow, datasets, or both, which can be done by passing those parameters to the `query` function:
 
 ```python
-generator = LCDB().get_results(workflows=["lcdb.workflow.sklearn.LibLinearWorkflow"], openmlids=[3, 6])
+generator = LCDB().query(workflows=["lcdb.workflow.sklearn.LibLinearWorkflow"], openmlids=[3, 6])
 ```
 
 Even this way, query times are generally high, and you probably want to avoid many of these queries.
