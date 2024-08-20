@@ -225,39 +225,6 @@ def get_observation_curve_data_nonaveraged(df_results):
     return res
 
 
-def plot_observation_curves(df_results, ax=None):
-    l = []
-    hp_columns = [c for c in df_results.columns if c.startswith("p:")]
-
-    for hp_config, df_hp_config in df_results.groupby(hp_columns):
-        source = df_hp_config["m:json"]
-        query_anchor_values = QueryAnchorValues()
-        anchor_values = source.apply(query_anchor_values).to_list()
-
-        query_confusion_matrix_values = QueryMetricValuesFromAnchors("confusion_matrix", split_name="val")
-        out = source.apply(query_confusion_matrix_values)
-
-        balanced_error_rate_values = np.array(out.apply(lambda x: list(map(lambda x: 1 - balanced_accuracy_from_confusion_matrix(x), x))).to_list())
-        l.append(np.mean(balanced_error_rate_values, axis=0))
-
-    balanced_error_rate_values = np.array(l)
-
-    for i, (xi, yi) in enumerate(zip(anchor_values, l)):
-        anchor_values[i] = xi[:len(yi)]
-
-    if ax is None:
-        fig, ax = plt.subplots()
-    else:
-        fig = ax.get_figure()
-    plot_learning_curves(anchor_values, balanced_error_rate_values, metric_value_baseline=balanced_error_rate_values[0][-1], ax=ax)
-    ax.axhline(y=balanced_error_rate_values[0][-1], color="lime", linestyle="--")
-    ax.set_xlabel(f"Number of Samples")
-    ax.set_ylabel(f"Validation Balanced Error Rate")
-    ax.set_xscale("log")
-    ax.set_yscale("log")
-    return fig, ax
-
-
 def plot_observation_curves(df_results):
     mean_balanced_error_rates_of_configs = []
     hp_columns = [c for c in df_results.columns if c.startswith("p:")]
