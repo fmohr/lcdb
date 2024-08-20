@@ -1,11 +1,15 @@
+import gzip
+import logging
 import os
+import pathlib
 import time
 
-from ._repository import Repository
-import gzip
 import pandas as pd
-from ._dataframe import deserialize_dataframe
-import pathlib
+from tqdm import tqdm
+
+from lcdb.db._dataframe import deserialize_dataframe
+from lcdb.db._repository import Repository
+from lcdb.analysis.json import JsonQuery
 
 from tqdm import tqdm
 
@@ -26,6 +30,7 @@ class LocalRepository(Repository):
         else:
             df = pd.read_csv(file, usecols=usecols)
         t_end = time.time()
+        logging.info(f"Reading {len(df)} lines with {df.shape[1]} cols from {file} took {int(1000 * (t_end - t_start))}ms.")
         return df
 
     def add_results(self, campaign, *result_files):
@@ -178,8 +183,9 @@ class LocalRepository(Repository):
             workflow_seeds=None,
             test_seeds=None,
             validation_seeds=None,
-            processors=None,
-            return_generator=True
+            return_generator=True,
+            json_query: JsonQuery=None,
+            verbose: bool=0
     ):
         """
 
@@ -189,7 +195,6 @@ class LocalRepository(Repository):
         :param workflow_seeds: iterable of workflow seeds (integers) for which results are desired (None for all available)
         :param test_seeds: iterable of dataset test split seeds (integers) for which results are desired (None for all available)
         :param validation_seeds: iterable of dataset validation split seeds (integers) for which results are desired (None for all available)
-        :param processors: dictionary with functions that compute desired values for each entry (keys will become column names). If this parameter is set, then the field `m:json` will be removed to save memory.
         :return:
         """
 
@@ -206,15 +211,18 @@ class LocalRepository(Repository):
         # read in all result files
         dfs = []
         total_entries = 0
-        for file in tqdm(result_files):
+        for file in tqdm(result_files, disable=not verbose):
             if total_entries > 10 ** 6:
                 raise ValueError(f"Cannot read in more than 10**6 results.")
             df = self.read_result_file(file)
             df_deserialized = deserialize_dataframe(df)
+            if json_query is not None:
+                json_query_output = df["m:json"].apply(json_query)
+                df.drop(columns="m:json", inplace=True)
+                df["JSON_QUERY"] = json_query_output
+
             total_entries += len(df_deserialized)
             if return_generator:
                 yield df_deserialized
             else:
                 dfs.append(df_deserialized)
-        if not return_generator:
-            return pd.concat(dfs) if dfs else None
