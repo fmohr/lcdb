@@ -7,6 +7,7 @@ import pandas as pd
 from ._dataframe import deserialize_dataframe
 import pathlib
 
+from tqdm import tqdm
 
 class LocalRepository(Repository):
 
@@ -25,7 +26,6 @@ class LocalRepository(Repository):
         else:
             df = pd.read_csv(file, usecols=usecols)
         t_end = time.time()
-        print(f"Reading {len(df)} lines with {df.shape[1]} cols from {file} took {int(1000 * (t_end - t_start))}ms.")
         return df
 
     def add_results(self, campaign, *result_files):
@@ -83,12 +83,16 @@ class LocalRepository(Repository):
         result_files = []
         for filename in result_files_unfiltered:
             offset = 4 if filename.endswith(".csv") else 7
-            _workflow_seed, _test_seed, _val_seed = [int(i) for i in filename[:-offset].split("-")]
-            if workflow_seeds is not None and _workflow_seed not in workflow_seeds:
-                continue
-            if test_seeds is not None and _test_seed not in test_seeds:
-                continue
-            if validation_seeds is not None and _val_seed not in validation_seeds:
+            try:
+                _workflow_seed, _test_seed, _val_seed = [int(i) for i in filename[:-offset].split("-")]
+                if workflow_seeds is not None and _workflow_seed not in workflow_seeds:
+                    continue
+                if test_seeds is not None and _test_seed not in test_seeds:
+                    continue
+                if validation_seeds is not None and _val_seed not in validation_seeds:
+                    continue
+            except ValueError:
+                print(f"Invalid filename {filename}")
                 continue
 
             result_files.append(f"{folder}/{filename}")
@@ -166,36 +170,6 @@ class LocalRepository(Repository):
             ))
         return result_files
 
-    def get_num_results(
-            self,
-            campaigns=None,
-            workflows=None,
-            openmlids=None,
-            workflow_seeds=None,
-            test_seeds=None,
-            validation_seeds=None,
-            result_files=None,
-            max_cnt=10**6
-    ):
-
-        # get all files
-        if result_files is None:
-            result_files = self.get_result_files(
-                workflows=workflows,
-                campaigns=campaigns,
-                openmlids=openmlids,
-                workflow_seeds=workflow_seeds,
-                test_seeds=test_seeds,
-                validation_seeds=validation_seeds
-            )
-
-        cnt = 0
-        for f in result_files:
-            cnt += len(self.read_result_file(f, usecols=["m:openmlid"]))
-            if cnt >= max_cnt:
-                return cnt
-        return cnt
-
     def get_results(
             self,
             workflows=None,
@@ -203,8 +177,21 @@ class LocalRepository(Repository):
             openmlids=None,
             workflow_seeds=None,
             test_seeds=None,
-            validation_seeds=None
+            validation_seeds=None,
+            processors=None,
+            return_generator=True
     ):
+        """
+
+        :param workflows: iterable of workflow names for which results are desired (None for all available)
+        :param campaigns: iterable of campaign names from which results are desired (None for all available)
+        :param openmlids: iterable of datasets (integers) for which results are desired (None for all available)
+        :param workflow_seeds: iterable of workflow seeds (integers) for which results are desired (None for all available)
+        :param test_seeds: iterable of dataset test split seeds (integers) for which results are desired (None for all available)
+        :param validation_seeds: iterable of dataset validation split seeds (integers) for which results are desired (None for all available)
+        :param processors: dictionary with functions that compute desired values for each entry (keys will become column names). If this parameter is set, then the field `m:json` will be removed to save memory.
+        :return:
+        """
 
         # get all result files
         result_files = self.get_result_files(
@@ -216,15 +203,18 @@ class LocalRepository(Repository):
             validation_seeds=validation_seeds
         )
 
-        if self.get_num_results(result_files=result_files) > 10**6:
-            raise ValueError(f"Cannot read in more than 10**6 results.")
-
         # read in all result files
         dfs = []
-        for file in result_files:
+        total_entries = 0
+        for file in tqdm(result_files):
+            if total_entries > 10 ** 6:
+                raise ValueError(f"Cannot read in more than 10**6 results.")
             df = self.read_result_file(file)
-            t_before = time.time()
-            dfs.append(deserialize_dataframe(df))
-            t_after = time.time()
-            print(f"Appending deserialized dataframe took {int(1000 * (t_after - t_before))}ms")
-        return pd.concat(dfs) if dfs else None
+            df_deserialized = deserialize_dataframe(df)
+            total_entries += len(df_deserialized)
+            if return_generator:
+                yield df_deserialized
+            else:
+                dfs.append(df_deserialized)
+        if not return_generator:
+            return pd.concat(dfs) if dfs else None

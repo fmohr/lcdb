@@ -72,7 +72,8 @@ class Repository(ABC):
             openmlids=None,
             workflow_seeds=None,
             test_seeds=None,
-            validation_seeds=None
+            validation_seeds=None,
+            return_generator=True
     ):
         """
 
@@ -82,6 +83,6 @@ class Repository(ABC):
         :param workflow_seeds:
         :param test_seeds:
         :param validation_seeds:
-        :return: dataframe with all results observed that match *all* the given criteria
+        :return: Pandas dataframe or generator thereof with all results observed that match *all* the given criteria
         """
         raise NotImplementedError

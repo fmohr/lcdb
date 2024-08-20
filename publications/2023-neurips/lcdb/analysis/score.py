@@ -33,3 +33,4 @@ def balanced_accuracy_from_confusion_matrix(x: np.ndarray) -> float:
         per_class = per_class[~np.isnan(per_class)]
     score = np.mean(per_class)
     return score
+

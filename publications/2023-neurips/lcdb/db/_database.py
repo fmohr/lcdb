@@ -92,8 +92,22 @@ class LCDB:
             openmlids=None,
             workflow_seeds=None,
             test_seeds=None,
-            validation_seeds=None
+            validation_seeds=None,
+            return_generator=True
     ):
+        """
+        Gets a dictionary or generator of result dataframes. In the case of a dictionary, there is one dataframe per workflow; these are not unified since different workflows have different hyperparameters. In the case of a generator, each returned dataframe is for a single workflow, but it may (and typically will) occur that several dataframes for the same workflow are returned (but with values for different datasets or different seeds). In other words, it can always be assumed that the workflows of the returned dataframes (either by a generator or contained in the dictionary) have a homogenous worklfow attribute.
+
+        :param repositories:
+        :param campaigns:
+        :param workflows:
+        :param openmlids:
+        :param workflow_seeds:
+        :param test_seeds:
+        :param validation_seeds:
+        :param return_generator:
+        :return:
+        """
         if not self.loaded:
             self._load()
 
@@ -118,11 +132,16 @@ class LCDB:
                     openmlids=openmlids,
                     workflow_seeds=workflow_seeds,
                     test_seeds=test_seeds,
-                    validation_seeds=validation_seeds
+                    validation_seeds=validation_seeds,
+                    return_generator=return_generator
                 )
-                if results_in_repo is not None:
-                    dfs.append(results_in_repo)
-        if dfs:
+                if return_generator:
+                    for r in results_in_repo:
+                        yield r
+                else:
+                    if results_in_repo is not None:
+                        dfs.append(results_in_repo)
+        if not return_generator and dfs:
             return pd.concat(dfs)
         else:
             return None
