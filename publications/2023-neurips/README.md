@@ -193,3 +193,31 @@ The learning curve data is contained in the second child, which has the tag `bui
                 ├── log_loss
                 └── brier_score
 ```
+### Using processors for computations prior to result delivery
+When calling the `query` function, you can add a dictionary of callables that will be applied to each dictionary inside of `m:json`. To do so, use the `processors` attribute.
+The following code generates two new columns with names `anchor_sizes` and `balanced_error_rate` in the result dataframe:
+
+```python
+df = lcdb.query(processors={
+  "anchor_sizes": QueryAnchorValues(),
+  "balanced_error_rate": lambda x: list(map(lambda x: 1 - balanced_accuracy_from_confusion_matrix(x), QueryMetricValuesFromAnchors("confusion_matrix", split_name="val")(x)))
+})
+```
+
+Importantly, when using `processors`, the column `m:json` is *removed* before returning the results, which can save memory.
+
+
+### Retrieving results without a generator
+It is highly recommended to use the generators for data retrieval. However, if you prefer to load the data in a batch fashion, you can proceed as follows:
+
+```python
+df = lcdb.query(workflows="<name of one workflow>", openmlids=[...], return_generator=False)
+```
+if you want data for just one workflow or
+
+```python
+df_dict = lcdb.query(workflows=["<wf 1>", "<wf 2>"], openmlids=[...], return_generator=False)
+```
+if it is for several workflows. In the second case, you get a dictionary in which the keys are the workflow names and the values are the dataframes with all results for those workflows.
+
+When not using a generator, it is highly recommended to use *processors* (described above) to make sure that the `m:json` column is discarded and hence to avoid memory flooding.
