@@ -10,6 +10,7 @@ from tqdm import tqdm
 from lcdb.db._dataframe import deserialize_dataframe
 from lcdb.db._repository import Repository
 from lcdb.analysis.json import JsonQuery
+from ._util import CountAwareGenerator
 
 from tqdm import tqdm
 
@@ -175,7 +176,7 @@ class LocalRepository(Repository):
             ))
         return result_files
 
-    def get_results(
+    def query_results_as_stream(
             self,
             workflows=None,
             campaigns=None,
@@ -183,9 +184,7 @@ class LocalRepository(Repository):
             workflow_seeds=None,
             test_seeds=None,
             validation_seeds=None,
-            return_generator=True,
-            json_query: JsonQuery=None,
-            verbose: bool=0
+            processors=None
     ):
         """
 
@@ -198,6 +197,9 @@ class LocalRepository(Repository):
         :return:
         """
 
+        if processors is not None and not isinstance(processors, dict):
+            raise ValueError(f"processors must be None or a dictionary with Callables as values.")
+
         # get all result files
         result_files = self.get_result_files(
             workflows=workflows,
@@ -209,20 +211,21 @@ class LocalRepository(Repository):
         )
 
         # read in all result files
-        dfs = []
-        total_entries = 0
-        for file in tqdm(result_files, disable=not verbose):
-            if total_entries > 10 ** 6:
-                raise ValueError(f"Cannot read in more than 10**6 results.")
-            df = self.read_result_file(file)
-            df_deserialized = deserialize_dataframe(df)
-            if json_query is not None:
-                json_query_output = df["m:json"].apply(json_query)
-                df.drop(columns="m:json", inplace=True)
-                df["JSON_QUERY"] = json_query_output
 
-            total_entries += len(df_deserialized)
-            if return_generator:
+        def gen_fun():
+            total_entries = 0
+
+            for file in result_files:
+                if total_entries > 10 ** 6:
+                    raise ValueError(f"Cannot read in more than 10**6 results.")
+                df = self.read_result_file(file)
+                df_deserialized = deserialize_dataframe(df)
+                if processors is not None:
+                    for name, fun in processors.items():
+                        df[name] = df["m:json"].apply(fun)
+                    df.drop(columns="m:json", inplace=True)
+
+                total_entries += len(df_deserialized)
                 yield df_deserialized
-            else:
-                dfs.append(df_deserialized)
+
+        return CountAwareGenerator(len(result_files), gen=gen_fun())

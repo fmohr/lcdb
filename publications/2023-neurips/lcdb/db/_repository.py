@@ -65,15 +65,14 @@ class Repository(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def get_results(
+    def query_results_as_stream(
             self,
             campaigns=None,
             workflows=None,
             openmlids=None,
             workflow_seeds=None,
             test_seeds=None,
-            validation_seeds=None,
-            return_generator=True
+            validation_seeds=None
     ):
         """
 

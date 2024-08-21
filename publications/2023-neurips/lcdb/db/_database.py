@@ -4,7 +4,7 @@ import pathlib
 
 import pandas as pd
 from lcdb.db._repository import Repository
-from lcdb.db._util import get_path_to_lcdb
+from lcdb.db._util import get_path_to_lcdb,  CountAwareGenerator
 from lcdb.analysis.json import JsonQuery, FullQuery
 
 
@@ -21,11 +21,12 @@ class LCDB:
 
     def __init__(
         self,
-        path: str = None,
-        config_filename: str = "config.json",
-        lcdb_folder: str = ".lcdb",
+        path: str = None
     ):
-        # TODO: config_filename and lcdb_folder should not be parameters but rather constants
+
+        # the following are now constants that are no longer configurable
+        config_filename = "config.json"
+        lcdb_folder = ".lcdb"
 
         # get path of LCDB
         self.path = pathlib.Path(
@@ -89,7 +90,7 @@ class LCDB:
             self._load()
         return self._repositories
 
-    def get_results(
+    def query(
             self,
             repositories=None,
             campaigns=None,
@@ -99,8 +100,7 @@ class LCDB:
             test_seeds=None,
             validation_seeds=None,
             return_generator=True,
-            json_query: JsonQuery=None,
-            verbose: bool=0
+            processors=None
     ):
         """
         Gets a dictionary or generator of result dataframes. In the case of a dictionary, there is one dataframe per workflow; these are not unified since different workflows have different hyperparameters. In the case of a generator, each returned dataframe is for a single workflow, but it may (and typically will) occur that several dataframes for the same workflow are returned (but with values for different datasets or different seeds). In other words, it can always be assumed that the workflows of the returned dataframes (either by a generator or contained in the dictionary) have a homogenous worklfow attribute.
@@ -139,30 +139,40 @@ class LCDB:
                 )
             repositories = [self.repositories[k] for k in requested_repository_names]
 
-        dfs = []
+        # make sure that required workflows are None or list
+        if workflows is not None and isinstance(workflows, str):
+            workflows = [workflows]
+
+        result_generators = []
         for repository in repositories:
             if repository.exists():
-                results_in_repo = repository.get_results(
-                    campaigns=campaigns,
-                    workflows=workflows,
-                    openmlids=openmlids,
-                    workflow_seeds=workflow_seeds,
-                    test_seeds=test_seeds,
-                    validation_seeds=validation_seeds,
-                    return_generator=return_generator,
-                    json_query=json_query,
-                    verbose=verbose
+                result_generators.append(
+                    repository.query_results_as_stream(
+                        campaigns=campaigns,
+                        workflows=workflows,
+                        openmlids=openmlids,
+                        workflow_seeds=workflow_seeds,
+                        test_seeds=test_seeds,
+                        validation_seeds=validation_seeds,
+                        processors=processors
+                    )
                 )
-                if return_generator:
-                    for r in results_in_repo:
-                        yield r
-                else:
-                    if results_in_repo is not None:
-                        dfs.append(results_in_repo)
-        if not return_generator and dfs:
-            return pd.concat(dfs)
-        else:
-            return None
 
-    def query(self, *args, **kwargs) -> pd.DataFrame:
-        return self.get_results(*args, **kwargs)
+        def generator():
+            for gen in result_generators:
+                for res in gen:
+                    yield res
+
+        gen = CountAwareGenerator(sum([len(g) for g in result_generators]), generator())
+
+        if return_generator:
+            return gen
+        else:
+            dfs_per_workflow = {}
+            for df in gen:
+                workflow_class = df["m:workflow"].values[0]
+                dfs_per_workflow[workflow_class] = df if workflow_class not in dfs_per_workflow else pd.concat([dfs_per_workflow[workflow_class], df])
+            if workflows is not None and len(workflows) == 1:
+                return dfs_per_workflow[workflows[0]]
+            else:
+                return dfs_per_workflow
