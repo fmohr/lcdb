@@ -1,8 +1,12 @@
 import argparse
 import fanova
 import lcdb.db
+import lcdb.builder.utils
+import lcdb.analysis.json
+import lcdb.analysis.score
 import logging
 import matplotlib.pyplot as plt
+import numpy as np
 import os
 import pandas as pd
 import seaborn as sns
@@ -25,6 +29,15 @@ def fanova_on_task(task_results, performance_column_name, n_trees):
     # in this simplified example, we only display numerical and float hyperparameters. For categorical
     # hyperparameters, the fanova library needs to be informed by using a configspace object.
     task_results = task_results.select_dtypes(include=["int64", "float64"])
+
+    # query_confusion_matrix_values = lcdb.analysis.json.QueryMetricValuesFromAnchors("confusion_matrix", split_name="val")
+    # out = task_results[performance_column_name].apply(query_confusion_matrix_values)
+    # print(out)
+    # balanced_error_rate_values_for_config = np.array(
+    #    out.apply(lambda x: list(map(lambda x: 1 - lcdb.analysis.score.balanced_accuracy_from_confusion_matrix(x), x))).to_list())
+    # print(balanced_error_rate_values_for_config.mean(axis=0))
+    # print(out)
+
     # drop rows with unique values. These are by definition not an interesting hyperparameter, e.g., ``axis``,
     # ``verbose``.
     columns = [
@@ -57,15 +70,31 @@ def run(args):
     fanova_all_results = []
     performance_column = "objective"
 
-    all_results = lcdb.db.LCDB().get_results(workflows=[args.workflow_name], openmlids=args.openml_ids)
-    hyperparameter_names = [i for i in all_results.columns.values if i.startswith('p:')]
-    relevant_columns = hyperparameter_names + [performance_column, args.openml_taskid_name]
-    all_results = all_results[relevant_columns]
+    WorkflowClass = lcdb.builder.utils.import_attr_from_module(args.workflow_name)
+    config_space = WorkflowClass.config_space()
+    id_results = dict()
+    print(config_space)  # TODO: properly integrate to fanova
 
-    task_ids = set(all_results[args.openml_taskid_name].to_list())
+    all_results_all_workflows = lcdb.db.LCDB().get_results(workflows=[args.workflow_name], openmlids=args.openml_ids)
+    for frame_workflow_job_task in all_results_all_workflows:
+        workflow_ids = frame_workflow_job_task['m:workflow'].unique()
+        openml_task_ids = frame_workflow_job_task['m:openmlid'].unique()
+        # job_ids = frame_workflow_job_task['job_id'].unique()
+        if len(workflow_ids) > 1 or len(openml_task_ids) > 1:
+            raise ValueError('Should not happen. %s %s' % (str(workflow_ids), str(openml_task_ids)))
+        if (workflow_ids[0], openml_task_ids[0]) not in id_results:
+            id_results[(workflow_ids[0], openml_task_ids[0])] = list()
+        id_results[(workflow_ids[0], openml_task_ids[0])].append(frame_workflow_job_task)
 
-    for idx, task_id in enumerate(task_ids):
-        logging.info("Starting with task %d (%d/%d)" % (task_id, idx + 1, len(task_ids)))
+    task_ids = set()
+    for idx, (workflow_name, task_id) in enumerate(id_results):
+        task_ids.add(task_id)
+        all_results = pd.concat(id_results[(workflow_name, task_id)])
+        hyperparameter_names = [i for i in all_results.columns.values if i.startswith('p:')]
+        relevant_columns = hyperparameter_names + [performance_column, args.openml_taskid_name]
+        all_results = all_results[relevant_columns]
+
+        logging.info("Starting with task %d (%d/%d)" % (task_id, idx + 1, len(id_results)))
         task_results = all_results[all_results[args.openml_taskid_name] == task_id]
         fanova_task_results = fanova_on_task(task_results, performance_column, args.n_trees)
         fanova_all_results.extend(fanova_task_results)
