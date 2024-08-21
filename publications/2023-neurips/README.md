@@ -195,16 +195,17 @@ The learning curve data is contained in the second child, which has the tag `bui
 ```
 ### Using processors for computations prior to result delivery
 When calling the `query` function, you can add a dictionary of callables that will be applied to each dictionary inside of `m:json`. To do so, use the `processors` attribute.
+Importantly, when using `processors`, the column `m:json` is *removed* before returning the results, which can save memory, specificall if you do not want to use a generator (see below).
+
 The following code generates two new columns with names `anchor_sizes` and `balanced_error_rate` in the result dataframe:
 
 ```python
-df = lcdb.query(processors={
+df_gen = lcdb.query(processors={
   "anchor_sizes": QueryAnchorValues(),
   "balanced_error_rate": lambda x: list(map(lambda x: 1 - balanced_accuracy_from_confusion_matrix(x), QueryMetricValuesFromAnchors("confusion_matrix", split_name="val")(x)))
 })
 ```
 
-Importantly, when using `processors`, the column `m:json` is *removed* before returning the results, which can save memory.
 
 
 ### Retrieving results without a generator
