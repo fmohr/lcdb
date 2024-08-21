@@ -16,7 +16,7 @@ import seaborn as sns
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--n_trees', type=int, default=16)
-    parser.add_argument('--openml_ids', type=int, nargs='+', default=[3, 6])
+    parser.add_argument('--openml_ids', type=int, nargs='+', default=None)
     parser.add_argument('--workflow_name', type=str, default="lcdb.workflow.sklearn.LibLinearWorkflow")
     parser.add_argument('--openml_taskid_name', type=str, default="m:openmlid")
     parser.add_argument('--output_directory', type=str, default=os.path.expanduser('~/experiments/lcdb'))
@@ -43,12 +43,8 @@ def numeric_encode(df, config_space):
     return result
 
 
-def fanova_on_task(task_results, performance_column_name, config_space, n_trees):
+def fanova_on_task(task_results, performance_column_name, curve_data_column, config_space, n_trees):
     fanova_results = []
-
-    # in this simplified example, we only display numerical and float hyperparameters. For categorical
-    # hyperparameters, the fanova library needs to be informed by using a configspace object.
-    # task_results = task_results.select_dtypes(include=["int64", "float64"])
 
     # query_confusion_matrix_values = lcdb.analysis.json.QueryMetricValuesFromAnchors("confusion_matrix", split_name="val")
     # out = task_results[performance_column_name].apply(query_confusion_matrix_values)
@@ -82,12 +78,12 @@ def fanova_on_task(task_results, performance_column_name, config_space, n_trees)
 def run(args):
     fanova_all_results = []
     performance_column = "objective"
+    curve_data_column = "m:json"
 
     WorkflowClass = lcdb.builder.utils.import_attr_from_module(args.workflow_name)
     config_space = WorkflowClass.config_space()
     workflow_hyperparameter_mapping = {"p:" + name: name for name in config_space.get_hyperparameter_names()}
     id_results = dict()
-    print(config_space)  # TODO: properly integrate to fanova
 
     all_results_all_workflows = lcdb.db.LCDB().query(workflows=[args.workflow_name], openmlids=args.openml_ids)
     load_count = 0
@@ -110,11 +106,11 @@ def run(args):
         task_ids.add(task_id)
         task_results = pd.concat(id_results[(workflow_name, task_id)])
         task_results = task_results.rename(workflow_hyperparameter_mapping, axis=1)
-        relevant_columns = list(workflow_hyperparameter_mapping.values()) + [performance_column, args.openml_taskid_name]
+        relevant_columns = list(workflow_hyperparameter_mapping.values()) + [performance_column, curve_data_column]
         task_results = task_results[relevant_columns]
 
         logging.info("Starting with task %d (%d/%d)" % (task_id, idx + 1, len(id_results)))
-        fanova_task_results = fanova_on_task(task_results, performance_column, config_space, args.n_trees)
+        fanova_task_results = fanova_on_task(task_results, performance_column, curve_data_column, config_space, args.n_trees)
         fanova_all_results.extend(fanova_task_results)
 
     fanova_all_results = pd.DataFrame(fanova_all_results)
