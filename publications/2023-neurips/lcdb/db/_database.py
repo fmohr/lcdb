@@ -5,7 +5,7 @@ import pathlib
 import pandas as pd
 from lcdb.db._repository import Repository
 from lcdb.db._util import get_path_to_lcdb,  CountAwareGenerator
-from lcdb.analysis.json import JsonQuery, FullQuery
+from tqdm import tqdm
 
 
 class LCDB:
@@ -100,7 +100,8 @@ class LCDB:
             test_seeds=None,
             validation_seeds=None,
             return_generator=True,
-            processors=None
+            processors=None,
+            show_progress=False
     ):
         """
         Gets a dictionary or generator of result dataframes. In the case of a dictionary, there is one dataframe per workflow; these are not unified since different workflows have different hyperparameters. In the case of a generator, each returned dataframe is for a single workflow, but it may (and typically will) occur that several dataframes for the same workflow are returned (but with values for different datasets or different seeds). In other words, it can always be assumed that the workflows of the returned dataframes (either by a generator or contained in the dictionary) have a homogenous worklfow attribute.
@@ -113,7 +114,7 @@ class LCDB:
             workflow_seeds (_type_, optional): _description_. Defaults to None.
             test_seeds (_type_, optional): _description_. Defaults to None.
             validation_seeds (_type_, optional): _description_. Defaults to None.
-            verbose (int, optional): _description_. Defaults to 0.
+            show_progress (int, optional): _description_. Defaults to 0.
 
         Raises:
             Exception: _description_
@@ -169,7 +170,7 @@ class LCDB:
             return gen
         else:
             dfs_per_workflow = {}
-            for df in gen:
+            for df in tqdm(gen, disable=not show_progress):
                 workflow_class = df["m:workflow"].values[0]
                 dfs_per_workflow[workflow_class] = df if workflow_class not in dfs_per_workflow else pd.concat([dfs_per_workflow[workflow_class], df])
             if workflows is not None and len(workflows) == 1:
