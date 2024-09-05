@@ -174,6 +174,6 @@ class LCDB:
                 workflow_class = df["m:workflow"].values[0]
                 dfs_per_workflow[workflow_class] = df if workflow_class not in dfs_per_workflow else pd.concat([dfs_per_workflow[workflow_class], df])
             if workflows is not None and len(workflows) == 1:
-                return dfs_per_workflow[workflows[0]]
+                return dfs_per_workflow[workflows[0]] if workflows[0] in dfs_per_workflow else None
             else:
                 return dfs_per_workflow

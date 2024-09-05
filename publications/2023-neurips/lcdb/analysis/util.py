@@ -9,12 +9,20 @@ import itertools as it
 
 class LearningCurve:
 
-    def __init__(self, hp_config, openmlid, values, metrics, val_seeds, test_seeds, wf_seeds, anchors_size, anchors_iteration=None):
+    def __init__(self, hp_config, openmlid, values, metrics, anchors_size, anchors_iteration=None):
         self.hp_config = hp_config
         self.openmlid = openmlid
+
         self.values = values
+        self.metrics = metrics
         self.anchors_size = anchors_size
         self.anchors_iteration = anchors_iteration
+
+
+    @property
+    def is_iteration_curve(self):
+        return self.anchors_iteration is not None
+
 
 class LearningCurveExtractor:
 
@@ -70,16 +78,17 @@ class LearningCurveExtractor:
                                 i4 = anchors_iteration.index(anchor_iteration)
                                 values[i1, i2, i3, i4] = fun(source_for_lc_point)
                     else:
-                        values[i1, i2] = [fun(e) for e in QueryMetricValuesFromAnchors(self.srcs[metric], split_name=fold)(lc_dict)]
+                        sample_wise_curve = [fun(e) for e in QueryMetricValuesFromAnchors(self.srcs[metric], split_name=fold)(lc_dict)]
+                        num_missing_entries = values.shape[2] - len(sample_wise_curve)
+                        if num_missing_entries > 0:
+                            sample_wise_curve.extend(num_missing_entries * [np.nan])
+                        values[i1, i2] = sample_wise_curve
 
             lc_params = {
                 "hp_config": None,
                 "openmlid": None,
                 "values": values,
                 "metrics": self.metrics,
-                "val_seeds": None,
-                "test_seeds": None,
-                "wf_seeds": None,
                 "anchors_size": anchors_size
             }
             if is_iteration_curve:
