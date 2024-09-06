@@ -42,6 +42,8 @@ EXTRAS = {
         "twine",
         # Formatter and Linter
         "black==22.6.0",
+        # Testing
+        "parameterized",
     ],
 }
 
