@@ -35,7 +35,7 @@ forbidden_clause_a = ForbiddenEqualsClause(CONFIG_SPACE["loss"], "hinge")
 forbidden_clause_b = ForbiddenEqualsClause(CONFIG_SPACE["penalty"], "l1")
 
 forbidden_clause = ForbiddenAndConjunction(forbidden_clause_a, forbidden_clause_b)
-CONFIG_SPACE.add_forbidden_clause(forbidden_clause)
+CONFIG_SPACE.add(forbidden_clause)
 
 forbidden_clause_c = ForbiddenEqualsClause(CONFIG_SPACE["loss"], "squared_hinge")
 forbidden_clause_d = ForbiddenEqualsClause(CONFIG_SPACE["penalty"], "l1")
@@ -43,7 +43,7 @@ forbidden_clause_e = ForbiddenEqualsClause(CONFIG_SPACE["dual"], True)
 
 forbidden_clause2 = ForbiddenAndConjunction(forbidden_clause_c, forbidden_clause_d)
 forbidden_clause3 = ForbiddenAndConjunction(forbidden_clause2, forbidden_clause_e)
-CONFIG_SPACE.add_forbidden_clause(forbidden_clause3)
+CONFIG_SPACE.add(forbidden_clause3)
 
 forbidden_clause_f = ForbiddenEqualsClause(CONFIG_SPACE["loss"], "hinge")
 forbidden_clause_g = ForbiddenEqualsClause(CONFIG_SPACE["penalty"], "l2")
@@ -51,7 +51,7 @@ forbidden_clause_h = ForbiddenEqualsClause(CONFIG_SPACE["dual"], False)
 
 forbidden_clause4 = ForbiddenAndConjunction(forbidden_clause_f, forbidden_clause_g)
 forbidden_clause5 = ForbiddenAndConjunction(forbidden_clause4, forbidden_clause_h)
-CONFIG_SPACE.add_forbidden_clause(forbidden_clause5)
+CONFIG_SPACE.add(forbidden_clause5)
 
 
 class LibLinearWorkflow(SVMWorkflow):

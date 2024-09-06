@@ -208,14 +208,12 @@ def run_experiment(
     import functools
     import pathlib
 
-    import lcdb.json
     import pandas as pd
 
     from deephyper.evaluator import Evaluator
     from deephyper.evaluator.callback import TqdmCallback
-    from deephyper.problem import HpProblem
-    from deephyper.problem._hyperparameter import convert_to_skopt_space
-    from deephyper.search.hps import CBO
+    from deephyper.hpo import CBO, HpProblem
+    from deephyper.hpo._problem import convert_to_skopt_space
 
     from lcdb.builder import run_learning_workflow
     from lcdb.builder.utils import import_attr_from_module, terminate_on_memory_exceeded

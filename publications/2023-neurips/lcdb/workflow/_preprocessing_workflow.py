@@ -78,7 +78,7 @@ CONFIG_SPACE = ConfigurationSpace(
     },
 )
 
-CONFIG_SPACE.add_conditions(
+CONFIG_SPACE.add(
     [
         EqualsCondition(
             CONFIG_SPACE["kernel_pca_kernel"],

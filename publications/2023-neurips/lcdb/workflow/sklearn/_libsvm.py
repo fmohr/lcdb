@@ -42,7 +42,7 @@ coef0 = Float(
     default=0.1,  # strange, 0.0 is not allowed?
     log=True,
 )
-CONFIG_SPACE.add_hyperparameters([kernel, degree, coef0, gamma])
+CONFIG_SPACE.add([kernel, degree, coef0, gamma])
 
 
 class LibSVMWorkflow(SVMWorkflow):

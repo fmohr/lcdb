@@ -1,11 +1,10 @@
-import json
 from typing import Tuple
 
+import lcdb.json
 import numpy as np
 import pandas as pd
-from deephyper.analysis.hps import filter_failed_objectives
 
-import lcdb.json
+from deephyper.analysis.hpo import filter_failed_objectives
 
 
 def deserialize_dataframe(df: pd.DataFrame) -> pd.DataFrame:
