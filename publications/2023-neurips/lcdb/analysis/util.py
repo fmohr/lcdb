@@ -1,15 +1,19 @@
-import pandas as pd
-
-from .score import balanced_accuracy_from_confusion_matrix
-from .json import QueryMetricValuesFromAnchors, QueryAnchorValues, QueryEpochValues, QueryMetricValuesFromEpochs
-
 import numpy as np
-import itertools as it
+import pandas as pd
+from lcdb.analysis.json import (
+    QueryAnchorValues,
+    QueryEpochValues,
+    QueryMetricValuesFromAnchors,
+    QueryMetricValuesFromEpochs,
+)
+from lcdb.analysis.score import balanced_accuracy_from_confusion_matrix
 
 
 class LearningCurve:
 
-    def __init__(self, hp_config, openmlid, values, metrics, anchors_size, anchors_iteration=None):
+    def __init__(
+        self, hp_config, openmlid, values, metrics, anchors_size, anchors_iteration=None
+    ):
         self.hp_config = hp_config
         self.openmlid = openmlid
 
@@ -18,7 +22,6 @@ class LearningCurve:
         self.anchors_size = anchors_size
         self.anchors_iteration = anchors_iteration
 
-
     @property
     def is_iteration_curve(self):
         return self.anchors_iteration is not None
@@ -26,7 +29,13 @@ class LearningCurve:
 
 class LearningCurveExtractor:
 
-    def __init__(self, metrics=["error_rate"], folds=["train", "val", "test"], rounding_decimals=4, return_none_on_error=True):
+    def __init__(
+        self,
+        metrics=["error_rate"],
+        folds=["train", "val", "test"],
+        rounding_decimals=4,
+        return_none_on_error=True,
+    ):
         accepted_metrics = ["error_rate", "balanced_error_rate"]
 
         self.funs = {}
@@ -38,10 +47,14 @@ class LearningCurveExtractor:
                 self.funs[metric] = lambda cm: 1 - np.diag(cm).sum() / np.sum(cm)
                 self.srcs[metric] = "confusion_matrix"
             elif metric == "balanced_error_rate":
-                self.funs[metric] = lambda cm: 1 - balanced_accuracy_from_confusion_matrix(cm)
+                self.funs[metric] = (
+                    lambda cm: 1 - balanced_accuracy_from_confusion_matrix(cm)
+                )
                 self.srcs[metric] = "confusion_matrix"
             else:
-                raise ValueError(f"metric is {metric} but must be in {accepted_metrics}.")
+                raise ValueError(
+                    f"metric is {metric} but must be in {accepted_metrics}."
+                )
 
         self.metrics = metrics
         self.rounding_decimals = rounding_decimals
@@ -63,7 +76,16 @@ class LearningCurveExtractor:
             is_iteration_curve = len(anchors_iteration) > 0
 
             # create array for values of curve
-            shape = (len(self.metrics), len(self.folds), len(anchors_size), len(anchors_iteration)) if is_iteration_curve else (len(self.metrics), len(self.folds), len(anchors_size))
+            shape = (
+                (
+                    len(self.metrics),
+                    len(self.folds),
+                    len(anchors_size),
+                    len(anchors_iteration),
+                )
+                if is_iteration_curve
+                else (len(self.metrics), len(self.folds), len(anchors_size))
+            )
             values = np.zeros(shape)
             values[:] = np.nan
 
@@ -72,13 +94,27 @@ class LearningCurveExtractor:
                 for i2, fold in enumerate(self.folds):
 
                     if is_iteration_curve:
-                        sources_for_iteration_curve_values = QueryMetricValuesFromEpochs(self.srcs[metric], split_name=fold)(lc_dict)
-                        for i3, (anchor_size, sources_for_anchor_size) in enumerate(zip(anchors_size, sources_for_iteration_curve_values)):
-                            for anchor_iteration, source_for_lc_point in zip(anchors_iterations_per_sample_size[i3], sources_for_anchor_size):
+                        sources_for_iteration_curve_values = (
+                            QueryMetricValuesFromEpochs(
+                                self.srcs[metric], split_name=fold
+                            )(lc_dict)
+                        )
+                        for i3, (anchor_size, sources_for_anchor_size) in enumerate(
+                            zip(anchors_size, sources_for_iteration_curve_values)
+                        ):
+                            for anchor_iteration, source_for_lc_point in zip(
+                                anchors_iterations_per_sample_size[i3],
+                                sources_for_anchor_size,
+                            ):
                                 i4 = anchors_iteration.index(anchor_iteration)
                                 values[i1, i2, i3, i4] = fun(source_for_lc_point)
                     else:
-                        sample_wise_curve = [fun(e) for e in QueryMetricValuesFromAnchors(self.srcs[metric], split_name=fold)(lc_dict)]
+                        sample_wise_curve = [
+                            fun(e)
+                            for e in QueryMetricValuesFromAnchors(
+                                self.srcs[metric], split_name=fold
+                            )(lc_dict)
+                        ]
                         num_missing_entries = values.shape[2] - len(sample_wise_curve)
                         if num_missing_entries > 0:
                             sample_wise_curve.extend(num_missing_entries * [np.nan])
@@ -89,7 +125,7 @@ class LearningCurveExtractor:
                 "openmlid": None,
                 "values": values,
                 "metrics": self.metrics,
-                "anchors_size": anchors_size
+                "anchors_size": anchors_size,
             }
             if is_iteration_curve:
                 lc_params["anchors_iteration"] = anchors_iteration
@@ -104,7 +140,12 @@ class LearningCurveExtractor:
 
 class IterationWiseCurveExtractor:
 
-    def __init__(self, metrics=["error_rate"], folds=["train", "val", "test"], rounding_decimals=4):
+    def __init__(
+        self,
+        metrics=["error_rate"],
+        folds=["train", "val", "test"],
+        rounding_decimals=4,
+    ):
         accepted_metrics = ["error_rate", "balanced_error_rate"]
 
         self.funs = {}
@@ -116,10 +157,14 @@ class IterationWiseCurveExtractor:
                 self.funs[metric] = lambda cm: 1 - np.diag(cm).sum() / np.sum(cm)
                 self.srcs[metric] = "confusion_matrix"
             elif metric == "balanced_error_rate":
-                self.funs[metric] = lambda cm: 1 - balanced_accuracy_from_confusion_matrix(cm)
+                self.funs[metric] = (
+                    lambda cm: 1 - balanced_accuracy_from_confusion_matrix(cm)
+                )
                 self.srcs[metric] = "confusion_matrix"
             else:
-                raise ValueError(f"metric is {metric} but must be in {accepted_metrics}.")
+                raise ValueError(
+                    f"metric is {metric} but must be in {accepted_metrics}."
+                )
 
         self.metrics = metrics
         self.rounding_decimals = rounding_decimals
@@ -137,15 +182,22 @@ class IterationWiseCurveExtractor:
         for metric in self.metrics:
             for fold in self.folds:
                 key = f"{metric}_{fold}"
-                values = QueryMetricValuesFromEpochs(self.srcs[metric], split_name=fold)(lc_dict)
+                values = QueryMetricValuesFromEpochs(
+                    self.srcs[metric], split_name=fold
+                )(lc_dict)
 
                 data[key] = []
 
                 anchor_size_column = []
                 anchor_iter_column = []
-                for i, (anchor_size, anchors_iteration_for_this_sample_anchor) in enumerate(zip(anchors_sizes, anchors_iterations_per_sample_size)):
+                for i, (
+                    anchor_size,
+                    anchors_iteration_for_this_sample_anchor,
+                ) in enumerate(zip(anchors_sizes, anchors_iterations_per_sample_size)):
                     num_values_for_iteration_curve = len(values[i])
-                    for j, anchor_iteration in enumerate(anchors_iteration_for_this_sample_anchor):
+                    for j, anchor_iteration in enumerate(
+                        anchors_iteration_for_this_sample_anchor
+                    ):
                         if j >= num_values_for_iteration_curve:
                             break
                         data[key] = self.funs[metric](values[i][j])
@@ -161,7 +213,9 @@ class IterationWiseCurveExtractor:
 def integrate_sample_wise_curves(df_results, column_with_sample_wise_curves):
     dfs = []
     if column_with_sample_wise_curves not in df_results.columns:
-        raise ValueError(f"Cannot extract sample-wise curves from inexistent field {column_with_sample_wise_curves}")
+        raise ValueError(
+            f"Cannot extract sample-wise curves from inexistent field {column_with_sample_wise_curves}"
+        )
     cols = list(df_results.columns)
     cols.remove(column_with_sample_wise_curves)
     for _, row in df_results.iterrows():
@@ -173,6 +227,7 @@ def integrate_sample_wise_curves(df_results, column_with_sample_wise_curves):
         dfs.append(df)
     return pd.concat(dfs)
 
+
 def to_numpy(df_results, curve_column):
 
     hp_cols = [c for c in df_results.columns if c.startswith("p:")]
@@ -181,7 +236,16 @@ def to_numpy(df_results, curve_column):
     num_test_seeds = len(pd.unique(df_results["m:test_seed"]))
     num_wf_seeds = len(pd.unique(df_results["m:workflow_seed"]))
 
-    tensor = np.zeros((num_configs, num_val_seeds, num_test_seeds, num_wf_seeds, df_results[curve_column].iloc[0].shape[1] - 1, df_results[curve_column].iloc[0].shape[0]))
+    tensor = np.zeros(
+        (
+            num_configs,
+            num_val_seeds,
+            num_test_seeds,
+            num_wf_seeds,
+            df_results[curve_column].iloc[0].shape[1] - 1,
+            df_results[curve_column].iloc[0].shape[0],
+        )
+    )
     tensor[:] = np.nan
 
     anchors_sizes_overall = None
@@ -196,7 +260,9 @@ def to_numpy(df_results, curve_column):
 
                     anchors_size = np.array(sorted(set(lc["anchor_size"])))
                     if is_iteration_curve:
-                        anchors_iteration = np.array(sorted(set(lc["anchor_iteration"])))
+                        anchors_iteration = np.array(
+                            sorted(set(lc["anchor_iteration"]))
+                        )
                         lc = lc.set_index(["anchor_size", "anchor_iteration"])
                     else:
                         lc = lc.set_index(["anchor_size"])
@@ -211,5 +277,5 @@ def to_numpy(df_results, curve_column):
                     print(lc.values)
 
                     # if this is a sample-wise curve, check anchors
-                    tensor[i1, i2, i3, i4, :, :lc.shape[0]] = lc.values.T
+                    tensor[i1, i2, i3, i4, :, : lc.shape[0]] = lc.values.T
     return tensor
