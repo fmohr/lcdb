@@ -222,7 +222,7 @@ class LocalRepository(Repository):
                 df_deserialized = deserialize_dataframe(df)
                 if processors is not None:
                     for name, fun in processors.items():
-                        df[name] = df["m:json"].apply(fun)
+                        df[name] = df.apply(fun, axis=1)  # apply the function to all rows in the dataframe
                     df.drop(columns="m:json", inplace=True)
 
                 total_entries += len(df_deserialized)

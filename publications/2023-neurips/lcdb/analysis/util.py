@@ -12,18 +12,34 @@ from lcdb.analysis.score import balanced_accuracy_from_confusion_matrix
 class LearningCurve:
 
     def __init__(
-        self, hp_config, openmlid, values, metrics, anchors_size, anchors_iteration=None
+            self,
+            workflow,
+            hp_config,
+            openmlid,
+            values,
+            metrics,
+            fold_names,
+            test_seeds,
+            val_seeds,
+            workflow_seeds,
+            anchors_size,
+            anchors_iteration=None
     ):
+        self.workflow = workflow
         self.hp_config = hp_config
         self.openmlid = openmlid
 
         self.values = values
         self.metrics = metrics
+        self.fold_names = fold_names
+        self.test_seeds = test_seeds
+        self.val_seeds = val_seeds
+        self.workflow_seeds = workflow_seeds
         self.anchors_size = anchors_size
         self.anchors_iteration = anchors_iteration
 
     @property
-    def is_iteration_curve(self):
+    def is_iteration_wise_curve(self):
         return self.anchors_iteration is not None
 
 
@@ -43,6 +59,9 @@ class LearningCurveExtractor:
         self.folds = folds
 
         for metric in metrics:
+            if not isinstance(metric, str):
+                raise ValueError(f"Each metric in metrics must be str, but at least one is {type(metric)}: {metric}")
+
             if metric == "error_rate":
                 self.funs[metric] = lambda cm: 1 - np.diag(cm).sum() / np.sum(cm)
                 self.srcs[metric] = "confusion_matrix"
@@ -60,10 +79,12 @@ class LearningCurveExtractor:
         self.rounding_decimals = rounding_decimals
         self.return_none_on_error = return_none_on_error
 
-    def __call__(self, lc_dict):
+    def __call__(self, row):
         """
         Computes the sample-wise learning curve for a specific metric for a set of configurations, possibly across workflows and datasets.
         """
+
+        lc_dict = row["m:json"]
 
         # determine anchors and whether this is an iteration curve
         try:
@@ -80,11 +101,14 @@ class LearningCurveExtractor:
                 (
                     len(self.metrics),
                     len(self.folds),
+                    1,
+                    1,
+                    1,
                     len(anchors_size),
                     len(anchors_iteration),
                 )
                 if is_iteration_curve
-                else (len(self.metrics), len(self.folds), len(anchors_size))
+                else (len(self.metrics), len(self.folds), 1, 1, 1, len(anchors_size))
             )
             values = np.zeros(shape)
             values[:] = np.nan
@@ -107,7 +131,7 @@ class LearningCurveExtractor:
                                 sources_for_anchor_size,
                             ):
                                 i4 = anchors_iteration.index(anchor_iteration)
-                                values[i1, i2, i3, i4] = fun(source_for_lc_point)
+                                values[i1, i2, 0, 0, 0, i3, i4] = fun(source_for_lc_point)
                     else:
                         sample_wise_curve = [
                             fun(e)
@@ -115,16 +139,21 @@ class LearningCurveExtractor:
                                 self.srcs[metric], split_name=fold
                             )(lc_dict)
                         ]
-                        num_missing_entries = values.shape[2] - len(sample_wise_curve)
+                        num_missing_entries = values.shape[-1] - len(sample_wise_curve)
                         if num_missing_entries > 0:
                             sample_wise_curve.extend(num_missing_entries * [np.nan])
-                        values[i1, i2] = sample_wise_curve
+                        values[i1, i2, 0, 0, 0] = sample_wise_curve
 
             lc_params = {
-                "hp_config": None,
-                "openmlid": None,
+                "workflow": row["m:workflow"],
+                "hp_config": {k: v for k, v in row.items() if k.startswith("p:")},
+                "openmlid": row["m:openmlid"],
                 "values": values,
                 "metrics": self.metrics,
+                "fold_names": self.folds,
+                "test_seeds": [row["m:test_seed"]],
+                "val_seeds": [row["m:valid_seed"]],
+                "workflow_seeds": [row["m:workflow_seed"]],
                 "anchors_size": anchors_size,
             }
             if is_iteration_curve:
@@ -273,9 +302,93 @@ def to_numpy(df_results, curve_column):
                         if np.any(anchors_sizes_overall != anchors_size):
                             raise ValueError()
 
-                    print(lc)
-                    print(lc.values)
-
                     # if this is a sample-wise curve, check anchors
                     tensor[i1, i2, i3, i4, :, : lc.shape[0]] = lc.values.T
     return tensor
+
+
+def merge_curves(curves):
+
+    if len(curves) == 0:
+        return "None"
+
+    curves = list(curves)
+
+    # make sure that all curves are on the same context
+    workflows = set([c.workflow for c in curves])
+    datasets = set([c.openmlid for c in curves])
+    hpconfigs = set([str(c.hp_config) for c in curves])
+    metrics = curves[0].metrics
+    fold_names = curves[0].fold_names
+    is_iteration_wise_curves = set([c.is_iteration_wise_curve for c in curves])
+
+    if len(workflows) > 1:
+        raise ValueError(f"The curves are defined on more than one workflow: {workflows}")
+    if len(datasets) > 1:
+        raise ValueError(f"The curves are defined on more than one dataset: {datasets}")
+    if len(hpconfigs) > 1:
+        raise ValueError(f"The curves are defined on more than one hyperparameter configuration: {hpconfigs}")
+    if len(is_iteration_wise_curves) > 1:
+        raise ValueError(f"Some of the curves are iteration-wise but other sample-wise curves.")
+    workflow = list(workflows)[0]
+    openmlid = list(datasets)[0]
+    hp_config = curves[0].hp_config
+    is_iteration_wise_curve = list(is_iteration_wise_curves)[0]
+
+    # get seeds and anchors
+    test_seeds = set()
+    val_seeds = set()
+    workflow_seeds = set()
+    anchors_size = set()
+    anchors_iteration = set()
+
+    for c in curves:
+        test_seeds |= set(c.test_seeds)
+        val_seeds |= set(c.val_seeds)
+        workflow_seeds |= set(c.workflow_seeds)
+        anchors_size |= set(c.anchors_size)
+        if is_iteration_wise_curve:
+            anchors_iteration |= set(c.anchors_iteration)
+
+        if c.metrics != metrics:
+            raise ValueError(f"Inconsistent metrics: {c.metrics} vs {metrics}")
+        if c.fold_names != fold_names:
+            raise ValueError(f"Inconsistent fold names: {c.fold_names} vs {fold_names}")
+
+    test_seeds = sorted(test_seeds)
+    val_seeds = sorted(val_seeds)
+    workflow_seeds = sorted(workflow_seeds)
+    anchors_size = sorted(anchors_size)
+    anchors_iteration = sorted(anchors_iteration)
+
+    # initialize all values with nans
+    if is_iteration_wise_curve:
+        values = np.zeros((len(metrics), len(fold_names), len(test_seeds), len(val_seeds), len(workflow_seeds), len(anchors_size), len(anchors_iteration)))
+    else:
+        values = np.zeros((len(metrics), len(fold_names), len(test_seeds), len(val_seeds), len(workflow_seeds), len(anchors_size)))
+    values[:] = np.nan
+
+    # fill the values from the existing curves
+    for c in curves:
+        test_seed_indices = [test_seeds.index(a) for a in c.test_seeds]
+        val_seed_indices = [val_seeds.index(a) for a in c.val_seeds]
+        workflow_seed_indices = [workflow_seeds.index(a) for a in c.workflow_seeds]
+        anchors_size_indices = [anchors_size.index(a) for a in c.anchors_size]
+
+        if is_iteration_wise_curve:
+            raise ValueError("not supported")
+        else:
+            values[:, :, test_seed_indices if len(test_seed_indices) > 1 else slice(test_seed_indices[0], test_seed_indices[0] + 1), val_seed_indices if len(val_seed_indices) > 1 else slice(val_seed_indices[0], val_seed_indices[0] + 1), workflow_seed_indices if len(workflow_seed_indices) > 1 else slice(workflow_seed_indices[0], workflow_seed_indices[0] + 1), anchors_size_indices] = c.values
+
+    return LearningCurve(
+        workflow=workflow,
+        openmlid=openmlid,
+        hp_config=hp_config,
+        values=values,
+        metrics=metrics,
+        fold_names=fold_names,
+        test_seeds=test_seeds,
+        val_seeds=val_seeds,
+        workflow_seeds=workflow_seeds,
+        anchors_size=anchors_size
+    )
