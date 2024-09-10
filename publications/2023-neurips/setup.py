@@ -21,7 +21,7 @@ platform_infos = platform.platform()
 # What packages are required for this module to be executed?
 REQUIRED = [
     "ConfigSpace~=1.1.1",
-    "deephyper[hps]>=0.6.0",
+    "deephyper==0.8.0",
     "jmespath==1.0.1",
     "numpy",
     "openml",
