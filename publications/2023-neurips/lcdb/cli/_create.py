@@ -44,7 +44,7 @@ def main(
     """
     :meta private:
     """
-    from deephyper.problem._hyperparameter import convert_to_skopt_space
+    from deephyper.hpo._problem import convert_to_skopt_space
 
     log_dir = os.path.dirname(output_file)
     pathlib.Path(log_dir).mkdir(parents=True, exist_ok=True)
