@@ -4,15 +4,11 @@ LCDB 2.0 is a database of learning workflows with diverse configurations (or hyp
 
 ## Installation
 
-The LCDB Package **alone** can be installed with:
+Before starting we advise the user to create a Python environment using `conda`.
+
+Then, the `lcdb` Package can be installed withing the environment by running the following command from this directory:
 ```console
 pip install -e "."
-```
-
-To install DeepHyper (develop) version:
-
-```console
-pip install "deephyper @ git+https://github.com/deephyper/deephyper@develop"
 ```
 
 ### ALCF - Polaris
