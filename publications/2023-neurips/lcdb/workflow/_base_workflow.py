@@ -121,7 +121,7 @@ class BaseWorkflow(abc.ABC):
 
     def transform(self, X, y, metadata, timer_suffix="") -> NP_ARRAY:
         """Transform the data."""
-        with self.timer.time("transform" + timer_suffix):
+        with self.timer.time("transform" + timer_suffix) as timer:
             X = self._transform(X, y, metadata)
         self.transform_fitted = True
         return X

@@ -48,7 +48,7 @@ def filter_keys_with_prefix(d: dict, prefix: str) -> dict:
     Returns:
         dict: the filtered dictionary.
     """
-    return {k[len(prefix) :]: v for k, v in d.items() if k.startswith(prefix)}
+    return {k[len(prefix):]: v for k, v in d.items() if k.startswith(prefix)}
 
 
 class FunctionCallTimeoutError(Exception):

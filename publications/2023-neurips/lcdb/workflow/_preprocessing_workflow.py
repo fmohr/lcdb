@@ -156,14 +156,18 @@ class PreprocessedWorkflow(BaseWorkflow):
 
             if not self.transform_fitted:
 
-                self.pp_pipeline = self.get_pp_pipeline(X, y, metadata, **self.pp_kws)
+                pp_steps = self.get_pp_steps(X, y, metadata, **self.pp_kws)
 
-                self.pp_pipeline.fit(X, y)
-
-            X = self.pp_pipeline.transform(X) if self.pp_pipeline is not None else X
+                for step_name, step_fun in pp_steps:
+                    with self.timer.time(step_name) as node:
+                        X = step_fun.fit_transform(X, y=y)
+                        node["new_shape"] = {"rows": X.shape[0], "cols": X.shape[1]}
+                self.pp_pipeline = Pipeline(steps=pp_steps)
+            else:
+                X = self.pp_pipeline.transform(X)
         return X
 
-    def get_pp_pipeline(self, X, y, metadata, **kwargs):
+    def get_pp_steps(self, X, y, metadata, **kwargs):
         idx_cat_col = np.where(metadata["categories"]["columns"])[0]
         idx_num_col = np.where(~np.array(metadata["categories"]["columns"]))[0]
         has_cat = len(idx_cat_col) > 0
@@ -300,12 +304,12 @@ class PreprocessedWorkflow(BaseWorkflow):
             treated_kws.append(KEY_FEATUREMAPPER)
 
         # sanity check
-        untreated_kws = [k for k in kwargs if not k in treated_kws]
+        untreated_kws = [k for k in kwargs if k not in treated_kws]
         if untreated_kws:
             raise ValueError(f"Untreated pre-processing kwargs: {untreated_kws}")
 
         # return trained pipeline
-        return Pipeline(steps) if steps else None
+        return steps if steps else None
 
     def _fit(self, X, y, X_valid, y_valid, X_test, y_test, metadata):
 

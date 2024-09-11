@@ -1,3 +1,5 @@
+import logging
+
 from lcdb.db import LCDB
 
 from parameterized import parameterized
@@ -5,6 +7,8 @@ import unittest
 
 import numpy as np
 from lcdb.analysis.util import LearningCurveExtractor, merge_curves
+from lcdb.builder import run_learning_workflow
+from lcdb.analysis.json import QueryPreprocessorResults
 
 
 class TestExtractors(unittest.TestCase):
@@ -84,3 +88,63 @@ class TestExtractors(unittest.TestCase):
             len_before = len(df)
             len_after = len(df.groupby(config_cols).agg({"learning_curve": merge_curves}))
             self.assertEqual(len_before, len_after * len(validation_seeds))
+
+    @parameterized.expand([
+        (11, "lcdb.workflow.sklearn.KNNWorkflow"),
+        (3, "lcdb.workflow.sklearn.LibLinearWorkflow"),
+        (3, "lcdb.workflow.sklearn.LibSVMWorkflow")
+    ])
+    def test_preprocessing_usage(self, openmlid, workflow):
+
+        from deephyper.evaluator import RunningJob
+        from lcdb.builder.utils import import_attr_from_module, terminate_on_memory_exceeded
+
+        WorkflowClass = import_attr_from_module(workflow)
+        config_space = WorkflowClass.config_space()
+        config = dict(config_space.get_default_configuration())
+
+        config.update({
+            "p:metric": "nan_euclidean",
+            "p:n_neighbors": 28,
+            "p:pp@cat_encoder": "onehot",
+            "p:pp@decomposition": "kernel_pca",
+            "p:pp@featuregen": "poly",
+            "p:pp@featureselector": "selectp",
+            "p:pp@scaler": "minmax",
+            "p:weights": "distance",
+            "p:p": 1,
+            "p:pp@kernel_pca_kernel": "linear",
+            "p:pp@kernel_pca_n_components": 0.25,
+            "p:pp@poly_degree": 2,
+            "p:pp@selectp_percentile": 25,
+            "p:pp@std_with_std": True
+        })
+
+        # define stream handler
+        ch = logging.StreamHandler()
+        ch.setLevel(logging.DEBUG)
+        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        ch.setFormatter(formatter)
+
+        logger = logging.getLogger("LCDB")
+        logger.addHandler(ch)
+
+        output = run_learning_workflow(
+            RunningJob(id=0, parameters=config),
+            openml_id=openmlid,
+            workflow_class=workflow,
+            task_type="classification",
+            monotonic=False,
+            valid_seed=0,
+            test_seed=0,
+            workflow_seed=0,
+            valid_prop=0.1,
+            test_prop=0.1,
+            timeout_on_fit=60,
+            anchor_schedule="power",
+            epoch_schedule=None,
+            logger=logger
+        )
+
+        for executed_preprocessors in QueryPreprocessorResults()(output["metadata"]["json"]):
+            self.assertEqual(5, len(executed_preprocessors))

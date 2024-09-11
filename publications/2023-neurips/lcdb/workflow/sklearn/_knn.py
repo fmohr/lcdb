@@ -57,10 +57,11 @@ class KNNWorkflow(SklearnWorkflow):
         metric="minkowski",
         **kwargs
     ):
+
         super().__init__(
             learner=None,
             timer=timer,
-            **filter_keys_with_prefix(kwargs, prefix="pp@")
+            **kwargs
         )
 
         self.learner_kwargs = dict(

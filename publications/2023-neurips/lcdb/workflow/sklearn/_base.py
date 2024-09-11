@@ -28,7 +28,7 @@ class SklearnWorkflow(PreprocessedWorkflow):
         timer=None,
         **kwargs,
     ):
-        super().__init__(timer, **filter_keys_with_prefix(kwargs, prefix="pp@"))
+        super().__init__(timer, **filter_keys_with_prefix(kwargs, prefix="p:pp@"))
         self.learner = learner
 
     @classmethod

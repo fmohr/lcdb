@@ -120,3 +120,15 @@ class QueryMetricValuesFromEpochs(JMESExpressionQuery):
             f".children[? tag == '{metric_name}'] | [*][*][0]"
             f".metadata.value"
         )
+
+
+class QueryPreprocessorResults(JMESExpressionQuery):
+
+    def __init__(self):
+        super().__init__ (
+            f"children[? tag == 'build_curves'] | [0]"  # here we replace sublists by the first element
+            f".children[? tag == 'anchor'] | [*]"  # here we keep all elements of the list
+            f".children[? tag == 'fit'] | [*][0]"
+            f".children[? tag == 'transform_train'] | [*][0]"
+            f".children | [*][*]"
+        )
