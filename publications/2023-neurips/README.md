@@ -218,3 +218,48 @@ df_dict = lcdb.query(workflows=["<wf 1>", "<wf 2>"], openmlids=[...], return_gen
 if it is for several workflows. In the second case, you get a dictionary in which the keys are the workflow names and the values are the dataframes with all results for those workflows.
 
 When not using a generator, it is highly recommended to use *processors* (described above) to make sure that the `m:json` column is discarded and hence to avoid memory flooding.
+
+### Retrieving Learning Curves in Numpy Format
+It is also possible to obtain learning curves already in a more aggregated way through objects of the `lcdb.db.util.LearningCurve` class.
+Objects of these class are basically annotated numpy arrays.
+If `lc` is an object of that class, then `lc.values` is a numpy array with 6 or 7 dimensions with the following meanings:
+1. the metrics for which values are available (names accessible via `lc.metrics`)
+2. the folds for which values are available (names accessible via `lc.fold_names`)
+3. the seeds for test-data separation for which values are available (seed values accessible via `lc.test_seeds`)
+4. the seeds for train/validation split for which values are available (seed values accessible via `lc.val_seeds`)
+5. the seeds for workflow random states for which values are available (seed values accessible via `lc.workflow_seeds`)
+6. the sample-wise anchors for the (absolute) training set sizes for which values are available (anchors accessible via `lc.anchors_size`), and
+7. the iteration-wise anchors (epochs/number of trees, etc.) for which values are available (anchors accessible via `lc.anchors_iteration`), only for workflows that produce iteration-wise learning curves.
+
+The availablility of iteration-wise anchors can be asked through the boolean `lc.is_iteration_wise_curve`, which is True iff there is a 7-th dimension for the iteration anchors.
+
+A learning curve object can only store information for *a single hyperparameter configuration of a single workflow on a single dataset*. These three attributes can also be accessed via:
+- `lc.workflow`
+- `lc.hp_config`
+- `lc.openmlid`
+
+There is an extractor that will automatically create objects of this type from the result rows:
+```python
+from lcdb.analysis.util import LearningCurveExtractor
+lcdb = LCDB()
+lcdb.query(
+    workflows=workflow,
+    processors={
+        "learning_curve": LearningCurveExtractor(
+            metrics=["error_rate"],
+            folds=["train", "val", "test", "oob"]
+        )
+    }
+)
+```
+
+Since results are delivered for all different seed combinations, it can be convenient to aggregate the results for a single dataset/hp-configuration combination into a single LearningCurve object.
+A utility function `lcdb.db.util.merge_curves` allows to do this, and this can also be used directly with standard Pandas functions:
+
+```python
+from lcdb.analysis.util import merge_curves
+
+config_cols = [c for c in df.columns if c.startswith("p:")]
+df.groupby(config_cols).agg({"learning_curve": merge_curves})
+```
+After this operation, there will be only one line for every hyperparameter configuration in the dataframe, and learning curves for different seeds but otherwise identical setups will have been merged into a single learning curve object (missing values will be nan).
