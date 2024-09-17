@@ -410,10 +410,20 @@ def merge_curves(curves):
         anchors_size_indices = [anchors_size.index(a) for a in c.anchors_size]
 
         if is_iteration_wise_curve:
-            values[:, :, test_seed_indices if len(test_seed_indices) > 1 else slice(test_seed_indices[0], test_seed_indices[0] + 1), val_seed_indices if len(val_seed_indices) > 1 else slice(val_seed_indices[0], val_seed_indices[0] + 1), workflow_seed_indices if len(workflow_seed_indices) > 1 else slice(workflow_seed_indices[0], workflow_seed_indices[0] + 1), anchors_size_indices] = c.values
+            anchors_iteration_indices = [anchors_iteration.index(a) for a in c.anchors_iteration]
+            values[:, :,
+            test_seed_indices if len(test_seed_indices) > 1 else slice(test_seed_indices[0], test_seed_indices[0] + 1),
+            val_seed_indices if len(val_seed_indices) > 1 else slice(val_seed_indices[0], val_seed_indices[0] + 1),
+            workflow_seed_indices if len(workflow_seed_indices) > 1 else slice(workflow_seed_indices[0],
+                                                                               workflow_seed_indices[0] + 1),
+            anchors_size_indices, anchors_iteration_indices] = c.values
         else:
-            anchors_iteration_indices = [anchirs_iteration.index(a) for a in c.anchors_iteration]
-            values[:, :, test_seed_indices if len(test_seed_indices) > 1 else slice(test_seed_indices[0], test_seed_indices[0] + 1), val_seed_indices if len(val_seed_indices) > 1 else slice(val_seed_indices[0], val_seed_indices[0] + 1), workflow_seed_indices if len(workflow_seed_indices) > 1 else slice(workflow_seed_indices[0], workflow_seed_indices[0] + 1), anchors_size_indices, anchors_iteration_indices] = c.values
+            values[:, :,
+            test_seed_indices if len(test_seed_indices) > 1 else slice(test_seed_indices[0], test_seed_indices[0] + 1),
+            val_seed_indices if len(val_seed_indices) > 1 else slice(val_seed_indices[0], val_seed_indices[0] + 1),
+            workflow_seed_indices if len(workflow_seed_indices) > 1 else slice(workflow_seed_indices[0],
+                                                                               workflow_seed_indices[0] + 1),
+            anchors_size_indices] = c.values
 
     return LearningCurve(
         workflow=workflow,
