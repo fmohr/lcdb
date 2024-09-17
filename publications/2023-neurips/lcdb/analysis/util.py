@@ -40,7 +40,7 @@ class LearningCurve:
 
     @property
     def is_iteration_wise_curve(self):
-        return self.anchors_iteration is not None
+        return self.anchors_iteration is not None and self.anchors_iteration
 
     def pad_anchors_size(self, anchors_size, inplace=False):
 
@@ -393,7 +393,7 @@ def merge_curves(curves):
     val_seeds = sorted(val_seeds)
     workflow_seeds = sorted(workflow_seeds)
     anchors_size = sorted(anchors_size)
-    anchors_iteration = sorted(anchors_iteration)
+    anchors_iteration = sorted(anchors_iteration) if is_iteration_wise_curve else None
 
     # initialize all values with nans
     if is_iteration_wise_curve:
