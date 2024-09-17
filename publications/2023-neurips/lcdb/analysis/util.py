@@ -42,6 +42,40 @@ class LearningCurve:
     def is_iteration_wise_curve(self):
         return self.anchors_iteration is not None
 
+    def pad_anchors_size(self, anchors_size, inplace=False):
+
+        num_anchors_size = len(anchors_size)
+
+        axis = -2 if self.is_iteration_wise_curve else -1
+
+        if self.values.shape[axis] >= num_anchors_size:
+            return self if inplace else None
+        if self.is_iteration_wise_curve:
+            nans_to_add = np.full(tuple(list(self.values.shape[:-2]) + [num_anchors_size - self.values.shape[-2], self.values.shape[-1]]), np.nan)
+        else:
+            nans_to_add = np.full(tuple(list(self.values.shape[:-1]) + [num_anchors_size - self.values.shape[-1]]), np.nan)
+
+        if inplace:
+            self.values = np.concatenate((self.values, nans_to_add), axis=axis)
+            self.anchors_size = anchors_size
+            assert len(self.anchors_size) == self.values.shape[axis]
+
+        else:
+            values = np.concatenate((self.values, nans_to_add), axis=axis)
+            assert len(anchors_size) == values.shape[-1]
+            return LearningCurve(
+                workflow=self.workflow,
+                hp_config=self.hp_config,
+                openmlid=self.openmlid,
+                values=values,
+                metrics=self.metrics,
+                fold_names=self.fold_names,
+                test_seeds=self.test_seeds,
+                val_seeds=self.val_seeds,
+                workflow_seeds=self.workflow_seeds,
+                anchors_size=anchors_size
+            )
+
 
 class LearningCurveExtractor:
 
@@ -376,9 +410,10 @@ def merge_curves(curves):
         anchors_size_indices = [anchors_size.index(a) for a in c.anchors_size]
 
         if is_iteration_wise_curve:
-            raise ValueError("not supported")
-        else:
             values[:, :, test_seed_indices if len(test_seed_indices) > 1 else slice(test_seed_indices[0], test_seed_indices[0] + 1), val_seed_indices if len(val_seed_indices) > 1 else slice(val_seed_indices[0], val_seed_indices[0] + 1), workflow_seed_indices if len(workflow_seed_indices) > 1 else slice(workflow_seed_indices[0], workflow_seed_indices[0] + 1), anchors_size_indices] = c.values
+        else:
+            anchors_iteration_indices = [anchirs_iteration.index(a) for a in c.anchors_iteration]
+            values[:, :, test_seed_indices if len(test_seed_indices) > 1 else slice(test_seed_indices[0], test_seed_indices[0] + 1), val_seed_indices if len(val_seed_indices) > 1 else slice(val_seed_indices[0], val_seed_indices[0] + 1), workflow_seed_indices if len(workflow_seed_indices) > 1 else slice(workflow_seed_indices[0], workflow_seed_indices[0] + 1), anchors_size_indices, anchors_iteration_indices] = c.values
 
     return LearningCurve(
         workflow=workflow,
@@ -390,5 +425,6 @@ def merge_curves(curves):
         test_seeds=test_seeds,
         val_seeds=val_seeds,
         workflow_seeds=workflow_seeds,
-        anchors_size=anchors_size
+        anchors_size=anchors_size,
+        anchors_iteration=anchors_iteration
     )
