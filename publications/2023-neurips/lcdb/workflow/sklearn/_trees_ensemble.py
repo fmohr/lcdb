@@ -22,7 +22,7 @@ from tqdm import tqdm
 CONFIG_SPACE = ConfigurationSpace(
     name="sklearn.TreesEnsembleWorkflow",
     space={
-        "n_estimators": Constant("n_estimators", value=512),
+        "n_estimators": Constant("n_estimators", value=2048),
         "criterion": Categorical(
             "criterion", items=["gini", "entropy", "log_loss"], default="gini"
         ),
