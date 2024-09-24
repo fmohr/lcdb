@@ -101,26 +101,29 @@ class ClassificationScorer:
                         ):
                             if average in [None, "micro"] and multi_class != "ovr":
                                 continue
-                            try:
-                                auc = np.round(
-                                    roc_auc_score(
-                                        y_true=y_true,
-                                        y_score=y_pred_proba_auc,
-                                        labels=accepted_labels,
-                                        multi_class=multi_class,
-                                        average=average,
-                                    ),
-                                    5,
-                                )
-                            except ValueError as e:
-                                if "Only one class present in y_true." in str(e):
-                                    auc = np.nan
-                                else:
-                                    raise e
+                            if np.any(np.isnan(y_pred_proba_auc)):
+                                auc = np.nan
+                            else:
+                                try:
+                                    auc = np.round(
+                                        roc_auc_score(
+                                            y_true=y_true,
+                                            y_score=y_pred_proba_auc,
+                                            labels=accepted_labels,
+                                            multi_class=multi_class,
+                                            average=average,
+                                        ),
+                                        5,
+                                    )
+                                except ValueError as e:
+                                    if "Only one class present in y_true." in str(e):
+                                        auc = np.nan
+                                    else:
+                                        raise e
 
                             score[f"auc_{multi_class}_{average}"] = auc
                 elif metric_name == "log_loss":
-                    y_base = y_pred_proba[:, 1] if is_binary else y_pred_proba
+                    y_base = y_pred_proba[:, 1] if y_pred_proba.shape[1] == 2 else y_pred_proba
                     score = np.round(
                         log_loss(y_true, y_base, labels=self.classes_overall), 5
                     )

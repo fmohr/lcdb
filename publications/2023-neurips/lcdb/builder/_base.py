@@ -38,7 +38,7 @@ def run_learning_workflow(
     known_categories: bool = True,
     raise_errors: bool = False,
     anchor_schedule: str = "power",
-    epoch_schedule: str = "full",
+    epoch_schedule: str = "power",
     logger=None,
 ):
     """This function trains the workflow on a dataset and returns performance metrics.
@@ -78,6 +78,7 @@ def run_learning_workflow(
     workflow_kwargs = copy.deepcopy(job.parameters)
     workflow_kwargs["epoch_schedule"] = epoch_schedule
     workflow_kwargs["random_state"] = workflow_seed
+    workflow_kwargs["logger"] = logger
     workflow_factory = lambda: WorkflowClass(timer=timer, **workflow_kwargs)
 
     # Initialize information to be returned
@@ -112,6 +113,7 @@ def run_learning_workflow(
         stratify=stratify,
         raise_errors=raise_errors,
         anchor_schedule=anchor_schedule,
+        logger=logger
     )
 
     # build the curves
@@ -185,8 +187,9 @@ class LearningCurveBuilder:
         self.timeout_on_fit = timeout_on_fit
         self.raise_errors = raise_errors
         self.anchors = get_schedule(
-            name=anchor_schedule, n=len(self.X_train), base=2, power=0.5, delay=7
+            name=anchor_schedule, n=len(self.X_train)
         )
+        self.logger.info(f"Using sample-wise schedule {self.anchors} based on anchor schedule definition {anchor_schedule}")
 
         # state variables
         self.cur_anchor = None

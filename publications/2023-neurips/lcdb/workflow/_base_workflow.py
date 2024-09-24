@@ -1,4 +1,5 @@
 import abc
+import logging
 
 from typing import Any
 from lcdb.builder.timer import Timer
@@ -12,7 +13,7 @@ NP_ARRAY = np.ndarray
 
 class BaseWorkflow(abc.ABC):
 
-    def __init__(self, timer=None) -> None:
+    def __init__(self, timer=None, logger=None) -> None:
         super().__init__()
         self.timer = Timer() if timer is None else timer
         self.infos = {}
@@ -30,6 +31,8 @@ class BaseWorkflow(abc.ABC):
         self.constant_prediction = None  # this is used to treat cases where only one class is provided
 
         self.label_encoder = LabelEncoder()  # internally we will always work with numeric classes
+
+        self.logger = logging.getLogger("LCDB") if logger is None else logger
 
     def fit(self, X, y, X_valid, y_valid, X_test, y_test, metadata) -> "BaseWorkflow":
 

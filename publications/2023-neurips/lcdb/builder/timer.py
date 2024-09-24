@@ -1,4 +1,3 @@
-import logging
 import pprint
 import time
 from contextlib import contextmanager
@@ -15,7 +14,7 @@ class TimerNode:
     CANCELED: str = "CANCELED"
 
     def __init__(
-        self, id_: int, tag: str, metadata: dict = None, precision: int = 6
+        self, id_: int, tag: str, metadata: dict = None, precision: int = 6, timestamp_start=None
     ) -> None:
         self.id = id_
 
@@ -25,7 +24,7 @@ class TimerNode:
         self.status = TimerNode.STARTED
         self.cancellation_source_id = None
 
-        self.timestamp_start = self.time()
+        self.timestamp_start = self.time() if timestamp_start is None else timestamp_start
         self.timestamp_end = None
 
         assert metadata is None or isinstance(metadata, dict)
@@ -37,11 +36,21 @@ class TimerNode:
         # return np.round(time.time(), decimals=self.precision)
         return time.time()
 
-    def stop(self, metadata=None):
-        self.timestamp_end = self.time()
+    def stop(self, metadata=None, timestamp_end=None):
+        self.timestamp_end = self.time() if timestamp_end is None else timestamp_end
         if metadata is not None:
             self.metadata.update(metadata)
         self.status = TimerNode.STOPPED
+
+        if self.children:
+            for i, child in enumerate(self.children[1:], start=1):
+                predecessor = self.children[i-1]
+                assert child.timestamp_start >= predecessor.timestamp_end, \
+                    f"timing error in children of {self.tag}."\
+                    f" child node {child.tag} starts at {child.timestamp_start},"\
+                    f" which is {predecessor.timestamp_end - child.timestamp_start}s earlier than predecessing child {predecessor.tag} ends ({predecessor.timestamp_end})."
+            assert self.timestamp_end >= self.children[-1].timestamp_end, \
+                f"node {self.tag} ended {self.children[-1].timestamp_end - self.timestamp_end}s earlier than its last child {self.children[-1].tag}"
 
     def cancel(self):
         self.timestamp_end = self.time()
@@ -108,19 +117,19 @@ class Timer:
         self.precision = precision
         self.id_counter = 0
 
-    def start(self, tag: Hashable, metadata: dict = None) -> int:
+    def start(self, tag: Hashable, metadata: dict = None, timestamp_start=None) -> int:
         """Start the timer for a new tag (i.e., creates a child node in the time tree).
 
         Args:
             tag (Hashable): tag of the node.
             metadata (dict, optional): optional metadata of the node. Defaults to ``None``.
+            timestamp_start (int, optional): the timestamp that should be used to tag the start of the node.
 
         Returns:
             int: id of the created node in the timer tree.
         """
-        logging.info(f"Starting timer for '{tag}'")
 
-        node = TimerNode(self.id_counter, tag, metadata, self.precision)
+        node = TimerNode(self.id_counter, tag, metadata, self.precision, timestamp_start=timestamp_start)
         self.id_counter += 1
 
         if self.root is None:
@@ -133,16 +142,26 @@ class Timer:
 
         return node.id
 
-    def stop(self, metadata: dict = None):
+    def stop(self, metadata: dict = None, timestamp_end=None):
         """Stops the current timer and steps back to the parent node"""
 
         if len(self.stack) == 0:
             raise ValueError("No timer currently active!")
 
         node = self.stack.pop()
-        node.stop(metadata)
-        
-        logging.info(f"Stopping timer for '{node.tag}'")
+        node.stop(metadata, timestamp_end=timestamp_end)
+
+    def inject(self, timer_node, offset=0, ignore_root=True):
+        """
+            Injects the full content of another timer inside this timer
+        """
+        if not ignore_root:
+            self.start(tag=timer_node.tag, metadata=timer_node.metadata, timestamp_start=timer_node.timestamp_start + offset)
+        for child in timer_node.children:
+            self.inject(child, ignore_root=False, offset=offset)
+        if not ignore_root:
+            self.stop(timestamp_end=timer_node.timestamp_end + offset)
+
 
     def cancel(self, node_id: int, only_children: bool = False):
         """Cancels all child nodes up to the node corresponding to node_id (i.e., cancel all branches starting from `node_id`).
@@ -199,8 +218,14 @@ class Timer:
         return json_data
 
     @contextmanager
-    def time(self, tag: Hashable, metadata: dict = None, cancel_on_error=False):
-        node_id = self.start(tag, metadata)
+    def time(
+            self,
+            tag: Hashable,
+            metadata: dict = None,
+            cancel_on_error=False,
+            timestamp_start=None,
+            timestamp_end=None):
+        node_id = self.start(tag, metadata, timestamp_start=timestamp_start)
         try:
             yield self.active_node
         except:
@@ -209,7 +234,7 @@ class Timer:
             else:
                 raise
         else:
-            self.stop()
+            self.stop(timestamp_end=timestamp_end)
 
 
 def test_timer():
@@ -272,6 +297,26 @@ def test_timer():
     assert len(dict_tree["children"]) == 3
 
     pprint.pprint(timer.as_dict(), indent=2)
+
+
+class Stopwatch:
+
+    def __init__(self):
+        self.ctime = None
+        self.elapsed_time_since_last_checkpoint = 0
+        self.elapsed_time_total = 0
+
+    def start(self):
+        self.ctime = time.time()
+        self.elapsed_time_since_last_checkpoint = 0
+        self.elapsed_time_total = 0
+
+    def checkpoint(self):
+        ctime = time.time()
+        self.elapsed_time_since_last_checkpoint = ctime - self.ctime
+        self.elapsed_time_total += self.elapsed_time_since_last_checkpoint
+        self.ctime = ctime
+        return self
 
 
 if __name__ == "__main__":

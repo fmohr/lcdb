@@ -23,7 +23,7 @@ REQUIRED = [
     "ConfigSpace~=1.1.1",
     "deephyper==0.8.0",
     "jmespath==1.0.1",
-    "numpy",
+    "numpy<2.0",
     "openml",
     "pandas>=0.24.2",
     "pyyaml",

@@ -167,8 +167,15 @@ def get_schedule(name, **kwargs):
         return get_linear_schedule(**kwargs)
     elif name == "last":
         return [kwargs["n"]]
-    elif name == "power":
-        return get_power_schedule(**kwargs)
+    elif name.startswith("power"):
+        if "-" in name:
+            exploded_name = name.split("-")
+            if len(exploded_name) != 4:
+                raise ValueError("if schedule starts with 'power-' it must be in format 'power-<base>-<power>-<delay>")
+            kwargs["base"] = float(exploded_name[1])
+            kwargs["power"] = float(exploded_name[2])
+            kwargs["delay"] = int(exploded_name[3])
+        return sorted(set(get_power_schedule(**kwargs)))
     else:
         raise ValueError(f"Unknown schedule: {name}")
 

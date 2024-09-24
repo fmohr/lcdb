@@ -10,8 +10,6 @@ from deephyper.evaluator import RunningJob
 from ..builder.utils import import_attr_from_module, terminate_on_memory_exceeded
 from lcdb.builder import run_learning_workflow
 
-#from ._experiments import run
-
 # Avoid Tensorflow Warnings
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = str(3)
 
@@ -157,15 +155,16 @@ def main(
     ch.setFormatter(formatter)
 
     logger = logging.getLogger("LCDB")
+    logger.handlers.clear()
     logger.addHandler(ch)
+    logger.setLevel(logging.INFo)
 
     # No parameters are given the default configuration is used
-    if parameters is None:
-        WorkflowClass = import_attr_from_module(workflow_class)
-        config_space = WorkflowClass.config_space()
-        config = dict(config_space.get_default_configuration())
-    else:
-        config = json.loads(parameters)
+    WorkflowClass = import_attr_from_module(workflow_class)
+    config_space = WorkflowClass.config_space()
+    config = dict(config_space.get_default_configuration())
+    if parameters is not None:
+        config.update(json.loads(parameters))
 
     # create controller
     if task_type not in ["classification", "regression"]:
