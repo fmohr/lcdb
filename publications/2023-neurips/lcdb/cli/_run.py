@@ -363,8 +363,18 @@ def run_experiment(
 def main(**kwargs):
     """Entry point for the command line interface."""
 
+    # setup logger
+    ch = logging.StreamHandler()
+    ch.setLevel(logging.DEBUG)
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    ch.setFormatter(formatter)
+
+    logger = logging.getLogger("LCDB")
+    logger.handlers.clear()
+    logger.addHandler(ch)
+    logger.setLevel(logging.INFO)
+
     # there is no point in making the logger configurable at the CLI, the log level maybe
-    logger = logging.getLogger("lcdb.run")
     kwargs["logger"] = logger
 
     run_experiment(**kwargs)
