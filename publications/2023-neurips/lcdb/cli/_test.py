@@ -157,7 +157,7 @@ def main(
     logger = logging.getLogger("LCDB")
     logger.handlers.clear()
     logger.addHandler(ch)
-    logger.setLevel(logging.INFo)
+    logger.setLevel(logging.INFO)
 
     # No parameters are given the default configuration is used
     WorkflowClass = import_attr_from_module(workflow_class)
