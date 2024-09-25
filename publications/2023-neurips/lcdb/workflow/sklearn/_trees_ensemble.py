@@ -147,10 +147,16 @@ class TreesEnsembleWorkflow(SklearnWorkflow):
 
         # first train full bagging ensemble. This is because training them iteratively is highly inefficient in sklearn
         self.logger.info(f"Training {self.max_n_estimators} trees.")
-        ts_train_start = time.time()
-        self.learner.set_params(n_estimators=self.max_n_estimators)
-        self.learner.fit(X, y)
-        ts_train_stop = time.time()
+        try:
+            ts_train_start = time.time()
+            self.learner.set_params(n_estimators=self.max_n_estimators)
+            self.learner.fit(X, y)
+            ts_train_stop = time.time()
+        except KeyboardInterrupt:
+            raise
+        except Exception as e:
+            self.logger.exception(e)
+            raise
         total_training_time = ts_train_stop - ts_train_start
         avg_fit_time_per_learner = total_training_time / self.learner.n_estimators
         self.logger.info(f"Trained {self.max_n_estimators} trees in {total_training_time}s.")
