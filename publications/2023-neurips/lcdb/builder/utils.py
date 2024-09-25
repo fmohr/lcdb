@@ -1,5 +1,5 @@
-import functools
 import importlib
+import logging
 import multiprocessing
 import multiprocessing.pool
 import os
@@ -48,7 +48,7 @@ def filter_keys_with_prefix(d: dict, prefix: str) -> dict:
     Returns:
         dict: the filtered dictionary.
     """
-    return {k[len(prefix):]: v for k, v in d.items() if k.startswith(prefix)}
+    return {k[len(prefix) :]: v for k, v in d.items() if k.startswith(prefix)}
 
 
 class FunctionCallTimeoutError(Exception):
@@ -98,6 +98,8 @@ def terminate_on_memory_exceeded(
         function: a decorated function.
     """
 
+    logger = logging.getLogger("LCDB")
+
     timestamp_start = time.time()
 
     p = psutil.Process()  # get the current process
@@ -127,6 +129,10 @@ def terminate_on_memory_exceeded(
                     if raise_exception:
                         raise CancelledError(
                             f"Memory limit exceeded: {memory_peak} > {memory_limit}"
+                        )
+                    else:
+                        logger.warning(
+                            f"Function call was cancelled due to exceeded memory limit: {memory_peak} > {memory_limit}"
                         )
 
                     break
@@ -171,7 +177,9 @@ def get_schedule(name, **kwargs):
         if "-" in name:
             exploded_name = name.split("-")
             if len(exploded_name) != 4:
-                raise ValueError("if schedule starts with 'power-' it must be in format 'power-<base>-<power>-<delay>")
+                raise ValueError(
+                    "if schedule starts with 'power-' it must be in format 'power-<base>-<power>-<delay>"
+                )
             kwargs["base"] = float(exploded_name[1])
             kwargs["power"] = float(exploded_name[2])
             kwargs["delay"] = int(exploded_name[3])
@@ -207,10 +215,9 @@ def decision_fun_to_proba(decision_fun_vals):
     :param decision_fun_vals:
     :return:
     """
-    sigmoid = lambda z: 1/(1 + np.exp(-z))
+    sigmoid = lambda z: 1 / (1 + np.exp(-z))
     if len(decision_fun_vals.shape) == 2:
         return softmax(decision_fun_vals, axis=1)
     else:  # if the decision function values is only a vector, then these are the probs of the positive class
         a = sigmoid(decision_fun_vals)
         return np.column_stack([1 - a, a])
-
