@@ -1,6 +1,6 @@
 #!/bin/bash
 
-export LCDB_NUM_CONFIGS=100
+export LCDB_NUM_CONFIGS=1024
 export LCDB_WORKFLOW_SEED=42
 # export LCDB_VALID_SEED=42
 # export LCDB_TEST_SEED=42

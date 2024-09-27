@@ -2,19 +2,16 @@
 #SBATCH --partition=rome
 #SBATCH --time=24:00:00
 #SBATCH --threads-per-core=1
-#SBATCH --output=%x/out/%x_%a.log
-#SBATCH --error=%x/err/%x_%a.log
 
 module load 2023
 module load OpenMPI/4.1.5-GCC-12.3.0
 source /home/$USER/projects/lcdb/publications/2023-neurips/build/activate-dhenv.sh
 
 #!!! CONFIGURATION - START
-source config.sh
+source scripts/config.sh
 
 export timeout=3500
 export NTOTRANKS=$(( $SLURM_JOB_NUM_NODES * $SLURM_CPUS_PER_TASK ))
-export PLOT_TYPE='test'
 #!!! CONFIGURATION - END
 
 mkdir -p $LCDB_OUTPUT_RUN
@@ -36,7 +33,8 @@ srun -n ${NTOTRANKS} -N ${SLURM_JOB_NUM_NODES} \
     --workflow-memory-limit $SLURM_MEM_PER_CPU \
     --valid-seed $LCDB_VALID_SEED \
     --test-seed $LCDB_TEST_SEED \
-    --evaluator mpicomm 
+    --evaluator mpicomm \
+    $( [ "$LCDB_WORKFLOW" == "lcdb.workflow.sklearn.TreesEnsembleWorkflow" ] && echo "--epoch-schedule=power-2-0.25-0" ) 
 
 gzip --best results.csv 
 

@@ -6,7 +6,7 @@
 source /home/$USER/projects/lcdb/publications/2023-neurips/build/activate-dhenv.sh
 
 # Load Experiment Configuration
-source config.sh
+source scripts/config.sh
 
 # Create Configurations
 echo "Creating $LCDB_NUM_CONFIGS configurations for $LCDB_WORKFLOW in $LCDB_INITIAL_CONFIGS"

@@ -40,9 +40,9 @@ class LocalRepository(Repository):
             for (workflow, openmlid, workflow_seed, valid_seed, test_seed), group in df.groupby(
                     ["m:workflow", "m:openmlid", "m:workflow_seed", "m:valid_seed", "m:test_seed"]
             ):
-                folder = f"{self.repo_dir}/{workflow}/{campaign}/{openmlid}"
+                folder = f"{self.repo_dir}/{workflow}/{campaign}/{int(openmlid)}"
                 pathlib.Path(folder).mkdir(exist_ok=True, parents=True)
-                filename = f"{folder}/{workflow_seed}-{test_seed}-{valid_seed}.csv.gz"
+                filename = f"{folder}/{int(workflow_seed)}-{int(test_seed)}-{int(valid_seed)}.csv.gz"
                 group.to_csv(filename, index=False, compression='gzip')
 
     def get_workflows(self):

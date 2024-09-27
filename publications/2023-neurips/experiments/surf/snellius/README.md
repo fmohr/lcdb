@@ -28,5 +28,5 @@ To run the experiments, you need to specify the OpenML dataset in `datasets_to_t
 
 To submit the jobs to cluster: 
 ```bash
-sbatch wrapper_script.sh liblinear
+./scripts/wrapper_script.sh liblinear
 ```
