@@ -166,7 +166,82 @@ def add_subparser(subparsers):
         type=str,
         help="The type of schedule for anchors (over learning iterations of the workflow). Value in ['linear', 'last', 'power'].",
     )
+
+    subparser.add_argument(
+        "--no-exception-on-unsuitable-preprocessor",
+        action="store_true",
+        default=False,
+        required=False,
+        help="If set, no exception will be generated if a pre-processor that is irrelevant or useless for the data is being used, e.g., a categorical encoder for a dataset with numerical features only."
+    )
+
     subparser.set_defaults(func=function_to_call)
+
+
+def run_learning_workflow_from_deephyper(
+        job,
+        openml_id: int = 3,
+        task_type: str = "classification",
+        workflow_class: str = "lcdb.workflow.sklearn.LibLinearWorkflow",
+        monotonic: bool = True,
+        valid_seed: int = 42,
+        test_seed: int = 42,
+        workflow_seed: int = 42,
+        valid_prop: float = 0.1,
+        test_prop: float = 0.1,
+        timeout_on_fit=-1,
+        known_categories: bool = True,
+        raise_errors: bool = False,
+        raise_exception_on_unsuitable_preprocessor: bool = True,
+        anchor_schedule: str = "power",
+        epoch_schedule: str = "power",
+        logger=None,
+):
+    """This function trains the workflow on a dataset and returns performance metrics.
+
+    Args:
+        job (RunningJob): A running job passed by DeepHyper (represent an instance of the function).
+        openml_id (int, optional): The identifier of the OpenML dataset. Defaults to 3.
+        workflow_class (str, optional): The "path" of the workflow to train. Defaults to "lcdb.workflow.sklearn.LibLinearWorkflow".
+        monotonic (bool, optional): A boolean indicating if the sample-wise learning curve should be monotonic (i.e., sample set at smaller anchors are always included in sample sets at larger anchors) or not. Defaults to True.
+        valid_seed (int, optional): Random state seed of train/validation split. Defaults to 42.
+        test_seed (int, optional): Random state seed of train+validation/test split. Defaults to 42.
+        workflow_seed (int, optional): Random state seed of the workflow. Defaults to 42.
+        valid_prop (float, optional): Ratio of validation/(train+validation). Defaults to 0.1.
+        test_prop (float, optional): Ratio of test/data . Defaults to 0.1.
+        timeout_on_fit (int, optional): Timeout in seconds for the fit method. Defaults to -1 for infinite time.
+        known_categories (bool, optional): If all the possible categories are assumed to be known in advance. Defaults to True.
+        raise_errors (bool, optional): If `True`, then errors are risen to the outside. Otherwise, just a log message is generated. Defaults to False.
+        anchor_schedule (str, optional): A type of schedule for anchors (over samples of the dataset). Defaults to "power".
+        epoch_schedule (str, optional): A type of schedule for epochs (over epochs of the dataset). Defaults to "power".
+
+    Returns:
+        dict: a dictionary with 2 keys (objective, metadata) where objective is the objective maximized by deephyper (if used) and metadata is a JSON serializable sub-dictionnary which are complementary information about the workflow.
+    """
+    if logger is None:
+        logger = logging.getLogger("LCDB")
+    logger.info(f"Running job {job.id} with parameters: {job.parameters}")
+
+    from lcdb.builder import run_learning_workflow
+
+    return run_learning_workflow(
+        openml_id=openml_id,
+        task_type=task_type,
+        workflow_class=workflow_class,
+        workflow_parameters=job.parameters,
+        monotonic=monotonic,
+        valid_seed=valid_seed,
+        test_seed=test_seed,
+        workflow_seed=workflow_seed,
+        valid_prop=valid_prop,
+        test_prop=test_prop,
+        timeout_on_fit=timeout_on_fit,
+        known_categories=known_categories,
+        raise_errors=raise_errors,
+        raise_exception_on_unsuitable_preprocessor=raise_exception_on_unsuitable_preprocessor,
+        anchor_schedule=anchor_schedule,
+        epoch_schedule=epoch_schedule
+    )
 
 
 def run_experiment(
@@ -191,6 +266,7 @@ def run_experiment(
     anchor_schedule,
     epoch_schedule,
     workflow_memory_limit,
+    no_exception_on_unsuitable_preprocessor
 ):
 
     try:
@@ -215,7 +291,6 @@ def run_experiment(
     from deephyper.hpo import CBO, HpProblem
     from deephyper.hpo._problem import convert_to_skopt_space
 
-    from lcdb.builder import run_learning_workflow
     from lcdb.builder.utils import import_attr_from_module, terminate_on_memory_exceeded
 
     if evaluator in ["serial", "thread", "process", "ray"]:
@@ -319,6 +394,7 @@ def run_experiment(
         "anchor_schedule": anchor_schedule,
         "epoch_schedule": epoch_schedule,
         "logger": logger,
+        "raise_exception_on_unsuitable_preprocessor": not no_exception_on_unsuitable_preprocessor
     }
 
     method_kwargs["run_function_kwargs"] = run_function_kwargs
@@ -333,7 +409,7 @@ def run_experiment(
         memory_limit,
         memory_tracing_interval,
         raise_exception,
-        run_learning_workflow,
+        run_learning_workflow_from_deephyper,
     )
 
     with Evaluator.create(

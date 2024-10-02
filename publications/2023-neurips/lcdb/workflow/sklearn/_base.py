@@ -26,9 +26,24 @@ class SklearnWorkflow(PreprocessedWorkflow):
         self,
         learner,
         timer=None,
+        logger=None,
+        random_state=None,
+        raise_exception_on_unsuitable_preprocessor=True,
         **kwargs,
     ):
-        super().__init__(timer, **filter_keys_with_prefix(kwargs, prefix="p:pp@"))
+        forbidden_kwargs = [kwarg for kwarg in kwargs if not kwarg.startswith("pp@")]
+        if forbidden_kwargs:
+            raise ValueError(
+                "SklearnWorfklow must only receive kwargs for pre-processing (starting with pp@) but also received:"
+                f" {forbidden_kwargs}"
+            )
+        super().__init__(
+            timer=timer,
+            logger=logger,
+            random_state=random_state,
+            raise_exception_on_unsuitable_preprocessor=raise_exception_on_unsuitable_preprocessor,
+            **filter_keys_with_prefix(kwargs, prefix="pp@")
+        )
         self.learner = learner
 
     @classmethod

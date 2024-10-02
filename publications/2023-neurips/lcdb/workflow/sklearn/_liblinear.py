@@ -65,7 +65,6 @@ class LibLinearWorkflow(SVMWorkflow):
 
     def __init__(
         self,
-        timer=None,
         dual=True,
         C=1,
         tol=1e-3,
@@ -75,7 +74,6 @@ class LibLinearWorkflow(SVMWorkflow):
         penalty="l2",
         fit_intercept=True,
         intercept_scaling=1.0,
-        random_state=None,
         **kwargs,
     ):
         learner_kwargs = dict(
@@ -89,11 +87,11 @@ class LibLinearWorkflow(SVMWorkflow):
             penalty=penalty,
             fit_intercept=fit_intercept,
             intercept_scaling=intercept_scaling,
-            random_state=random_state,
+            random_state=kwargs["random_state"] if "random_state" in kwargs else None,
         )
 
         svm_instance = LinearSVC(**learner_kwargs)
-        super().__init__(svm_instance, timer, **kwargs)
+        super().__init__(svm_instance, **kwargs)
 
     @classmethod
     def config_space(cls):

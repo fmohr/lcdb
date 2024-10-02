@@ -1,11 +1,9 @@
 import functools
 import numpy as np
-import copy
 import logging
 
-from deephyper.evaluator import RunningJob
-from ..data import load_task
-from .utils import import_attr_from_module
+from lcdb.data import load_task
+from lcdb.builder.utils import import_attr_from_module
 
 import traceback
 import warnings
@@ -24,10 +22,10 @@ from sklearn.preprocessing import FunctionTransformer, OneHotEncoder
 
 
 def run_learning_workflow(
-    job: RunningJob,
     openml_id: int = 3,
     task_type: str = "classification",
     workflow_class: str = "lcdb.workflow.sklearn.LibLinearWorkflow",
+    workflow_parameters: dict = None,
     monotonic: bool = True,
     valid_seed: int = 42,
     test_seed: int = 42,
@@ -37,6 +35,7 @@ def run_learning_workflow(
     timeout_on_fit=-1,
     known_categories: bool = True,
     raise_errors: bool = False,
+    raise_exception_on_unsuitable_preprocessor: bool = True,
     anchor_schedule: str = "power",
     epoch_schedule: str = "power",
     logger=None,
@@ -44,9 +43,9 @@ def run_learning_workflow(
     """This function trains the workflow on a dataset and returns performance metrics.
 
     Args:
-        job (RunningJob): A running job passed by DeepHyper (represent an instance of the function).
         openml_id (int, optional): The identifier of the OpenML dataset. Defaults to 3.
         workflow_class (str, optional): The "path" of the workflow to train. Defaults to "lcdb.workflow.sklearn.LibLinearWorkflow".
+        workflow_parameters (dict, optional): The dictionary with the hyperparameters to be used by the workflow.
         monotonic (bool, optional): A boolean indicating if the sample-wise learning curve should be monotonic (i.e., sample set at smaller anchors are always included in sample sets at larger anchors) or not. Defaults to True.
         valid_seed (int, optional): Random state seed of train/validation split. Defaults to 42.
         test_seed (int, optional): Random state seed of train+validation/test split. Defaults to 42.
@@ -56,13 +55,16 @@ def run_learning_workflow(
         timeout_on_fit (int, optional): Timeout in seconds for the fit method. Defaults to -1 for infinite time.
         known_categories (bool, optional): If all the possible categories are assumed to be known in advance. Defaults to True.
         raise_errors (bool, optional): If `True`, then errors are risen to the outside. Otherwise, just a log message is generated. Defaults to False.
+        raise_exception_on_unsuitable_preprocessor (bool, optional): If `False`, no exception will be generated if a pre-processor that is irrelevant or useless for the data is being used, e.g., a categorical encoder for a dataset with numerical features only.
         anchor_schedule (str, optional): A type of schedule for anchors (over samples of the dataset). Defaults to "power".
         epoch_schedule (str, optional): A type of schedule for epochs (over epochs of the dataset). Defaults to "power".
 
     Returns:
         dict: a dictionary with 2 keys (objective, metadata) where objective is the objective maximized by deephyper (if used) and metadata is a JSON serializable sub-dictionnary which are complementary information about the workflow.
     """
-    logger.info(f"Running job {job.id} with parameters: {job.parameters}")
+    if logger is None:
+        logger = logging.getLogger("LCDB")
+    logger.info(f"Running workflow {workflow_class} with parameters: {workflow_parameters}")
 
     timer = Timer(precision=4)
     run_timer_id = timer.start("run")
@@ -74,12 +76,29 @@ def run_learning_workflow(
 
     # Create and fit the workflow
     logger.info("Importing the workflow...")
-    WorkflowClass = import_attr_from_module(workflow_class)
-    workflow_kwargs = copy.deepcopy(job.parameters)
-    workflow_kwargs["epoch_schedule"] = epoch_schedule
-    workflow_kwargs["random_state"] = workflow_seed
+    WorkflowClass = import_attr_from_module(workflow_class) if isinstance(workflow_class, str) else workflow_class
+    if workflow_parameters is not None and not isinstance(workflow_parameters, dict):
+        raise ValueError(f"workflow_parameters must be None or a dict but is {type(workflow_parameters)}")
+    workflow_kwargs = workflow_parameters.copy() if workflow_parameters is not None else {}
+    if WorkflowClass.builds_iteration_curve():
+        workflow_kwargs["epoch_schedule"] = epoch_schedule
+    if WorkflowClass.is_randomizable():
+        workflow_kwargs["random_state"] = workflow_seed
+    elif workflow_seed != 0:
+        logger.warning(
+            f"Workflow class {workflow_class} is not randomizable."
+            f" Yet, a workflow seed different from 0 (namely {workflow_seed}) was provided."
+        )
+
+    # the import is done here to avoid cyclic dependencies
+    from lcdb.workflow._preprocessing_workflow import PreprocessedWorkflow
+    if issubclass(WorkflowClass, PreprocessedWorkflow):
+        workflow_kwargs["raise_exception_on_unsuitable_preprocessor"] = raise_exception_on_unsuitable_preprocessor
+
     workflow_kwargs["logger"] = logger
-    workflow_factory = lambda: WorkflowClass(timer=timer, **workflow_kwargs)
+
+    def workflow_factory():
+        return WorkflowClass(timer=timer, **workflow_kwargs)
 
     # Initialize information to be returned
     infos = {
@@ -88,7 +107,7 @@ def run_learning_workflow(
         "workflow": workflow_class,
     }
 
-    # create controller
+    # create builder
     if task_type not in ["classification", "regression"]:
         raise ValueError(
             f"Task type must be 'classification' or 'regression' but is {task_type}."
@@ -96,7 +115,7 @@ def run_learning_workflow(
     is_classification = task_type == "classification"
     stratify = is_classification
 
-    controller = LearningCurveBuilder(
+    builder = LearningCurveBuilder(
         timer=timer,
         workflow_factory=workflow_factory,
         is_classification=is_classification,
@@ -117,7 +136,7 @@ def run_learning_workflow(
     )
 
     # build the curves
-    controller.build_curves()
+    builder.build_curves()
 
     assert (
         timer.active_node.id == run_timer_id
@@ -125,11 +144,11 @@ def run_learning_workflow(
     timer.stop()
 
     # update infos based on report
-    infos.update(controller.report)
+    infos.update(builder.report)
 
     infos["json"] = timer.as_json()
 
-    results = {"objective": controller.objective, "metadata": infos}
+    results = {"objective": builder.objective, "metadata": infos}
 
     return results
 
@@ -260,10 +279,6 @@ class LearningCurveBuilder:
                 self.set_anchor(anchor)
 
                 with self.timer.time("anchor", {"value": anchor}) as anchor_timer:
-                    self.logger.info(
-                        f"Fitting workflow {self.workflow.__class__.__name__} on sample anchor {anchor} which is {anchor / self.X_train.shape[0] * 100:.2f}% of the dataset."
-                    )
-
                     error_code = self.fit_workflow_on_current_anchor()
 
                     if error_code != 0:
@@ -320,6 +335,10 @@ class LearningCurveBuilder:
         with self.timer.time("create_workflow"):
             self.workflow = self.workflow_factory()
 
+        self.logger.info(
+            f"Fitting workflow {self.workflow.__class__.__name__} on sample anchor {self.cur_anchor} which is {self.cur_anchor / self.X_train.shape[0] * 100:.2f}% of the dataset."
+        )
+
         if self.timeout_on_fit > 0:
             self.workflow.fit = functools.partial(
                 terminate_on_timeout, self.timeout_on_fit, self.workflow.fit
@@ -340,6 +359,9 @@ class LearningCurveBuilder:
                 )
 
         except Exception as exception:
+            if self.raise_errors:
+                raise
+
             self.report["traceback"] = traceback.format_exc()
 
             self.logger.error(

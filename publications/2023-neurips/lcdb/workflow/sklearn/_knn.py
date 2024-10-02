@@ -51,6 +51,8 @@ class KNNWorkflow(SklearnWorkflow):
     def __init__(
         self,
         timer=None,
+        random_state=None,
+        logger=None,
         n_neighbors=5,
         weights="uniform",
         p=2,
@@ -64,6 +66,12 @@ class KNNWorkflow(SklearnWorkflow):
             **kwargs
         )
 
+        if random_state is not None and logger is not None:
+            logger.warning(
+                f"A random state ({random_state}) has been given to the KNN workflow."
+                "  But this workflow is not randomizable. The random seed will be ignored."
+            )
+
         self.learner_kwargs = dict(
             n_neighbors=n_neighbors, weights=weights, p=p, metric=metric
         )
@@ -71,6 +79,14 @@ class KNNWorkflow(SklearnWorkflow):
     @classmethod
     def config_space(cls):
         return cls._config_space
+
+    @classmethod
+    def builds_iteration_curve(cls):
+        return False
+
+    @classmethod
+    def is_randomizable(cls):
+        return False
 
     def _fit_model_after_transformation(self, X, y, X_valid, y_valid, X_test, y_test, metadata):
 

@@ -62,7 +62,6 @@ class TreesEnsembleWorkflow(SklearnWorkflow):
 
     def __init__(
         self,
-        timer=None,
         n_estimators=1,
         criterion="gini",
         max_depth=None,
@@ -76,7 +75,6 @@ class TreesEnsembleWorkflow(SklearnWorkflow):
         ccp_alpha=0.0,
         max_samples=None,
         splitter="best",
-        random_state=None,
         epoch_schedule: str = "power",
         iterations_to_wait_for_update=4,
         **kwargs,
@@ -88,7 +86,7 @@ class TreesEnsembleWorkflow(SklearnWorkflow):
         self.iterations_to_wait_for_update = iterations_to_wait_for_update
         self.last_recorded_iteration = None
 
-        max_depth = max_depth if max_depth > 0 else None
+        max_depth = max_depth if (max_depth is not None and max_depth > 0) else None
         max_samples = max_samples if bootstrap else None
         max_features = 1.0 if max_features == "all" else max_features
 
@@ -105,7 +103,7 @@ class TreesEnsembleWorkflow(SklearnWorkflow):
                 bootstrap=bootstrap,
                 ccp_alpha=ccp_alpha,
                 max_samples=max_samples,
-                random_state=random_state,
+                random_state=kwargs["random_state"] if "random_state" in kwargs else None,
             )
         elif splitter == "random":
             learner = ExtraTreesClassifier(
@@ -120,13 +118,13 @@ class TreesEnsembleWorkflow(SklearnWorkflow):
                 bootstrap=bootstrap,
                 ccp_alpha=ccp_alpha,
                 max_samples=max_samples,
-                random_state=random_state,
+                random_state=kwargs["random_state"] if "random_state" in kwargs else None,
             )
         else:
             raise ValueError(
                 f"The splitter is '{splitter}' when it should be in ['random', 'best']."
             )
-        super().__init__(learner=learner, timer=timer, **kwargs)
+        super().__init__(learner=learner, **kwargs)
 
         # Scoring Schedule for Sub-fidelity
         self.schedule = get_schedule(
@@ -137,6 +135,14 @@ class TreesEnsembleWorkflow(SklearnWorkflow):
     @classmethod
     def config_space(cls):
         return cls._config_space
+
+    @classmethod
+    def builds_iteration_curve(cls):
+        return True
+
+    @classmethod
+    def is_randomizable(cls):
+        return True
 
     def _fit_model_after_transformation(
         self, X, y, X_valid, y_valid, X_test, y_test, metadata

@@ -1,9 +1,5 @@
-import ConfigSpace
 from ConfigSpace import (
-    Categorical,
     ConfigurationSpace,
-    Integer,
-    EqualsCondition,
 )
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis, QuadraticDiscriminantAnalysis
 
@@ -28,18 +24,25 @@ class LDAWorkflow(SklearnWorkflow):
 
     def __init__(
         self,
-        timer=None,
         **kwargs
     ):
+
         super().__init__(
             learner=LinearDiscriminantAnalysis(),
-            timer=timer,
             **kwargs
         )
 
     @classmethod
     def config_space(cls):
         return cls._config_space
+
+    @classmethod
+    def builds_iteration_curve(cls):
+        return False
+
+    @classmethod
+    def is_randomizable(cls):
+        return False
 
 
 CONFIG_SPACE_QDA = ConfigurationSpace(
@@ -59,15 +62,22 @@ class QDAWorkflow(SklearnWorkflow):
 
     def __init__(
         self,
-        timer=None,
         **kwargs
     ):
+
         super().__init__(
             learner=QuadraticDiscriminantAnalysis(),
-            timer=timer,
             **kwargs
         )
 
     @classmethod
     def config_space(cls):
         return cls._config_space
+
+    @classmethod
+    def builds_iteration_curve(cls):
+        return False
+
+    @classmethod
+    def is_randomizable(cls):
+        return False

@@ -1,6 +1,8 @@
 import warnings
 
 import os
+from abc import ABC
+
 import numpy as np
 import pandas as pd
 from sys import getsizeof
@@ -103,20 +105,23 @@ CONFIG_SPACE.add(
 )
 
 
-class PreprocessedWorkflow(BaseWorkflow):
+class PreprocessedWorkflow(BaseWorkflow, ABC):
     _config_space = CONFIG_SPACE
 
     def __init__(
         self,
         timer=None,
+        logger=None,
+        random_state=None,
         kernel_pca_kernel="linear",
         kernel_pca_n_components=1.0,
         selectp_percentile=100,
         poly_degree=2,
         std_with_std=True,
+        raise_exception_on_unsuitable_preprocessor=True,
         **kwargs,
     ):
-        super().__init__(timer)
+        super().__init__(timer=timer, logger=logger, random_state=random_state)
 
         # extract preprocessing hyperparameters
         self.pp_kws = kwargs
@@ -127,6 +132,7 @@ class PreprocessedWorkflow(BaseWorkflow):
         self.selectp_percentile = selectp_percentile
         self.poly_degree = poly_degree
         self.std_with_std = std_with_std
+        self.raise_exception_on_unsuitable_preprocessor = raise_exception_on_unsuitable_preprocessor
 
     @classmethod
     def config_space(
@@ -203,6 +209,15 @@ class PreprocessedWorkflow(BaseWorkflow):
                     f"Unknown {KEY_CAT_ENCODER} technique {kwargs['cat_encoder']}"
                 )
             cat_steps.append((KEY_CAT_ENCODER, cat_encoder))
+        elif KEY_CAT_ENCODER in kwargs:
+            msg = f"The value for {KEY_CAT_ENCODER} is set even though the data has no categorical attributes."\
+                  " This may indicate an inefficiency, because different values may tried without having any effect."
+            if self.raise_exception_on_unsuitable_preprocessor:
+                msg += "\nYou can avoid that this situation generates an exception"\
+                       "by setting `raise_exception_on_unsuitable_preprocessor=False`."
+                raise ValueError(msg)
+            self.logger.warning(msg)
+
         treated_kws.append(KEY_CAT_ENCODER)
 
         # initialize steps with the preliminary transformers

@@ -1,9 +1,5 @@
-import ConfigSpace
 from ConfigSpace import (
-    Categorical,
     ConfigurationSpace,
-    Integer,
-    EqualsCondition,
 )
 from sklearn.naive_bayes import GaussianNB
 
@@ -27,15 +23,21 @@ class GaussianNBWorkflow(SklearnWorkflow):
 
     def __init__(
         self,
-        timer=None,
         **kwargs
     ):
         super().__init__(
             learner=GaussianNB(),
-            timer=timer,
             **kwargs
         )
 
     @classmethod
     def config_space(cls):
         return cls._config_space
+
+    @classmethod
+    def builds_iteration_curve(cls):
+        return False
+
+    @classmethod
+    def is_randomizable(cls):
+        return False

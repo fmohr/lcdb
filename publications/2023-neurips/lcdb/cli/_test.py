@@ -130,6 +130,13 @@ def add_subparser(subparsers):
         help="The type of schedule for anchors (over learning iterations of the workflow). Value in ['linear', 'last', 'power']."
         " If 'power', you can also specify 'power-<base>-<power>-<delay>' to be more specific. Default is 2-0.5-7",
     )
+    subparser.add_argument(
+        "--no-exception-on-unsuitable-preprocessor",
+        action="store_true",
+        default=False,
+        required=False,
+        help="If set, no exception will be generated if a pre-processor that is irrelevant or useless for the data is being used, e.g., a categorical encoder for a dataset with numerical features only."
+    )
     subparser.set_defaults(func=function_to_call)
 
 
@@ -148,6 +155,7 @@ def main(
     verbose,
     anchor_schedule,
     epoch_schedule,
+    no_exception_on_unsuitable_preprocessor
 ):
 
     # define stream handler
@@ -189,9 +197,9 @@ def main(
     )
 
     output = run_function(
-        RunningJob(id=0, parameters=config),
         openml_id=openml_id,
         workflow_class=workflow_class,
+        workflow_parameters=config,
         task_type=task_type,
         monotonic=monotonic,
         valid_seed=valid_seed,
@@ -202,7 +210,8 @@ def main(
         timeout_on_fit=timeout_on_fit,
         anchor_schedule=anchor_schedule,
         epoch_schedule=epoch_schedule,
-        logger=logger
+        logger=logger,
+        raise_exception_on_unsuitable_preprocessor=not no_exception_on_unsuitable_preprocessor
     )
 
     # check that the output can indeed be compiled into a string using JSON

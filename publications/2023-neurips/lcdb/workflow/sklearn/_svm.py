@@ -11,7 +11,7 @@ from ._base import SklearnWorkflow
 CONFIG_SPACE = ConfigurationSpace(
     name="sklearn.SVMWorkflow",
     space={
-        "multi_class": Categorical("multiclass", ["ovr", "ovo-scikit"], default="ovr"),
+        "multi_class": Categorical("multi_class", ["ovr", "ovo-scikit"], default="ovr"),
     }
 )
 
@@ -44,6 +44,14 @@ class SVMWorkflow(SklearnWorkflow):
     @classmethod
     def config_space(cls):
         return cls._config_space
+
+    @classmethod
+    def builds_iteration_curve(cls):
+        return False
+
+    @classmethod
+    def is_randomizable(cls):
+        return True
 
     def _fit_model_after_transformation(self, X, y, X_valid, y_valid, X_test, y_test, metadata):
         super()._fit_model_after_transformation(X, y, X_valid, y_valid, X_test, y_test, metadata)

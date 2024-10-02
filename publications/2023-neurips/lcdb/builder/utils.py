@@ -203,7 +203,7 @@ def get_power_schedule(n: int, base=2, power=0.5, delay: int = 7, **kwargs):
             break
         anchors.append(sample_size)
         k += 1
-    if anchors[-1] < n:
+    if len(anchors) > 0 and anchors[-1] < n:
         anchors.append(n)
     return anchors
 

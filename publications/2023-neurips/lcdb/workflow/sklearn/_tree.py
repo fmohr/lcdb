@@ -22,9 +22,7 @@ CONFIG_SPACE = ConfigurationSpace(
         ),
         "min_impurity_decrease": Float(
             "min_impurity_decrease", bounds=(0.0, 1.0), default=0.0
-        ),
-        "bootstrap": Categorical("bootstrap", items=[True, False], default=True),
-        "max_samples": Float("max_samples", bounds=(0.0, 1.0), default=1.0),
+        )
     },
 )
 
@@ -51,7 +49,6 @@ class DTWorkflow(SklearnWorkflow):
         min_impurity_decrease=0.0,
         class_weight=None,
         ccp_alpha=0.0,
-        random_state=None,
         **kwargs,
     ):
 
@@ -67,7 +64,7 @@ class DTWorkflow(SklearnWorkflow):
                 min_impurity_decrease=min_impurity_decrease,
                 class_weight=class_weight,
                 ccp_alpha=ccp_alpha,
-                random_state=random_state
+                random_state=kwargs["random_state"] if "random_state" in kwargs else None
             ),
             timer=timer,
             **kwargs
@@ -76,3 +73,11 @@ class DTWorkflow(SklearnWorkflow):
     @classmethod
     def config_space(cls):
         return cls._config_space
+
+    @classmethod
+    def builds_iteration_curve(cls):
+        return False
+
+    @classmethod
+    def is_randomizable(cls):
+        return True

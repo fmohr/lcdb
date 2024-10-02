@@ -25,18 +25,26 @@ class LRWorkflow(SklearnWorkflow):
 
     def __init__(
         self,
-        timer=None,
         **kwargs
     ):
         super().__init__(
-            learner=LogisticRegression(),
-            timer=timer,
+            learner=LogisticRegression(
+                random_state=kwargs["random_state"] if "random_state" in kwargs else None
+            ),
             **kwargs
         )
 
     @classmethod
     def config_space(cls):
         return cls._config_space
+
+    @classmethod
+    def builds_iteration_curve(cls):
+        return False
+
+    @classmethod
+    def is_randomizable(cls):
+        return True
 
 
 CONFIG_SPACE_RIDGE = ConfigurationSpace(
@@ -57,18 +65,26 @@ class RidgeWorkflow(SklearnWorkflow):
 
     def __init__(
         self,
-        timer=None,
         **kwargs
     ):
         super().__init__(
-            learner=RidgeClassifier(),
-            timer=timer,
+            learner=RidgeClassifier(
+                random_state=kwargs["random_state"] if "random_state" in kwargs else None
+            ),
             **kwargs
         )
 
     @classmethod
     def config_space(cls):
         return cls._config_space
+
+    @classmethod
+    def builds_iteration_curve(cls):
+        return False
+
+    @classmethod
+    def is_randomizable(cls):
+        return True
 
     def _predict_proba_after_transform(self, X):
         return decision_fun_to_proba(self.learner.decision_function(X))
@@ -92,18 +108,24 @@ class PAWorkflow(SklearnWorkflow):
 
     def __init__(
         self,
-        timer=None,
         **kwargs
     ):
         super().__init__(
             learner=PassiveAggressiveClassifier(),
-            timer=timer,
             **kwargs
         )
 
     @classmethod
     def config_space(cls):
         return cls._config_space
+
+    @classmethod
+    def builds_iteration_curve(cls):
+        return False
+
+    @classmethod
+    def is_randomizable(cls):
+        return False
 
     def _predict_proba_after_transform(self, X):
         return decision_fun_to_proba(self.learner.decision_function(X))
@@ -127,18 +149,24 @@ class PerceptronWorkflow(SklearnWorkflow):
 
     def __init__(
         self,
-        timer=None,
         **kwargs
     ):
         super().__init__(
             learner=Perceptron(),
-            timer=timer,
             **kwargs
         )
 
     @classmethod
     def config_space(cls):
         return cls._config_space
+
+    @classmethod
+    def builds_iteration_curve(cls):
+        return False
+
+    @classmethod
+    def is_randomizable(cls):
+        return False
 
     def _predict_proba_after_transform(self, X):
         return decision_fun_to_proba(self.learner.decision_function(X))

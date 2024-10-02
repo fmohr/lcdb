@@ -56,7 +56,6 @@ class LibSVMWorkflow(SVMWorkflow):
 
     def __init__(
         self,
-        timer=None,
         C=1,
         shrinking=True,
         tol=1e-4,
@@ -68,7 +67,6 @@ class LibSVMWorkflow(SVMWorkflow):
         gamma=1,
         degree=2,
         coef0=0.1,
-        random_state=None,
         **kwargs,
     ):
 
@@ -83,10 +81,10 @@ class LibSVMWorkflow(SVMWorkflow):
             gamma=gamma,
             degree=degree,
             coef0=coef0,
-            random_state=random_state,
+            random_state=kwargs["random_state"] if "random_state" in kwargs else None,
         )
         svm_instance = SVC(**learner_kwargs)
-        super().__init__(svm_instance, timer, **kwargs)
+        super().__init__(svm_instance, **kwargs)
 
     @classmethod
     def config_space(cls):

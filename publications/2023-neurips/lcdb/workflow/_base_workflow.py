@@ -13,9 +13,21 @@ NP_ARRAY = np.ndarray
 
 class BaseWorkflow(abc.ABC):
 
-    def __init__(self, timer=None, logger=None) -> None:
+    def __init__(self, timer=None, logger=None, random_state=None) -> None:
         super().__init__()
-        self.timer = Timer() if timer is None else timer
+        if timer is None:
+            self.timer = Timer()
+        elif not isinstance(timer, Timer):
+            raise ValueError(f"timer must be None or object of Timer but is {type(timer)}")
+        else:
+            self.timer = timer
+
+        # generate warning if the randomness is not seeded
+        if self.__class__.is_randomizable() and random_state is None and logger is not None:
+            logger.warning(
+                f"Workflow {self.__class__.__name__} is randomizable but no seed was provided!"
+            )
+
         self.infos = {}
 
         # Attributes which indicates if the .transform(...) method was called
@@ -80,10 +92,20 @@ class BaseWorkflow(abc.ABC):
         self.workflow_fitted = True
         return self
 
+    @classmethod
+    @abc.abstractmethod
+    def builds_iteration_curve(cls):
+        pass
+
+    @classmethod
+    @abc.abstractmethod
+    def is_randomizable(cls):
+        pass
+
     @abc.abstractmethod
     def _fit(self, X, y, metadata, *args, **kwargs) -> "BaseWorkflow":
         """Fit the workflow to the data."""
-        raise NotImplementedError
+        pass
 
     def predict(self, *args, **kwargs) -> NP_ARRAY:
         """Predict from the data."""
