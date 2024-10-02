@@ -263,3 +263,23 @@ config_cols = [c for c in df.columns if c.startswith("p:")]
 df.groupby(config_cols).agg({"learning_curve": merge_curves})
 ```
 After this operation, there will be only one line for every hyperparameter configuration in the dataframe, and learning curves for different seeds but otherwise identical setups will have been merged into a single learning curve object (missing values will be nan).
+
+### Learning Curve Groups
+It can be convenient to hold a list of learning curve objects that all have the same dimensionality. LCDB 2.0 allows groups of learning curves *for the same workflow* that *either* share the same dataset and differ in hyperparameters *or* have the same hyperparameter values but differ in the dataset (openmlid).
+
+Once the learning curves for the identical context are grouped (no duplicates in openmlid/hp_config combination) as above, such a group can be created via
+```python
+from lcdb.analysis.util import LearningCurveGroup
+lcg = LearningCurveGroup(df_grouped["learning_curve"])
+```
+
+It will be guaranteed that that learning curve objects in this group all have the same shape in `.values`.
+
+A `LearningCurveGroup` object is iterable, so you can iterate over the learning curves in it.
+When iterating, you directly get access to the `lc.values` object instead of `lc`, where `lc` is a curve object in `lcg.curves`.
+
+```python
+  for lc in lcg:
+      print(lc.shape)
+```
+The axis labels can be accessed in the same way as for the learning curve objects themselves, i.e., `lcg.metrics`, `lcg.test_seeds`, etc. Since these are now unified for all learning curves, there is no need to access these anymore directly in the learning curve objects.

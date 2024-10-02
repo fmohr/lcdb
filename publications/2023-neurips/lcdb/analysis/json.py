@@ -132,3 +132,12 @@ class QueryPreprocessorResults(JMESExpressionQuery):
             f".children[? tag == 'transform_train'] | [*][0]"
             f".children | [*][*]"
         )
+
+
+class QueryFittimes(JMESExpressionQuery):
+    def __init__(self):
+        super().__init__(
+            f"children[? tag == 'build_curves'] | [0]"  
+            f".children[? tag == 'anchor'] | [*]"  
+            f".children[? tag == 'fit'] | [*][0]" 
+        )
