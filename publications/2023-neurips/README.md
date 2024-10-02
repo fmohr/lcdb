@@ -263,3 +263,14 @@ config_cols = [c for c in df.columns if c.startswith("p:")]
 df.groupby(config_cols).agg({"learning_curve": merge_curves})
 ```
 After this operation, there will be only one line for every hyperparameter configuration in the dataframe, and learning curves for different seeds but otherwise identical setups will have been merged into a single learning curve object (missing values will be nan).
+
+### Learning Curve Groups
+It can be convenient to hold a list of learning curve objects that all have the same dimensionality. LCDB 2.0 allows groups of learning curves *for the same workflow* that *either* share the same dataset and differ in hyperparameters *or* have the same hyperparameter values but differ in the dataset (openmlid).
+
+Once the learning curves for the identical context are grouped (no duplicates in openmlid/hp_config combination) as above, such a group can be created via
+```python
+from lcdb.analysis.util import LearningCurveGroup
+lcg = LearningCurveGroup(df_grouped["learning_curve"])
+```
+
+It will be guaranteed that that learning curve objects in this group all have the same shape in `.values`.
