@@ -42,6 +42,59 @@ class LearningCurve:
     def is_iteration_wise_curve(self):
         return self.anchors_iteration is not None and len(self.anchors_iteration) > 0
 
+    def pad(self, dim, dim_labels, inplace=False):
+
+        dim_names = ["metrics", "fold_names", "test_seeds", "val_seeds", "workflow_seeds", "anchors_size"]
+        dim_index = dim_names.index(dim)
+
+        if self.is_iteration_wise_curve:
+            dim_names.append("anchors_iteration")
+
+        cur_domain = getattr(self, dim)
+        indices_to_insert = [i for i, label in enumerate(dim_labels) if label in cur_domain]
+
+        # create new values object with nans
+        old_shape = self.values.shape
+        new_shape = list(old_shape)
+        new_shape[dim_names.index(dim)] = len(dim_labels)
+        new_shape = tuple(new_shape)
+        new_values = np.zeros(new_shape)
+        new_values[:] = np.nan
+
+        # fill up new object with existing values
+        selectors = tuple([
+            slice(None, None, None) if (label != dim) else indices_to_insert for i, label in enumerate(dim_names)
+        ])
+        new_values[selectors] = self.values
+
+        if inplace:
+            self.values = new_values
+            cur_domain.clear()
+            cur_domain.extend(dim_labels)
+            assert len(cur_domain) == self.values.shape[dim_index]
+
+        else:
+            assert len(dim_labels) == new_values.shape[dim_index]
+            new_lc = {"workflow": self.workflow, "hp_config": self.hp_config, "openmlid": self.openmlid,
+                      "values": new_values, "metrics": self.metrics, "fold_names": self.fold_names,
+                      "test_seeds": self.test_seeds, "val_seeds": self.val_seeds, "workflow_seeds": self.workflow_seeds,
+                      "anchors_size": self.anchors_size, dim: dim_labels}
+            return LearningCurve(**new_lc)
+
+    def clone(self):
+        return LearningCurve(**{
+            "workflow": self.workflow,
+            "hp_config": self.hp_config,
+            "openmlid": self.openmlid,
+            "values": self.values,
+            "metrics": self.metrics,
+            "fold_names": self.fold_names,
+            "test_seeds": self.test_seeds,
+            "val_seeds": self.val_seeds,
+            "workflow_seeds": self.workflow_seeds,
+            "anchors_size": self.anchors_size
+        })
+
     def pad_anchors_size(self, anchors_size, inplace=False):
 
         num_anchors_size = len(anchors_size)
@@ -75,6 +128,134 @@ class LearningCurve:
                 workflow_seeds=self.workflow_seeds,
                 anchors_size=anchors_size
             )
+
+
+class LearningCurveGroup:
+
+    def __init__(self, curves=None):
+
+        self.workflow = None
+        self.group_attribute = None
+        self.moving_attribute = None
+        self.openmlids = []
+        self.hp_configs = []
+        self.metrics = []
+        self.fold_names = []
+        self.test_seeds = []
+        self.val_seeds = []
+        self.workflow_seeds = []
+        self.anchors_size = []
+        self.anchors_iteration = []
+
+        self.attribute_names_per_dimension = [
+            "openmlids", "hp_configs", "metrics", "fold_names", "test_seeds", "val_seeds", "workflow_seeds",
+            "anchors_size", "anchors_iteration"
+        ]
+
+        self.curves = []
+        if curves is not None:
+            for curve in curves:
+                self.add_curve(curve)
+
+    def add_curve(self, curve):
+
+        # check workflow compatibility
+        if self.workflow is not None and self.workflow != curve.workflow:
+            raise ValueError("Cannot join learning curves from different workflows into a group.")
+        elif self.workflow is None:
+            self.workflow = curve.workflow
+
+        # check axis compatibility
+        if len(self.curves) > 0:
+
+            # determine attribute for which all curves are identical (and implicitly in which they move)
+            if self.group_attribute is None:
+                different_dataset = curve.openmlid != self.openmlids[0]
+                different_config = curve.hp_config != self.hp_configs[0]
+                if different_dataset and different_config:
+                    raise ValueError("Cannot group together learning curves that differ in both dataset and hp config!")
+                if different_dataset:
+                    self.group_attribute = "hp_config"
+                    self.moving_attribute = "openmlid"
+                else:
+                    self.group_attribute = "openmlid"
+                    self.moving_attribute = "hp_config"
+
+        # add the value to the group axis and make sure that it is not a double entry
+        if curve.hp_config not in self.hp_configs:
+            self.hp_configs.append(curve.hp_config)
+        elif self.moving_attribute == "hp_config":
+            raise ValueError(
+                "Cannot add a second curve for the same hyperparameter configuration to a group. Merge the curves before.")
+        if curve.openmlid not in self.openmlids:
+            self.openmlids.append(curve.openmlid)
+        elif self.moving_attribute == "openmlid":
+            raise ValueError("Cannot add a second curve for the same dataset to a group. Merge the curves before.")
+
+        # update numpy array in group or of new curve if necessary
+        for attribute_name in self.attribute_names_per_dimension[2:]:
+
+            domain_group = getattr(self, attribute_name)
+            domain_new_curve = getattr(curve, attribute_name)
+
+            values_to_add_for_group = [v for v in domain_new_curve if
+                                       v not in domain_group] if domain_new_curve is not None else []
+            values_to_add_for_new_curve = [v for v in domain_group if v not in domain_new_curve]
+
+            domain_group += values_to_add_for_group
+
+            # if there are new values, define the new domain and pad the existing curves
+            if len(values_to_add_for_group) > 0:
+                for existing_curve in self.curves:
+                    # existing_curve.pad(dim=attribute_name, dim_labels=domain_group)
+                    raise NotImplementedError
+
+            if len(values_to_add_for_new_curve) > 0:
+                curve = curve.pad(dim=attribute_name, dim_labels=domain_group, inplace=False)
+
+            if attribute_name in ["anchors_size", "anchors_iteration"] and sorted(domain_group) != domain_group:
+                print(f"WARNING: {attribute_name} has unnaturally ordered values {domain_group}")
+
+        self.curves.append(curve.clone())
+
+    def __getitem__(self, key):
+        if type(key) == int:
+            return self.curves[key].values
+
+        if type(key) != tuple:
+            _lcg = LearningCurveGroup()
+            _lcg.curves = self.curves[key]
+            _lcg.workflow = self.workflow
+            _lcg.group_attribute = self.group_attribute
+            _lcg.moving_attribute = self.moving_attribute
+            _lcg.openmlids = self.openmlids
+            _lcg.hp_configs = self.hp_configs
+            _lcg.metrics = self.metrics
+            _lcg.fold_names = self.fold_names
+            _lcg.test_seeds = self.test_seeds
+            _lcg.val_seeds = self.val_seeds
+            _lcg.workflow_seeds = self.workflow_seeds
+            _lcg.anchors_size = self.anchors_size
+            _lcg.anchors_iteration = self.anchors_iteration
+
+            _lcg.attribute_names_per_dimension = self.attribute_names_per_dimension
+            return _lcg
+
+        curve_index = key[0]
+        rest_index = key[1:]
+
+        selected_curves = self.curves[curve_index]
+        if isinstance(selected_curves, LearningCurve):
+            selected_curves = [selected_curves]
+        if len(selected_curves) == 0:
+            return None
+        if len(selected_curves) == 1:
+            return selected_curves[0].values[rest_index]
+        else:
+            return np.array([sc.values[rest_index] for sc in selected_curves])
+
+    def __len__(self):
+        return len(self.curves)
 
 
 class LearningCurveExtractor:
