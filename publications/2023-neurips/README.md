@@ -274,3 +274,12 @@ lcg = LearningCurveGroup(df_grouped["learning_curve"])
 ```
 
 It will be guaranteed that that learning curve objects in this group all have the same shape in `.values`.
+
+A `LearningCurveGroup` object is iterable, so you can iterate over the learning curves in it.
+When iterating, you directly get access to the `lc.values` object instead of `lc`, where `lc` is a curve object in `lcg.curves`.
+
+```python
+  for lc in lcg:
+      print(lc.shape)
+```
+The axis labels can be accessed in the same way as for the learning curve objects themselves, i.e., `lcg.metrics`, `lcg.test_seeds`, etc. Since these are now unified for all learning curves, there is no need to access these anymore directly in the learning curve objects.
