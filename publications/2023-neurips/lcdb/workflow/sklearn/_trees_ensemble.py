@@ -48,9 +48,6 @@ CONFIG_SPACE.add_condition(
 )
 
 
-
-
-
 class TreesEnsembleWorkflow(SklearnWorkflow):
     # Static Attribute
     _config_space = CONFIG_SPACE
@@ -62,7 +59,7 @@ class TreesEnsembleWorkflow(SklearnWorkflow):
 
     def __init__(
         self,
-        n_estimators=1,
+        n_estimators=2048,
         criterion="gini",
         max_depth=None,
         min_samples_split=2,
