@@ -395,7 +395,7 @@ class LearningCurveBuilder:
             self.workflow.infos["classes_overall"] if self.is_classification else None
         )
 
-        with self.timer.time("get_predictions"):
+        with (self.timer.time("get_predictions")):
             for X_split, label_split in [
                 (self.X_train_at_anchor, "train"),
                 (self.X_valid, "val"),
@@ -409,6 +409,9 @@ class LearningCurveBuilder:
                         if self.is_classification
                         else None
                     )
+                    assert keys[f"y_pred_proba_{label_split}"].shape[1] <= len(self.workflow.infos["classes_overall"]),\
+                        "Prediction matrix has more columns than there are classes."
+
                     keys[f"y_pred_{label_split}"] = (
                         self.workflow.get_predictions_from_probas(
                             keys[f"y_pred_proba_{label_split}"]

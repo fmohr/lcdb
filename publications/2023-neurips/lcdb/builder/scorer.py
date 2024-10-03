@@ -30,6 +30,9 @@ class ClassificationScorer:
         self.timer = Timer() if timer is None else timer
 
     def score(self, y_true, y_pred, y_pred_proba):
+        assert y_pred_proba.shape[1] <= len(self.classes_overall),\
+            f"Distribution with {y_pred_proba.shape[1]} columns delivered,"\
+            " but there are only {len(self.classes_overall)} classes."
 
         # make sure that y_predict_proba is a matrix over all known labels (not only the ones known to the learner)
         if len(self.padded_classes) > 0:
@@ -123,9 +126,9 @@ class ClassificationScorer:
 
                             score[f"auc_{multi_class}_{average}"] = auc
                 elif metric_name == "log_loss":
-                    y_base = y_pred_proba[:, 1] if y_pred_proba.shape[1] == 2 else y_pred_proba
+                    #y_base = y_pred_proba[:, 1] if y_pred_proba.shape[1] == 2 else y_pred_proba
                     score = np.round(
-                        log_loss(y_true, y_base, labels=self.classes_overall), 5
+                        log_loss(y_true, y_pred_proba, labels=self.classes_overall), 5
                     )
                 elif metric_name == "brier_score":
                     if is_binary:

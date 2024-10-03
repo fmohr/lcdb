@@ -18,7 +18,7 @@ ch.setFormatter(formatter)
 logger = logging.getLogger("LCDB")
 logger.handlers.clear()
 logger.addHandler(ch)
-logger.setLevel(logging.WARN)
+logger.setLevel(logging.DEBUG)
 
 DATASETS = [
     61,
@@ -41,7 +41,8 @@ WORKFLOWS = [
     "lcdb.workflow.sklearn.MajorityWorkflow",
     "lcdb.workflow.sklearn.RandomWorkflow",
     "lcdb.workflow.sklearn.DTWorkflow",
-    "lcdb.workflow.sklearn.TreesEnsembleWorkflow"
+    "lcdb.workflow.sklearn.TreesEnsembleWorkflow",
+    "lcdb.workflow.xgboost.XGBoostWorkflow"
 ]
 
 VAL_SEEDS = [0]
@@ -74,7 +75,7 @@ class TestBuildFunctionalities(unittest.TestCase):
                 workflow_seed=workflow_seed,
                 raise_errors=True,
                 anchor_schedule="power-2-2-2",
-                epoch_schedule="power"
+                epoch_schedule="power-2-2-2"
             )
 
             final_node = out["metadata"]["json"]["children"][-1]
@@ -134,15 +135,6 @@ class TestBuildFunctionalities(unittest.TestCase):
             "pp@selectp_percentile": 25,
             "pp@std_with_std": True
         })
-
-        # define stream handler
-        ch = logging.StreamHandler()
-        ch.setLevel(logging.DEBUG)
-        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-        ch.setFormatter(formatter)
-
-        logger = logging.getLogger("LCDB")
-        logger.addHandler(ch)
 
         output = run_learning_workflow(
             openml_id=openmlid,

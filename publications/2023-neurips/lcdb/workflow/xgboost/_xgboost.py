@@ -1,42 +1,11 @@
 import numpy as np
 from ConfigSpace import ConfigurationSpace, Float, Integer, Uniform
-from lcdb.scorer import ClassificationScorer
-#from lcdb.utils import filter_keys_with_prefix
-#from lcdb.workflow._preprocessing_workflow import PreprocessedWorkflow
-from ...utils import filter_keys_with_prefix, get_schedule
+from lcdb.builder.scorer import ClassificationScorer
+from lcdb.builder.utils import filter_keys_with_prefix, get_schedule
 from .._preprocessing_workflow import PreprocessedWorkflow
 from sklearn.preprocessing import LabelEncoder
 from xgboost import DMatrix, XGBClassifier
 from xgboost.callback import TrainingCallback
-
-
-class ExtendedLabelEncoder(LabelEncoder):
-    def __init__(self, handle_unknown="ignore"):
-        self.handle_unknown = handle_unknown
-        self.unknown_integer = None
-        LabelEncoder.__init__(self)
-
-    def fit(self, y):
-        # unknown integer is n if n is the number of seen classes
-        # because we map seen class labels to (0 to n-1) and n is the next unseen class
-        if self.handle_unknown == "ignore":
-            if "___UNKNOWN___" in y:
-                raise ValueError("___UNKNOWN___ is a reserved label")
-        self.unknown_integer = len(np.unique(y))
-        return super(ExtendedLabelEncoder, self).fit(y)
-
-    def transform(self, y):
-        if self.handle_unknown == "ignore":
-            return [super(ExtendedLabelEncoder, self).transform([label])[
-                        0] if label in self.classes_ else self.unknown_integer for label in y]
-        else:
-            return super(ExtendedLabelEncoder, self).transform(y)
-
-    def inverse_transform(self, y):
-        if self.handle_unknown == "ignore":
-            return [super(ExtendedLabelEncoder, self).inverse_transform([label])[0] if label != self.unknown_integer else "___UNKNOWN___" for label in y]
-        else:
-            return super(ExtendedLabelEncoder, self).inverse_transform(y)
 
 
 CONFIG_SPACE = ConfigurationSpace(
@@ -91,27 +60,19 @@ CONFIG_SPACE = ConfigurationSpace(
 
 
 class EvalCallBack(TrainingCallback):
-    def __init__(self, workflow, timer, encoder, data, epoch_schedule: str = "power"):
+    def __init__(self, workflow, timer, encoder, data, schedule: str = "power"):
         super().__init__()
         self.timer = timer
+        self.encoder = encoder
         self.workflow = workflow
         self.scorer = None
-        self.encoder = encoder
         self.data = data
-        self.n_classes = len(self.workflow.infos["classes_train"])
-        self.epoch_schedule = epoch_schedule
-        self.schedule = set(get_schedule(
-            name=epoch_schedule, n=self.workflow.n_estimators, base=2, power=0.5, delay=0
-        ))
+        self.schedule = schedule
 
         self.epoch = None
         self.train_timer_id = None
         self.test_timer_id = None
         self.epoch_timer_id = None
-
-        self.data["train"]["y"] = self.encoder.inverse_transform(self.data["train"]["y"])
-        self.data["val"]["y"] = self.encoder.inverse_transform(self.data["val"]["y"])
-        self.data["test"]["y"] = self.encoder.inverse_transform(self.data["test"]["y"])
 
     def before_iteration(self, model, epoch, evals_log):
         # start tracking time for the current anchor (epoch)
@@ -124,7 +85,8 @@ class EvalCallBack(TrainingCallback):
     def after_iteration(self, model, epoch, evals_log):
         assert self.timer.active_node.id == self.train_timer_id
         self.timer.stop()
-        if epoch in self.schedule:
+        if (epoch + 1) in self.schedule:
+            self.workflow.logger.info(f"Computing iteration-wise performance curve at iteration anchor {epoch + 1}")
             self.test_timer_id = self.timer.start("epoch_test")
             with self.timer.time("metrics"):
                 for label_split, data_split in self.data.items():
@@ -132,73 +94,29 @@ class EvalCallBack(TrainingCallback):
                         with self.timer.time("predict_with_proba"):
                             y_pred_proba = model.predict(data_split["X"], strict_shape=True)
 
-                        y_pred_proba = self.create_full_probs(y_pred_proba)
-                        y_pred = self.create_labels_from_probs(y_pred_proba, invert=True)
+                        y_pred_proba = self.workflow._create_full_probs(y_pred_proba)
+                        y_pred = self.workflow._predict_label_from_probs(y_pred_proba, orig_label=False)
 
                         y_true = data_split["y"]
 
                         # get the scorer lazy, because at init time, the labels are not yet registered
                         if self.scorer is None:
                             self.scorer = ClassificationScorer(
-                                classes_learner=list(self.workflow.learner.classes_),
+                                classes_learner=self.workflow.infos["classes_train"],
                                 classes_overall=self.workflow.infos["classes_overall"],
                                 timer=self.timer
                             )
-
-                        self.scorer.score(
+                        out = self.scorer.score(
                             y_true=y_true,
                             y_pred=y_pred,
                             y_pred_proba=y_pred_proba,
                         )
+                        self.workflow.logger.debug(f"{label_split} accuracy: {np.diag(out['confusion_matrix']).sum() / np.sum(out['confusion_matrix'])}")
             assert self.timer.active_node.id == self.test_timer_id
             self.timer.stop()
             assert self.timer.active_node.id == self.epoch_timer_id
         self.timer.stop()
         return False
-
-    #def before_training(self, model):
-    #    # start tracking time for the training
-    #    self.train_timer_id = self.timer.start("epoch_train")
-    #    return model
-
-    #def after_training(self, model):
-    #    assert self.timer.active_node.id == self.train_timer_id
-    #    self.timer.stop()
-    #    self.test_timer_id = self.timer.start("epoch_test")
-    #    with self.timer.time("metrics"):
-    #        for label_split, data_split in self.data.items():
-    #            with self.timer.time(label_split):
-    #                with self.timer.time("predict_with_proba"):
-    #                    y_pred_proba = model.predict(data_split["X"], strict_shape=True)
-
-    #                y_pred_proba = self.create_full_probs(y_pred_proba)
-    #                y_pred = self.create_labels_from_probs(y_pred_proba, invert=True)
-
-    #                y_true = data_split["y"]
-
-    #                self.scorer.score(
-    #                    y_true=y_true,
-    #                    y_pred=y_pred,
-    #                    y_pred_proba=y_pred_proba,
-    #                )
-    #    self.timer.stop()
-    #    return model
-
-    def create_full_probs(self, probs_pred):
-        if self.n_classes == 2:
-            # add the first class (0) to the probabilities
-            probs_pred = np.concatenate((1 - probs_pred, probs_pred), axis=1)
-        return probs_pred
-
-    def create_labels_from_probs(self, probs_pred, invert: bool = False):
-        # get the index of the highest probability
-        # this is the same procedure the official sklearn wrapper uses
-        # https://github.com/dmlc/xgboost/blob/6c0a190f6d12d2ba6a1cabd7741881ea1913d433/python-package/xgboost/sklearn.py#L1568
-        y_pred = np.argmax(probs_pred, axis=1)
-        # invert the label encoding index if necessary
-        if invert:
-            y_pred = self.encoder.inverse_transform(y_pred)
-        return y_pred
 
 
 class XGBoostWorkflow(PreprocessedWorkflow):
@@ -211,12 +129,11 @@ class XGBoostWorkflow(PreprocessedWorkflow):
     )
 
     # FIXME: increase the number of iterations to something like 1000-10000
-    # FIXME: random_state?
     # FIXME: trycatch and logging?
     def __init__(
         self,
         timer=None,
-        n_estimators=100,
+        n_estimators=2048,
         learning_rate=0.3,
         gamma=10**-6,
         min_child_weight=0,
@@ -226,9 +143,18 @@ class XGBoostWorkflow(PreprocessedWorkflow):
         reg_alpha=10**-6,
         reg_lambda=1,
         random_state=None,
+        logger=None,
+        epoch_schedule="power",
+        raise_exception_on_unsuitable_preprocessor=True,
         **kwargs,
     ):
-        super().__init__(timer, **filter_keys_with_prefix(kwargs, prefix="pp@"))
+        super().__init__(
+            timer=timer,
+            logger=logger,
+            random_state=random_state,
+            raise_exception_on_unsuitable_preprocessor=raise_exception_on_unsuitable_preprocessor,
+            **filter_keys_with_prefix(kwargs, prefix="pp@")
+        )
 
         self.requires_valid_to_fit = True
         self.requires_test_to_fit = True
@@ -249,13 +175,27 @@ class XGBoostWorkflow(PreprocessedWorkflow):
 
         self.learner = XGBClassifier(**learner_kwargs)
 
-        self.encoder = ExtendedLabelEncoder()
+        self.schedule = get_schedule(
+            name=epoch_schedule, n=self.n_estimators
+        )
+
+        self.encoder = LabelEncoder()
+        self.labels_missing_in_train_set = None  # will be set in fit
+        self.n_classes = None
 
     @classmethod
     def config_space(cls):
         return cls._config_space
 
-    def _fit(self, X, y, X_valid, y_valid, X_test, y_test, metadata):
+    @classmethod
+    def builds_iteration_curve(cls):
+        return True
+
+    @classmethod
+    def is_randomizable(cls):
+        return True
+
+    def _fit_model_after_transformation(self, X, y, X_valid, y_valid, X_test, y_test, metadata):
         # FIXME: not sure what is the best way to additionally track the time spent in the fit method
         #   we could try to also track some of the overhead here for example the y transform but this is not real
         #   like in outer workflow
@@ -263,15 +203,8 @@ class XGBoostWorkflow(PreprocessedWorkflow):
         # store the metadata and label encode y, y_valid and y_test
         self.metadata = metadata
         self.encoder.fit(y)
-        self.infos["classes"] = list(self.encoder.classes_)
-        y = self.encoder.transform(y)
-        y_valid = self.encoder.transform(y_valid)
-        y_test = self.encoder.transform(y_test)
-
-        # transform X, X_valid and X_test
-        X = self.transform(X, y, metadata)
-        X_valid = self.transform(X_valid, y_valid, metadata)
-        X_test = self.transform(X_test, y_test, metadata)
+        self.labels_missing_in_train_set = sorted(set(self.infos["classes_overall"]).difference(set(self.infos["classes_train"])))
+        self.n_classes = len(self.infos["classes_train"])
 
         # construct callback that will handle the iteration-wise learning curve tracking and set it as a callback
         eval_callback = EvalCallBack(
@@ -279,12 +212,11 @@ class XGBoostWorkflow(PreprocessedWorkflow):
             timer=self.timer,
             encoder=self.encoder,
             data=dict(train=dict(X=DMatrix(X, label=y), y=y), val=dict(X=DMatrix(X_valid), y=y_valid), test=dict(X=DMatrix(X_test), y=y_test)),
-            epoch_schedule="power"
+            schedule=self.schedule
         )
         self.learner.set_params(callbacks=[eval_callback])
 
-        n_classes = len(self.infos["classes"])
-        multiclass = n_classes > 2
+        multiclass = self.n_classes > 2
 
         if multiclass:
             self.learner.set_params(objective="multi:softprob")
@@ -292,14 +224,32 @@ class XGBoostWorkflow(PreprocessedWorkflow):
             self.learner.set_params(objective="binary:logistic")
 
         # fit the learner
-        self.learner.fit(X, y)
+        self.logger.info(f"Starting training of XGBoost with schedule {self.schedule}")
+        self.learner.fit(X, self.encoder.transform(y))
+        self.logger.info("Training of XGBoost finished")
 
-    def _predict(self, X):
-        X_pred = self.pp_pipeline.transform(X)
-        y_pred = self.learner.predict(X_pred)
-        return self.encoder.inverse_transform(y_pred)
+    def _create_full_probs(self, probs_pred):
+        if self.n_classes == 2 and probs_pred.shape[1] == 1:
+            # add the first class (0) to the probabilities
+            probs_pred = np.concatenate((1 - probs_pred, probs_pred), axis=1)
+        probs_pred /= probs_pred.sum(axis=1, keepdims=True)  # make sure that probs sum to 1
+        return probs_pred
 
-    def _predict_proba(self, X):
-        X_pred = self.pp_pipeline.transform(X)
-        y_pred = self.learner.predict_proba(X_pred)
-        return y_pred
+    def _predict_label_from_probs(self, probs, orig_label=True):
+        key = "classes_train"
+        if orig_label:
+            key += "_orig"
+        return np.array([
+            self.infos[key][i] for i in np.argmax(probs, axis=1)
+        ])
+
+    def _predict_proba_after_transform(self, X):
+        y_prob = self.learner.predict_proba(X)
+        assert y_prob.shape[1] <= self.n_classes, "XGBoost has created a distribution with more columns than there are classes."
+        out = self._create_full_probs(y_prob)
+        assert out.shape[1] <= self.n_classes, "_create_full_probs has created a distribution with more columns than there are classes."
+        return out
+
+    def _predict_after_transform(self, X, orig_label=True):
+        return self._predict_label_from_probs(self._predict_proba_after_transform(X), orig_label=orig_label)
+
