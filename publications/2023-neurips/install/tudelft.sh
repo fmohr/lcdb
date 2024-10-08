@@ -1,16 +1,18 @@
 #!/bin/bash
 
+mkdir ../build
 echo "Installing to ../build"
 cd ../build
 
 set -xe
 
 # Load modules available on the current system
+module use /opt/insy/modulefiles
 module load miniconda/3.11
 
 # Copy the base conda environment
 conda create -p dhenv --clone base -y
-conda activate dhenv/
+conda activate `pwd`/dhenv/ #need to specify full path
 pip install --upgrade pip
 
 # Install the DeepHyper's Python package
@@ -37,11 +39,12 @@ lcdb --help
 
 # Create activation script
 touch activate-dhenv.sh
-echo "#!/bin/bash" >> activate-dhenv.sh
+echo '#!/bin/bash' >> activate-dhenv.sh # ! = history expansion when " is used. ' turns this off
 
 
 # Append modules loading and conda activation
 echo "" >> activate-dhenv.sh
+echo 'module use /opt/insy/modulefiles' >> activate-dhenv.sh
 echo "module load openmpi/4.0.1" >> activate-dhenv.sh
 echo "module load miniconda/3.11" >> activate-dhenv.sh
 echo "conda activate $PWD/dhenv/" >> activate-dhenv.sh

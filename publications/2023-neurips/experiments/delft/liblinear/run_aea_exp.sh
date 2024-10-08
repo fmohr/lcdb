@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --partition=general --qos=short
-#SBATCH --time=4:00:00
-#SBATCH --ntasks=128 --cpus-per-task=2
+#SBATCH --time=1:00:00
+#SBATCH --ntasks=12 --cpus-per-task=2
 #SBATCH --mem-per-cpu=4096
 #SBATCH --job-name=lcdb2
 #SBATCH --output=lcdbB2.txt
@@ -12,7 +12,7 @@ module load miniconda/3.11
 module load openmpi/4.0.1
 
 source $HOME/.bashrc # this is to make sure that we have CONDA available, could be done in a different way
-source $HOME/build/activate-dhenv.sh
+source $HOME/user_support/tom_viering/build/activate-dhenv.sh
 
 #!!! CONFIGURATION - START
 source config.sh
