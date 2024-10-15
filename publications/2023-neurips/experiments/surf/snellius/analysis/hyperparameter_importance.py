@@ -16,13 +16,13 @@ import seaborn as sns
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--n_trees', type=int, default=16)
-    parser.add_argument('--openml_ids', type=int, nargs='+', default=[3])
+    parser.add_argument('--openml_ids', type=int, nargs='+', default=[3, 6])
     parser.add_argument('--workflow_name', type=str, default="lcdb.workflow.sklearn.LibLinearWorkflow")
     parser.add_argument('--openml_taskid_name', type=str, default="m:openmlid")
     parser.add_argument('--output_directory', type=str, default=os.path.expanduser('~/experiments/lcdb'))
     parser.add_argument('--output_filetype', type=str, choices=['pdf', 'png'], default='png')
     parser.add_argument('--max_load', type=int, default=None)
-    parser.add_argument('--anchor_value', type=int, default=2048)
+    parser.add_argument('--anchor_values', type=int, nargs='+', default=[128, 512, 2048, -1])
     return parser.parse_args()
 
 
@@ -44,7 +44,7 @@ def numeric_encode(df, config_space):
     return result
 
 
-def fanova_on_task(task_results, performance_column_name, config_space, n_trees):
+def fanova_on_task(task_results, performance_column_name, current_anchor_value, config_space, n_trees):
     fanova_results = []
 
     evaluator = fanova.fanova.fANOVA(
@@ -61,14 +61,15 @@ def fanova_on_task(task_results, performance_column_name, config_space, n_trees)
 
         fanova_results.append({
             "hyperparameter": pname,
-            "fanova": importance[(idx,)]["individual importance"],
+            "anchor": current_anchor_value,
+            "variance_contribution": importance[(idx,)]["individual importance"],
         })
     return fanova_results
 
 
 def run(args):
     fanova_all_results = []
-    performance_column = "objective"
+    performance_column = "final_objective"  # make sure to give this a unique name (not same as the "objective" field)
     anchor_size_column = "anchor_sizes"
     learning_curve_column = "learning_curve_data"
 
@@ -95,50 +96,54 @@ def run(args):
         # job_ids = frame_workflow_job_task['job_id'].unique()
         if len(workflow_ids) > 1 or len(openml_task_ids) > 1:
             raise ValueError('Should not happen. %s %s' % (str(workflow_ids), str(openml_task_ids)))
-        if (workflow_ids[0], openml_task_ids[0]) not in id_results:
-            id_results[(workflow_ids[0], openml_task_ids[0])] = list()
 
-        performance_values_new = list()
-        for index, row in frame_workflow_job_task.iterrows():
-            anchor_sizes = row[anchor_size_column]
-            performance_value_at_anchor = np.nan
-            if args.anchor_value is not None:
-                if args.anchor_value not in anchor_sizes:
-                    logging.warning('Anchor %d not available in task %d workflow %s'
-                                    % (args.anchor_value, openml_task_ids[0], workflow_ids[0])
-                    )
+        for current_anchor_value in args.anchor_values:
+            if (workflow_ids[0], openml_task_ids[0], current_anchor_value) not in id_results:
+                id_results[(workflow_ids[0], openml_task_ids[0], current_anchor_value)] = list()
+
+            performance_values_new = list()
+            for index, row in frame_workflow_job_task.iterrows():
+                anchor_sizes = row[anchor_size_column]
+                performance_value_at_anchor = np.nan
+                if current_anchor_value != -1:
+                    if current_anchor_value not in anchor_sizes:
+                        logging.warning('Anchor %d not available in task %d workflow %s'
+                                        % (current_anchor_value, openml_task_ids[0], workflow_ids[0])
+                        )
+                    else:
+                        anchor_index = anchor_sizes.index(current_anchor_value)
+                        performance_value_at_anchor = row[learning_curve_column][anchor_index]
                 else:
-                    anchor_index = anchor_sizes.index(args.anchor_value)
-                    performance_value_at_anchor = row[learning_curve_column][anchor_index]
-            else:
-                performance_value_at_anchor = row[learning_curve_column][-1]
-            performance_values_new.append(performance_value_at_anchor)
-        performance_values_new = np.array(performance_values_new, dtype=float)
-        frame_workflow_job_task[performance_column] = pd.Series(performance_values_new)
+                    performance_value_at_anchor = row[learning_curve_column][-1]
+                performance_values_new.append(performance_value_at_anchor)
+            performance_values_new = np.array(performance_values_new, dtype=float)
+            frame_workflow_job_task[performance_column] = pd.Series(performance_values_new)
 
-        id_results[(workflow_ids[0], openml_task_ids[0])].append(frame_workflow_job_task)
+            id_results[(workflow_ids[0], openml_task_ids[0], current_anchor_value)].append(frame_workflow_job_task)
 
-        load_count += 1
-        if args.max_load and load_count >= args.max_load:
-            break
+            load_count += 1
+            if args.max_load and load_count >= args.max_load:
+                break
 
     task_ids = set()
-    for idx, (workflow_name, task_id) in enumerate(id_results):
+    for idx, (workflow_name, task_id, current_anchor_value) in enumerate(id_results):
         task_ids.add(task_id)
-        task_results = pd.concat(id_results[(workflow_name, task_id)])
+        task_results = pd.concat(id_results[(workflow_name, task_id, current_anchor_value)])
         task_results = task_results.rename(workflow_hyperparameter_mapping, axis=1)
         relevant_columns = list(workflow_hyperparameter_mapping.values()) + [performance_column]
         task_results = task_results[relevant_columns]
 
-        logging.info("Starting with task %d (%d/%d)" % (task_id, idx + 1, len(id_results)))
-        fanova_task_results = fanova_on_task(task_results, performance_column, config_space, args.n_trees)
+        logging.info("Starting with task %d anchor %d (%d/%d)" % (task_id, current_anchor_value, idx + 1, len(id_results)))
+        fanova_task_results = fanova_on_task(
+            task_results, performance_column, current_anchor_value, config_space, args.n_trees
+        )
         fanova_all_results.extend(fanova_task_results)
 
     fanova_all_results = pd.DataFrame(fanova_all_results)
 
     # generate plot
     fig, ax = plt.subplots(figsize=(16, 9))
-    sns.boxplot(x="hyperparameter", y="fanova", data=fanova_all_results, ax=ax)
+    sns.boxplot(x="hyperparameter", y="variance_contribution", hue="anchor", data=fanova_all_results, ax=ax)
     ax.set_xticklabels(ax.get_xticklabels(), rotation=45, ha="right")
     ax.set_ylabel("Variance Contribution")
     ax.set_xlabel(None)
@@ -147,12 +152,14 @@ def run(args):
 
     # save plot to file
     filename_suffix = ""
-    if args.anchor_value is not None:
-        filename_suffix = "_anchor_%d" % args.anchor_value
-    output_file = args.output_directory + '/fanova_%s%s.%s' % (args.workflow_name, filename_suffix, args.output_filetype)
+    if args.anchor_values is not None:
+        filename_suffix = "_anchor_%s" % str(args.anchor_values)
+    output_file_base = args.output_directory + '/fanova_%s%s' % (args.workflow_name, filename_suffix)
     os.makedirs(args.output_directory, exist_ok=True)
-    plt.savefig(output_file)
-    logging.info('saved to %s' % output_file)
+    fanova_all_results.to_csv(output_file_base + '.csv')
+    plt.savefig(output_file_base + '.' + args.output_filetype)
+    logging.info('saved plot to %s.%s' % (output_file_base, args.output_filetype))
+    logging.info('saved csv to %s.csv' % output_file_base)
 
 
 if __name__ == '__main__':
