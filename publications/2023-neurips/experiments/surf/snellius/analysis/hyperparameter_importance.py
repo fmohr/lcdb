@@ -117,13 +117,15 @@ def run(args):
                     performance_value_at_anchor = row[learning_curve_column][-1]
                 performance_values_new.append(performance_value_at_anchor)
             performance_values_new = np.array(performance_values_new, dtype=float)
-            frame_workflow_job_task[performance_column] = pd.Series(performance_values_new)
 
-            id_results[(workflow_ids[0], openml_task_ids[0], current_anchor_value)].append(frame_workflow_job_task)
+            # make a copy
+            frame_copy = frame_workflow_job_task.copy(deep=True)
+            frame_copy[performance_column] = pd.Series(performance_values_new)
+            id_results[(workflow_ids[0], openml_task_ids[0], current_anchor_value)].append(frame_copy)
 
-            load_count += 1
-            if args.max_load and load_count >= args.max_load:
-                break
+        load_count += 1
+        if args.max_load and load_count >= args.max_load:
+            break
 
     task_ids = set()
     for idx, (workflow_name, task_id, current_anchor_value) in enumerate(id_results):
@@ -133,7 +135,11 @@ def run(args):
         relevant_columns = list(workflow_hyperparameter_mapping.values()) + [performance_column]
         task_results = task_results[relevant_columns]
 
-        logging.info("Starting with task %d anchor %d (%d/%d)" % (task_id, current_anchor_value, idx + 1, len(id_results)))
+        nan_count = task_results[performance_column].isna().sum()
+        logging.info("Starting with task %d anchor %d (%d/%d), shape %s %d nans" % (
+            task_id, current_anchor_value, idx + 1, len(id_results), task_results.shape, nan_count)
+        )
+
         fanova_task_results = fanova_on_task(
             task_results, performance_column, current_anchor_value, config_space, args.n_trees
         )
