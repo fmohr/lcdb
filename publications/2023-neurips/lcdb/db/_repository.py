@@ -1,4 +1,3 @@
-import os
 from abc import abstractmethod, ABC
 
 
@@ -10,7 +9,14 @@ class Repository(ABC):
     @staticmethod
     def get(path):
         from ._local_repository import LocalRepository
-        return LocalRepository(path)
+        from ._pcloud_repository import PCloudRepository
+
+        if path.startswith("pcloud:"):
+            repo_code = path[7:]
+            return PCloudRepository(repo_code=repo_code)
+
+        else:
+            return LocalRepository(path)
 
     @abstractmethod
     def add_results(self, campaign, *result_files):

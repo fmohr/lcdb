@@ -73,9 +73,10 @@ class LCDB:
             cfg = json.load(f)
             repository_paths = {}
             for k, p in cfg["repositories"].items():
-                p = os.path.expanduser(p)
-                if p[:1] != "/":
-                    p = f"{self.path.parent}/{p}"
+                if not p.startswith("pcloud:"):
+                    p = os.path.expanduser(p)
+                    if p[:1] != "/":
+                        p = f"{self.path.parent}/{p}"
                 repository_paths[k] = p
 
         self._repositories = {}

@@ -1,67 +1,82 @@
+from ._util import CountAwareGenerator
+
 import gzip
 import logging
-import os
-import pathlib
+import io
 import time
 
 import pandas as pd
 
 from lcdb.db._dataframe import deserialize_dataframe
 from lcdb.db._repository import Repository
-from ._util import CountAwareGenerator
+
+import requests
+import jmespath
 
 
-class LocalRepository(Repository):
+class PCloudRepository(Repository):
 
-    def __init__(self, repo_dir):
+    def __init__(self, repo_code):
         super().__init__()
-        self.repo_dir = repo_dir
+        self.repo_code = repo_code
+        response = requests.get(f"https://api.pcloud.com/showpublink?code={self.repo_code}")
+        self.content = response.json()
 
     def exists(self):
-        return pathlib.Path(self.repo_dir).exists()
+        return self.content is not None and len(self.content) > 0
 
     def read_result_file(self, file, usecols=None):
-        t_start = time.time()
-        if file.endswith((".gz", ".gzip")):
-            with gzip.GzipFile(file, "rb") as f:
-                df = pd.read_csv(f, usecols=usecols)
+
+        # get download link
+        response = requests.get(f"https://api.pcloud.com/getpublinkdownload?code={self.repo_code}&fileid={file}").json()
+        download_link = "https://" + response["hosts"][0] + response["path"]
+
+        # download file
+        response = requests.get(download_link)
+        if response.status_code == 200:
+
+            t_start = time.time()
+            if download_link.endswith((".gz", ".gzip")):
+                compressed_file = io.BytesIO(response.content)
+                with gzip.GzipFile(fileobj=compressed_file) as f:
+                    df = pd.read_csv(f, usecols=usecols)
+            else:
+                df = pd.read_csv(file, usecols=usecols)
+            t_end = time.time()
+            logging.info(
+                f"Reading {len(df)} lines with {df.shape[1]} cols from {file} took {int(1000 * (t_end - t_start))}ms.")
+            return df
+
         else:
-            df = pd.read_csv(file, usecols=usecols)
-        t_end = time.time()
-        logging.info(f"Reading {len(df)} lines with {df.shape[1]} cols from {file} took {int(1000 * (t_end - t_start))}ms.")
-        return df
+            print(f"Failed to fetch the file. Status code: {response.status_code}")
 
     def add_results(self, campaign, *result_files):
-        for result_file in result_files:
-            df = self.read_result_file(result_file)
-            for (workflow, openmlid, workflow_seed, valid_seed, test_seed), group in df.groupby(
-                    ["m:workflow", "m:openmlid", "m:workflow_seed", "m:valid_seed", "m:test_seed"]
-            ):
-                folder = f"{self.repo_dir}/{workflow}/{campaign}/{int(openmlid)}"
-                pathlib.Path(folder).mkdir(exist_ok=True, parents=True)
-                filename = f"{folder}/{int(workflow_seed)}-{int(test_seed)}-{int(valid_seed)}.csv.gz"
-                group.to_csv(filename, index=False, compression='gzip')
+        raise NotImplementedError
 
     def get_workflows(self):
-        base_folder = self.repo_dir
-        if not pathlib.Path(base_folder).exists():
-            return []
-        else:
-            return [f.name for f in os.scandir(base_folder) if f.is_dir()]
+        return jmespath.compile("metadata.contents[? name == 'data'] | [0] .contents | [*].name").search(self.content)
 
     def get_campaigns(self, workflow):
-        base_folder = f"{self.repo_dir}/{workflow}"
-        if not pathlib.Path(base_folder).exists():
-            return []
-        else:
-            return [f.name for f in os.scandir(base_folder) if f.is_dir()]
+        return jmespath.compile(
+            f"""
+            metadata
+            .contents[? name == 'data'] | [0]
+            .contents | [? name == '{workflow}'] | [0]
+            .contents | [*].name"""
+        ).search(self.content)
 
     def get_datasets(self, workflow, campaign):
-        base_folder = f"{self.repo_dir}/{workflow}/{campaign}"
-        if not pathlib.Path(base_folder).exists():
-            return []
-        else:
-            return [f.name for f in os.scandir(base_folder) if f.is_dir()]
+        return sorted([
+            int(i) for i in jmespath.compile(
+                f"""
+                metadata
+                .contents[? name == 'data'] | [0]
+                .contents | [? name == '{workflow}'] | [0]
+                .contents | [? name == '{campaign}'] | [0]
+                .contents | [*].name
+                """
+            ).search(self.content)]
+        )
 
     def get_result_files_of_workflow_and_dataset_in_campaign(
             self,
@@ -72,19 +87,19 @@ class LocalRepository(Repository):
             test_seeds=None,
             validation_seeds=None
     ):
-        folder = f"{self.repo_dir}/{workflow}/{campaign}/{openmlid}"
+        result_files_unfiltered = jmespath.compile(
+            f"""
+                metadata.contents[? name == 'data'] | [0]
+                .contents | [? name == '{workflow}'] | [0]
+                .contents | [? name == '{campaign}'] | [0]
+                .contents | [? name == '{openmlid}'] | [0]
+                .contents | [*]
+            """).search(self.content)
 
-        if not pathlib.Path(folder).exists():
-            return []
-
-        result_files_unfiltered = [
-            f.name
-            for f in os.scandir(folder)
-            if f.is_file() and f.name.endswith((".csv", ".csv.gz"))
-        ]
-
+        # now collect file ids of matching files
         result_files = []
-        for filename in result_files_unfiltered:
+        for file_data in result_files_unfiltered:
+            filename = file_data["name"]
             offset = 4 if filename.endswith(".csv") else 7
             try:
                 _workflow_seed, _test_seed, _val_seed = [int(i) for i in filename[:-offset].split("-")]
@@ -98,7 +113,7 @@ class LocalRepository(Repository):
                 print(f"Invalid filename {filename}")
                 continue
 
-            result_files.append(f"{folder}/{filename}")
+            result_files.append(file_data["fileid"])
         return result_files
 
     def get_result_files_of_workflow_in_campaign(
