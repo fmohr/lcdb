@@ -44,7 +44,10 @@ class LCDB:
         self.path.mkdir(exist_ok=True, parents=True)
 
         # create default config file
-        default_config = {"repositories": {"local": ".lcdb/data"}}
+        default_config = {"repositories": {
+            "official": "pcloud://kZK9f70Zxwwjkt54zA8FY6kBUFB5PXoAYT9k",
+            "local": ".lcdb/data"}
+        }
         if config is not None:
             default_config.update(config)
         config = default_config
@@ -73,7 +76,7 @@ class LCDB:
             cfg = json.load(f)
             repository_paths = {}
             for k, p in cfg["repositories"].items():
-                if not p.startswith("pcloud:"):
+                if not p.startswith("pcloud://"):
                     p = os.path.expanduser(p)
                     if p[:1] != "/":
                         p = f"{self.path.parent}/{p}"

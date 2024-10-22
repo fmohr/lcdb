@@ -11,8 +11,8 @@ class Repository(ABC):
         from ._local_repository import LocalRepository
         from ._pcloud_repository import PCloudRepository
 
-        if path.startswith("pcloud:"):
-            repo_code = path[7:]
+        if path.startswith("pcloud://"):
+            repo_code = path[9:]
             return PCloudRepository(repo_code=repo_code)
 
         else:
