@@ -31,8 +31,16 @@ class PCloudRepository(Repository):
     def exists(self):
         return self.content is not None and len(self.content) > 0
 
-    def authenticate(self, username, password):
-        url = f"https://api.pcloud.com/userinfo?getauth=1&logout=1&device=lcdbclient"
+    def authenticate(self, username, password, device="lcdbclient", authexpire=300):
+        """
+
+        :param username: the username at pCloud with access to this repository
+        :param password: the password of the user
+        :param device: name associated with the authentication request (usually no change reasonable)
+        :param authexpire: time in seconds after which the received token will expire
+        :return:
+        """
+        url = f"https://api.pcloud.com/userinfo?getauth=1&logout=1&device={device}&authexpire={authexpire}"
         response = requests.post(url, {
             "username": username,
             "password": password
