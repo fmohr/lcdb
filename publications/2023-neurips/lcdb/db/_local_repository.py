@@ -5,14 +5,11 @@ import pathlib
 import time
 
 import pandas as pd
-from tqdm import tqdm
 
 from lcdb.db._dataframe import deserialize_dataframe
 from lcdb.db._repository import Repository
-from lcdb.analysis.json import JsonQuery
 from ._util import CountAwareGenerator
 
-from tqdm import tqdm
 
 class LocalRepository(Repository):
 
