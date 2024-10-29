@@ -5,13 +5,74 @@ import multiprocessing.pool
 import os
 import signal
 import time
-from concurrent.futures import CancelledError, ProcessPoolExecutor, BrokenExecutor
+from concurrent.futures import BrokenExecutor, CancelledError, ProcessPoolExecutor
+from numbers import Number
+from typing import Union
 
 import numpy as np
-from scipy.special import softmax
 import psutil
+from scipy.special import softmax
 
-from deephyper.evaluator._run_function_utils import standardize_run_function_output
+
+def standardize_run_function_output(
+    output: Union[str, float, tuple, list, dict],
+) -> dict:
+    """Transform the output of the run-function to its standard form.
+
+    Possible return values of the run-function are:
+
+    >>> 0
+    >>> 0, 0
+    >>> "F_something"
+    >>> {"objective": 0 }
+    >>> {"objective": (0, 0), "metadata": {...}}
+
+    Args:
+        output (Union[str, float, tuple, list, dict]): the output of the run-function.
+
+    Returns:
+        dict: standardized output of the function.
+    """
+
+    # output returned a single objective value
+    if np.isscalar(output):
+        if isinstance(output, str):
+            output = {"objective": output}
+        elif isinstance(output, Number):
+            output = {"objective": float(output)}
+        else:
+            raise TypeError(
+                f"The output of the run-function cannot be of type {type(output)} it should be either a string or a number."
+            )
+
+    # output only returned objective values as tuple or list
+    elif isinstance(output, (tuple, list)):
+
+        output = {"objective": output}
+
+    elif isinstance(output, dict):
+        pass
+    else:
+        raise TypeError(
+            f"The output of the run-function cannot be of type {type(output)}"
+        )
+
+    metadata = output.get("metadata", dict())
+    if metadata is None:
+        metadata = dict()
+    elif not isinstance(metadata, dict):
+        raise TypeError(
+            f"The metadata of the run-function cannot be of type {type(metadata)}"
+        )
+    output["metadata"] = metadata
+
+    # check if multiple observations returned
+    objective = np.asarray(output["objective"])
+    if objective.ndim == 2:
+        output["objective"] = objective[1, -1].tolist()
+        output["observations"] = objective.tolist()
+
+    return output
 
 
 def import_attr_from_module(path: str):
