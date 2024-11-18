@@ -162,15 +162,18 @@ class PreprocessedWorkflow(BaseWorkflow, ABC):
 
             if not self.transform_fitted:
 
+                # get further pre-processing steps
                 pp_steps = self.get_pp_steps(X, y, metadata, **self.pp_kws)
-
                 for step_name, step_fun in pp_steps:
                     with self.timer.time(step_name) as node:
                         X = step_fun.fit_transform(X, y=y)
                         node["new_shape"] = {"rows": X.shape[0], "cols": X.shape[1]}
                 self.pp_pipeline = Pipeline(steps=pp_steps)
             else:
-                X = self.pp_pipeline.transform(X)
+                for step_name, step_fun in self.pp_pipeline.steps:
+                    with self.timer.time(step_name) as node:
+                        X = step_fun.transform(X)
+                        node["new_shape"] = {"rows": X.shape[0], "cols": X.shape[1]}
         return X
 
     def get_pp_steps(self, X, y, metadata, **kwargs):

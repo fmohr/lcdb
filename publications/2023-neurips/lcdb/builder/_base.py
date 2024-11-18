@@ -70,9 +70,12 @@ def run_learning_workflow(
     run_timer_id = timer.start("run")
 
     # Load the raw dataset
-    with timer.time("load_task"):
+    with timer.time("load_task") as load_timer:
         logger.info("Loading the dataset...")
         (X, y), dataset_metadata = load_task(f"openml.{openml_id}")
+        load_timer["rows"] = X.shape[0]
+        load_timer["cols"] = X.shape[1]
+        load_timer["num_classes"] = dataset_metadata["num_classes"]
 
     # Create and fit the workflow
     logger.info("Importing the workflow...")
@@ -199,6 +202,12 @@ class LearningCurveBuilder:
             self.y_test,
         ) = train_valid_test_split(
             X, y, test_seed, valid_seed, test_prop, valid_prop, stratify=stratify
+        )
+        self.logger.info(
+            f"Original data of size {X.shape} was split into\n"
+            f"\t{self.X_train.shape} training fold\n"
+            f"\t{self.X_valid.shape} validation fold\n"
+            f"\t{self.X_test.shape} test fold"
         )
         self.valid_seed = valid_seed
         self.test_seed = test_seed

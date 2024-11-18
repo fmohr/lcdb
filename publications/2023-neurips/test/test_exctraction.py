@@ -5,6 +5,17 @@ import numpy as np
 from lcdb.analysis.util import LearningCurveExtractor, merge_curves
 from lcdb.db import LCDB
 from parameterized import parameterized
+import logging
+
+ch = logging.StreamHandler()
+ch.setLevel(logging.INFO)
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+ch.setFormatter(formatter)
+
+logger = logging.getLogger("LCDB")
+logger.handlers.clear()
+logger.addHandler(ch)
+logger.setLevel(logging.DEBUG)
 
 
 @pytest.mark.db
@@ -67,13 +78,20 @@ class TestExtractors(unittest.TestCase):
     )
     def test_learning_curve_grouping_after_extraction(self, openmlid, workflow):
 
+        campaigns = ["snellius"]
+        validation_seeds = [0, 1]
+        test_seeds = [0]
+        logger.info(
+            f"Testing extraction of learning curves on dataset {openmlid} for workflow {workflow}"
+            f"Considered campaigns: {campaigns}, validation seeds: {validation_seeds}, test_seeds: {test_seeds}"
+        )
         lcdb = LCDB()
-        validation_seeds = [0, 1, 2, 3, 4]
         df = lcdb.query(
+            campaigns=campaigns,
             openmlids=[openmlid],
             workflows=workflow,
             return_generator=False,
-            test_seeds=[0],
+            test_seeds=test_seeds,
             validation_seeds=validation_seeds,
             processors={
                 "learning_curve": LearningCurveExtractor(

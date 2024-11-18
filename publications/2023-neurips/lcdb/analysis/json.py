@@ -122,14 +122,23 @@ class QueryMetricValuesFromEpochs(JMESExpressionQuery):
         )
 
 
+class QueryDatasetMetadata(JMESExpressionQuery):
+    def __init__(self):
+        super().__init__(
+            f"children[? tag == 'load_task'] | [0].metadata"
+        )
+
+
 class QueryPreprocessorResults(JMESExpressionQuery):
 
-    def __init__(self):
-        super().__init__ (
+    def __init__(self, fold):
+        if fold not in ["train", "valid", "test"]:
+            raise ValueError(f"`fold` must be in 'train', 'valid', 'test' but was {fold}")
+        super().__init__(
             f"children[? tag == 'build_curves'] | [0]"  # here we replace sublists by the first element
             f".children[? tag == 'anchor'] | [*]"  # here we keep all elements of the list
             f".children[? tag == 'fit'] | [*][0]"
-            f".children[? tag == 'transform_train'] | [*][0]"
+            f".children[? tag == 'transform_{fold}'] | [*][0]"
             f".children | [*][*]"
         )
 
