@@ -88,6 +88,5 @@ def main(
     pd.DataFrame(configs, columns=skopt_space.dimension_names).to_csv(
         output_file, index=False
     )
-
     if verbose:
         print(f"Experiments written to {output_file}")
