@@ -1,6 +1,4 @@
 from ._base_workflow import BaseWorkflow
-from .torch import *
-from .sklearn import *
-from .xgboost import *
+from ._preprocessing_workflow import PreprocessedWorkflow
 
-__all__ = ["BaseWorkflow"]
+__all__ = ["BaseWorkflow", "PreprocessedWorkflow"]

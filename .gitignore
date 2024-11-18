@@ -12,8 +12,14 @@ publications/2023-neurips/build/
 .DS_Store
 *.egg-info/
 *.log
+*.err
 *.db
 publications/2023-neurips/lightning_logs/*
 publications/2023-neurips/MNIST/*
 
 .codecarbon.config
+*.jpg
+*.pyc
+pf.txt
+*.xz
+*.gz

@@ -1,8 +1,9 @@
-"""Command line to create/generate new experiments."""
+"""Command line to create a list of hyperparameter configurations to be evaluated later."""
+import os
+import pathlib
 
-import json
-
-from ..workflow._util import get_all_experiments, get_experimenter
+import pandas as pd
+from ..builder.utils import import_attr_from_module
 
 
 def add_subparser(subparsers):
@@ -13,91 +14,79 @@ def add_subparser(subparsers):
     function_to_call = main
 
     subparser = subparsers.add_parser(
-        subparser_name, help="Create new experiments from a configuration file."
+        subparser_name, help="Generate a list of hyperparameter configurations."
     )
 
+    subparser.add_argument("-w", "--workflow-class", type=str, required=True)
+    subparser.add_argument("-n", "--num-configs", type=int, required=True)
     subparser.add_argument(
-        "--config", type=str, required=True, help="Path to the configuration file."
+        "-c", "--campaign", type=str, required=False, default=None
     )
     subparser.add_argument(
-        "--num_configs",
-        type=int,
-        required=False,
-        default=10,
-        help="The number of hyperparameter configurations that are being sampled.",
+        "-o", "--output-file", type=str, required=False, default="configs.csv"
     )
     subparser.add_argument(
-        "--seed",
-        type=int,
-        required=False,
-        default=42,
-        help="The random seed used in sampling configurations.",
+        "-v", "--verbose", action="store_true", default=False, required=False
     )
-    subparser.add_argument(
-        "--max_num_anchors_per_row",
-        type=int,
-        required=False,
-        default=3,
-        help="The number of anchors per row in the database.",
-    )
-    subparser.add_argument('--LHS', action='store_true')
-    subparser.add_argument('--no-LHS', dest='LHS', action='store_false')
-    subparser.set_defaults(LHS=True)
-
-    subparser.add_argument('--random_hps_per_dataset', action='store_true')
-    subparser.add_argument('--no-random_hps_per_dataset', dest='random_hps_per_dataset', action='store_false')
-    subparser.set_defaults(random_hps_per_dataset=True)
+    subparser.add_argument("-s", "--seed", type=int, required=False, default=0)
 
     subparser.set_defaults(func=function_to_call)
 
 
-def batch(iterable, n=1):
-    l = len(iterable)
-    for ndx in range(0, l, n):
-        yield iterable[ndx:min(ndx + n, l)]
-
-
 def main(
-    config: str,
-    num_configs: int,
-    seed: int,
-    max_num_anchors_per_row: int,
-    LHS: bool,
-    random_hps_per_dataset: bool,
-    *args,
-    **kwargs
+    workflow_class,
+    num_configs,
+    output_file,
+    seed=0,
+    verbose=False,
+    campaign=None
 ):
     """
     :meta private:
     """
+    from deephyper.hpo._problem import convert_to_skopt_space
 
-    # create experiment rows
-    workflow_class, experiments = get_all_experiments(
-        config_file=config,
-        num_configs=num_configs,
-        seed=seed,
-        max_num_anchors_per_row=max_num_anchors_per_row,
-        LHS=LHS,
-        random_hps_per_dataset=random_hps_per_dataset,
+    log_dir = os.path.dirname(output_file)
+    pathlib.Path(log_dir).mkdir(parents=True, exist_ok=True)
+
+    # Load the workflow to get its config space
+    WorkflowClass = import_attr_from_module(workflow_class)
+    config_space = WorkflowClass.config_space()
+
+    if verbose:
+        print(config_space)
+
+    # Convert the config space to a skopt space
+    skopt_space = convert_to_skopt_space(config_space, surrogate_model="RF")
+
+    # Sample the configurations
+    # TODO: LHS should be done here
+    configs = skopt_space.rvs(n_samples=num_configs - 1, random_state=seed)
+
+    # Add the default configuration
+    config_default = config_space.get_default_configuration()
+    x = []
+    for i, k in enumerate(skopt_space.dimension_names):
+        # Check if hyperparameter k is active
+        # If it is not active we attribute the "lower bound value" of the space
+        # To avoid duplication of the same "entity" in the list of configurations
+        if k in dict(config_default):
+            val = config_default[k]
+        else:
+            val = skopt_space.dimensions[i].bounds[0]
+        x.append(val)
+    configs.insert(0, x)  # at the beginning
+
+    # modify output file
+    if campaign is not None:
+        if output_file != "configs.csv":
+            raise ValueError("You must specify *either* a campaign *or* an output file; in a campaign, the file is always called 'configs.csv' in the respective workflow folder.")
+        output_folder = f"{campaign.rstrip('/')}/{workflow_class}"
+        pathlib.Path(output_folder).mkdir(parents=True, exist_ok=True)
+        output_file = f"{output_folder}/configs.csv"
+
+    pd.DataFrame(configs, columns=skopt_space.dimension_names).to_csv(
+        output_file, index=False
     )
-
-    # filter experiments
-    if hasattr(workflow_class, "is_experiment_valid"):
-        experiments = [e for e in experiments if workflow_class.is_experiment_valid(e)]
-
-    # replace hyperparameters by strings
-    for e in experiments:
-        e["hyperparameters"] = json.dumps(e["hyperparameters"])
-        e["train_sizes"] = json.dumps(e["train_sizes"])
-
-    # create all rows for the experiments
-    print(list(experiments[0].keys()))
-
-    print('total experiments: %d ' % len(experiments))
-
-    batch_size = 10000
-    batches = batch(experiments, batch_size)
-    num_batches = len(experiments) / batch_size
-    for (cur_batch_num, B) in enumerate(batches):
-        print('inserting batch %d of %d...' % (cur_batch_num, num_batches))
-        get_experimenter(config_file=config).fill_table_with_rows(rows=B)
+    if verbose:
+        print(f"Experiments written to {output_file}")
