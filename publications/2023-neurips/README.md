@@ -110,6 +110,19 @@ Even this way, query times are generally high, and you probably want to avoid ma
 It is therefore highly recommended to retrieve the information you are interested in from the dataframes and only store the important information.
 Most applications only need a fraction of the stored information (often less than 10%), so storing the relevant information locally will drastically speed up your research activity.
 
+### Debug Result
+The `debug_info` object stores detailed error messages and their corresponding `['configs']`, `['tracebacks']`, and `['errors']`. To quickly view the error messages, you can use the following code:
+```python
+lcdb = LCDB()
+debug_info = lcdb.debug(
+    openmlids=[openmlid],
+    workflows=[workflow],
+    show_progress=True
+)
+
+print("Non-duplicate Error: \n", debug_info['errors'].drop_duplicates().reset_index(drop=True).to_frame().to_string(header=False))
+```
+
 ### Processing Result Dictionaries
 The dictionaries stored inside `m:json` contain a potentially deep tree structure. The dictionary itself is the root node of this tree, and for any node, children can be obtained through the `children` key. Each node has the following entries:
 | Key    | Type of value  | Description of the value |
