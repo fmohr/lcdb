@@ -12,6 +12,7 @@ from lcdb.db._repository import Repository
 
 import requests
 import jmespath
+from json import JSONDecodeError
 
 
 class PCloudRepository(Repository):
@@ -233,8 +234,8 @@ class PCloudRepository(Repository):
                 print(f"Invalid filename {filename}")
                 continue
 
-            result_files.append(file_data["fileid"])
-        return result_files
+            result_files.append([workflow, campaign, openmlid, _workflow_seed, _test_seed, _val_seed, file_data["fileid"]])
+        return pd.DataFrame(result_files, columns=["workflow", "campaign", "openmlid", "seed_workflow", "seed_test", "seed_val", "fileid"])
 
     def get_result_files_of_workflow_in_campaign(
             self,
@@ -249,17 +250,18 @@ class PCloudRepository(Repository):
         if openmlids is None:
             openmlids = self.get_datasets(workflow=workflow, campaign=campaign)
 
-        filenames = []
+        result_files = None
         for openmlid in openmlids:
-            filenames.extend(self.get_result_files_of_workflow_and_dataset_in_campaign(
+            result_files_new = self.get_result_files_of_workflow_and_dataset_in_campaign(
                 workflow=workflow,
                 campaign=campaign,
                 openmlid=openmlid,
                 workflow_seeds=workflow_seeds,
                 test_seeds=test_seeds,
                 validation_seeds=validation_seeds
-            ))
-        return filenames
+            )
+            result_files = result_files_new if result_files is None else pd.concat([result_files, result_files_new])
+        return result_files
 
     def get_result_files_of_workflow(
             self,
@@ -270,19 +272,20 @@ class PCloudRepository(Repository):
             test_seeds=None,
             validation_seeds=None
     ):
-        filenames = []
+        result_files = None
         if campaigns is None:
             campaigns = self.get_campaigns(workflow)
         for campaign in campaigns:
-            filenames.extend(self.get_result_files_of_workflow_in_campaign(
+            result_files_new = self.get_result_files_of_workflow_in_campaign(
                 workflow=workflow,
                 campaign=campaign,
                 openmlids=openmlids,
                 workflow_seeds=workflow_seeds,
                 test_seeds=test_seeds,
                 validation_seeds=validation_seeds
-            ))
-        return filenames
+            )
+            result_files = result_files_new if result_files is None else pd.concat([result_files, result_files_new])
+        return result_files
 
     def get_result_files(
             self,
@@ -296,16 +299,17 @@ class PCloudRepository(Repository):
         if workflows is None:
             workflows = self.get_workflows()
 
-        result_files = []
+        result_files = None
         for workflow in workflows:
-            result_files.extend(self.get_result_files_of_workflow(
+            result_files_new = self.get_result_files_of_workflow(
                 workflow=workflow,
                 campaigns=campaigns,
                 openmlids=openmlids,
                 workflow_seeds=workflow_seeds,
                 test_seeds=test_seeds,
                 validation_seeds=validation_seeds
-            ))
+            )
+            result_files = result_files_new if result_files is None else pd.concat([result_files, result_files_new])
         return result_files
 
     def query_results_as_stream(
@@ -316,7 +320,9 @@ class PCloudRepository(Repository):
             workflow_seeds=None,
             test_seeds=None,
             validation_seeds=None,
-            processors=None
+            processors=None,
+            raise_errors=False,
+            report_errors=True
     ):
         """
 
@@ -344,20 +350,42 @@ class PCloudRepository(Repository):
 
         # read in all result files
 
-        def gen_fun():
+        def gen_fun(raise_errors=False):
             total_entries = 0
 
-            for file in result_files:
+            for i, file_desc in result_files.iterrows():
                 if total_entries > 10 ** 6:
                     raise ValueError(f"Cannot read in more than 10**6 results.")
-                df = self.read_result_file(file)
-                df_deserialized = deserialize_dataframe(df)
+                df = self.read_result_file(file_desc["fileid"])
+                try:
+                    df_deserialized = deserialize_dataframe(df)
+                except Exception as e:
+                    is_parsing_error = isinstance(e, JSONDecodeError)
+                    if is_parsing_error:
+                        error_msg = f"Parsing error {repr(e)} for result file:"
+                    else:
+                        error_msg = f"{type(e)} with message '{repr(e)}' in result file:"
+
+                    error_msg += ""\
+                                f"\n\tworkflow {file_desc['workflow']}"\
+                                f"\n\tcampaign {file_desc['campaign']}"\
+                                f"\n\topenmlid {file_desc['openmlid']}"\
+                                f"\n\tseed_wf {file_desc['seed_workflow']}"\
+                                f"\n\tseed_test {file_desc['seed_test']}"\
+                                f"\n\tseed_valid {file_desc['seed_val']}"\
+                                f"\n\tpCloud file id {file_desc['fileid']}"
+                    if raise_errors:
+                        raise Exception(error_msg)
+                    elif report_errors:
+                        print(error_msg)
+                    df_deserialized = None
+
                 if processors is not None:
                     for name, fun in processors.items():
                         df[name] = df.apply(fun, axis=1)  # apply the function to all rows in the dataframe
                     df.drop(columns="m:json", inplace=True)
 
-                total_entries += len(df_deserialized)
+                total_entries += len(df_deserialized) if df_deserialized is not None else 0
                 yield df_deserialized
 
         return CountAwareGenerator(len(result_files), gen=gen_fun())

@@ -242,31 +242,33 @@ class LCDB:
         tracebacks, configs, errors = [], [], []
 
         for df in tqdm(gen, disable=not show_progress):
-            # check if "traceback" column exists
-            if "m:traceback" in df.columns:
-                traceback_rows = df[df["m:traceback"].notna()]
 
-                # extract corresponding configuration parameters
-                if not traceback_rows.empty:
-                    traceback_indices = traceback_rows.index.tolist()
-                    config_cols = [c for c in df.columns if c.startswith("p:")]
-                    # corresponding_configs = df.loc[traceback_rows.index]
-                    # configs.append(corresponding_configs)
-                    corresponding_configs_reset = df.loc[traceback_indices, config_cols].drop_duplicates().reset_index(drop=True)
-                    configs.append(corresponding_configs_reset)
+            if df is not None:
+                # check if "traceback" column exists
+                if "m:traceback" in df.columns:
+                    traceback_rows = df[df["m:traceback"].notna()]
 
-                    tracebacks.append(traceback_rows["m:traceback"])
+                    # extract corresponding configuration parameters
+                    if not traceback_rows.empty:
+                        traceback_indices = traceback_rows.index.tolist()
+                        config_cols = [c for c in df.columns if c.startswith("p:")]
+                        # corresponding_configs = df.loc[traceback_rows.index]
+                        # configs.append(corresponding_configs)
+                        corresponding_configs_reset = df.loc[traceback_indices, config_cols].drop_duplicates().reset_index(drop=True)
+                        configs.append(corresponding_configs_reset)
 
-                    # extract errors from traceback messages str format first
-                    traceback_str = str(traceback_rows["m:traceback"].iloc[0])
-                    try: 
-                        error_message = re.search(r'(\w+Error): (.*)', traceback_str).group(0)
-                    except:
-                        error_message = traceback_str
-                    errors.append(error_message)
+                        tracebacks.append(traceback_rows["m:traceback"])
 
-            else:
-                print("Error: no traceback column in dataframe")
+                        # extract errors from traceback messages str format first
+                        traceback_str = str(traceback_rows["m:traceback"].iloc[0])
+                        try:
+                            error_message = re.search(r'(\w+Error): (.*)', traceback_str).group(0)
+                        except:
+                            error_message = traceback_str
+                        errors.append(error_message)
+
+                else:
+                    print("Error: no traceback column in dataframe")
 
         return {
             "configs": pd.concat(configs, ignore_index=True) if configs else None,

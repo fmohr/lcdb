@@ -189,7 +189,7 @@ class PreprocessedWorkflow(BaseWorkflow, ABC):
         # step 1: imputation
         if np.any(pd.isnull(X)):
             cat_steps.append(("cat_imputer", SimpleImputer(strategy="most_frequent")))
-            num_steps.append(("num_imputer", SimpleImputer(strategy="most_frequent")))
+            num_steps.append(("num_imputer", SimpleImputer(strategy="median")))
 
         # step 2: encoding of categorical attributes
         if has_cat:

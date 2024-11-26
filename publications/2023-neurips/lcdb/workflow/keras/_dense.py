@@ -4,9 +4,9 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.keras.utils import Sequence
 from ConfigSpace import Categorical, ConfigurationSpace, Float, Integer
-from ...scorer import ClassificationScorer
-from ...timer import Timer
-from ...utils import get_schedule, filter_keys_with_prefix
+from lcdb.builder.scorer import ClassificationScorer
+from lcdb.builder.timer import Timer
+from lcdb.builder.utils import get_schedule, filter_keys_with_prefix
 from .._base_workflow import BaseWorkflow
 from .._preprocessing_workflow import PreprocessedWorkflow
 from ._augmentation import MixUpAugmentation, CutMixAugmentation, CutOutAugmentation
