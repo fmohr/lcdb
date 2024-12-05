@@ -27,7 +27,8 @@ class PCloudRepository(Repository):
         self.update_content()
 
     def update_content(self):
-        self.content = requests.get(f"https://api.pcloud.com/showpublink?code={self.repo_code}").json()
+        self.content = requests.get(f"https://eapi.pcloud.com/showpublink?code={self.repo_code}").json()
+
 
     def exists(self):
         return self.content is not None and len(self.content) > 0
@@ -41,7 +42,7 @@ class PCloudRepository(Repository):
         :param authexpire: time in seconds after which the received token will expire
         :return:
         """
-        url = f"https://api.pcloud.com/userinfo?getauth=1&logout=1&device={device}&authexpire={authexpire}"
+        url = f"https://eapi.pcloud.com/userinfo?getauth=1&logout=1&device={device}&authexpire={authexpire}"
         response = requests.post(url, {
             "username": username,
             "password": password
@@ -53,7 +54,7 @@ class PCloudRepository(Repository):
     def read_result_file(self, file, usecols=None):
 
         # get download link
-        response = requests.get(f"https://api.pcloud.com/getpublinkdownload?code={self.repo_code}&fileid={file}").json()
+        response = requests.get(f"https://eapi.pcloud.com/getpublinkdownload?code={self.repo_code}&fileid={file}").json()
         download_link = "https://" + response["hosts"][0] + response["path"]
 
         # download file
@@ -100,7 +101,7 @@ class PCloudRepository(Repository):
 
     def _create_folder(self, parent_folder_id, name):
         response = requests.get(
-            f"https://api.pcloud.com/createfolder?code={self.repo_code}&auth={self.token}&folderid={parent_folder_id}&name={name}"
+            f"https://eapi.pcloud.com/createfolder?code={self.repo_code}&auth={self.token}&folderid={parent_folder_id}&name={name}"
         ).json()
         if response is None:
             raise ValueError(f"Could not create folder '{name}', received no response")
@@ -165,7 +166,7 @@ class PCloudRepository(Repository):
                 csv_buffer.seek(0)
 
                 # upload the file
-                url = f"https://api.pcloud.com/uploadfile?code={self.repo_code}&auth={self.token}&folderid={folder_id}&filename={name}"
+                url = f"https://eapi.pcloud.com/uploadfile?code={self.repo_code}&auth={self.token}&folderid={folder_id}&filename={name}"
                 status = requests.post(url, files={'file': (name, csv_buffer, 'application/gzip')}).json()
                 if not isinstance(status, dict):
                     raise ValueError(

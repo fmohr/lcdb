@@ -2,8 +2,6 @@ import os
 
 import pandas as pd
 import gzip
-from . import deserialize_dataframe
-
 
 class TracebackExtractor:
 
