@@ -20,7 +20,6 @@ export NTOTRANKS=$DESIRED_CORES
 mkdir -p $LCDB_OUTPUT_RUN
 pushd $LCDB_OUTPUT_RUN
 
-    # --workflow-memory-limit $SLURM_MEM_PER_CPU \ 
 # Run experiment
 srun -n ${NTOTRANKS} -N ${SLURM_JOB_NUM_NODES} \
      --cpus-per-task 1 \
