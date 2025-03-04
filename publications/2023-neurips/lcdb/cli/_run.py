@@ -412,6 +412,10 @@ def run_experiment(
         run_learning_workflow_from_deephyper,
     )
 
+    print("method_kwargs", method_kwargs)
+    # print the run function setup
+    print("run_function", run_function)
+    
     with Evaluator.create(
         run_function,
         method=evaluator,

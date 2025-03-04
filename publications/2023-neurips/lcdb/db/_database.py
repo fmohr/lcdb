@@ -272,3 +272,139 @@ class LCDB:
             "tracebacks": pd.Series(tracebacks) if tracebacks else None,
             "errors": pd.Series(errors) if errors else None  
         }
+
+
+    def statistics(
+            self,
+            repositories=None,
+            campaigns=None,
+            workflows=None,
+            openmlids=None,
+            workflow_seeds=None,
+            test_seeds=None,
+            validation_seeds=None,
+            show_progress=False
+    ):
+        """
+        Retrieves only rows that contain a traceback and their associated configs.
+
+        Returns:
+            pd.DataFrame: Execution and error statistics.
+        """
+        if not self.loaded:
+            self._load()
+
+        # Validate repositories
+        if repositories is None:
+            repositories = list(self.repositories.values())
+        else:
+            invalid_repos = set(repositories) - self.repositories.keys()
+            if invalid_repos:
+                raise ValueError(f"Invalid repositories: {invalid_repos}")
+            repositories = [self.repositories[name] for name in repositories]
+
+        if isinstance(workflows, str):
+            workflows = [workflows]
+
+        # Collect result generators with error handling
+        result_generators = []
+        for repo in repositories:
+            if not repo.exists():
+                print(f"Skipping non-existent repository: {repo}")
+                continue  # Skip repositories that don't exist
+
+            try:
+                gen = repo.query_results_as_stream(
+                    campaigns=campaigns,
+                    workflows=workflows,
+                    openmlids=openmlids,
+                    workflow_seeds=workflow_seeds,
+                    test_seeds=test_seeds,
+                    validation_seeds=validation_seeds
+                )
+
+                if gen is None:
+                    print(f"Warning: query_results_as_stream returned None for repository: {repo}")
+                    continue  # Skip None results
+
+                result_generators.append(gen)
+
+            except Exception as e:
+                print(f"Error retrieving results from {repo}: {e}")
+                continue  # Skip on failure
+
+        # Ensure we have valid generators
+        if not result_generators:
+            print("Error: No valid data sources found.")
+            return pd.DataFrame()  # Return an empty DataFrame to avoid crashes
+
+        # Create a generator function
+        def generator():
+            for gen in result_generators:
+                yield from gen
+
+        try:
+            gen = CountAwareGenerator(sum(len(g) for g in result_generators), generator())
+        except TypeError:
+            print("Error: One of the generators is invalid.")
+            return pd.DataFrame()
+
+        records = []  # Stores structured data for CSV output
+
+        def process_traceback(df):
+            """Extracts traceback messages, errors, configs, execution times, and metadata."""
+            num_configs = len(df)
+            traceback_rows = df[df["m:traceback"].notna()]
+            num_errors = len(traceback_rows)
+            error_rate = num_errors / num_configs if num_configs else 0
+
+            tracebacks, errors = [], []
+            for _, row in traceback_rows.iterrows():
+                traceback_str = row["m:traceback"]
+                try:
+                    error_message = re.search(r'(\w+Error): (.*)', traceback_str).group(0)
+                except AttributeError:
+                    error_message = traceback_str  # Use full traceback if regex fails
+                
+                tracebacks.append(traceback_str)
+                errors.append(error_message)
+
+            # Extract metadata fields
+            workflow = df["m:workflow"].iloc[0] if "m:workflow" in df.columns else None
+            openmlid = df["m:openmlid"].iloc[0] if "m:openmlid" in df.columns else None
+            # ensure openmlids column is integers
+            if openmlid is not None:
+                openmlid = int(openmlid)
+            memory = df["m:memory"].iloc[0] if "m:memory" in df.columns else None
+
+            # Calculate execution times
+            if "m:timestamp_start" in df.columns and "m:timestamp_end" in df.columns:
+                df["execution_time"] = df["m:timestamp_end"] - df["m:timestamp_start"]
+                avg_config_time = df["execution_time"].mean()
+                max_config_time = df["execution_time"].max()
+            else:
+                avg_config_time, max_config_time = None, None
+
+            # Append structured data
+            records.append({
+                "workflow": workflow,
+                "openmlid": openmlid,
+                "num_configs": num_configs,
+                "error_rate": error_rate,
+                "tracebacks": tracebacks,
+                "errors": errors,
+                "memory": memory,
+                "avg_config_time": avg_config_time,
+                "max_config_time": max_config_time
+            })
+
+        for df in tqdm(gen, disable=not show_progress):
+            if df is not None and "m:traceback" in df.columns:
+                process_traceback(df)
+            elif df is not None:
+                print("Warning: No 'm:traceback' column in dataframe")
+
+        # Convert to DataFrame
+        result_df = pd.DataFrame(records)
+
+        return result_df

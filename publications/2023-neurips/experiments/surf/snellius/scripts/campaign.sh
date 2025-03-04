@@ -1,27 +1,28 @@
 #!/bin/bash
 #SBATCH --partition=rome
-#SBATCH --time=02:00:00
+#SBATCH --time=48:00:00
 #SBATCH --threads-per-core=1
 
 module load 2023
 module load OpenMPI/4.1.5-GCC-12.3.0
-source /home/$USER/projects/lcdb/publications/2023-neurips/build/activate-dhenv.sh
+source /home/$USER/workspace/lcdb/publications/2023-neurips/build/activate-dhenv.sh
 
-declare -a values
-while IFS= read -r line || [[ -n "$line" ]]; do
-    values+=("$line")
-done < "./datasets_to_test.csv"
-export LCDB_OPENML_ID_ARRAY=(${values[@]})
+declare -a result_files=("$@")
+# srun lcdb add -c data_probing -t "e7E1H7ZiFqSZR6Rfh7L38FRhOdBuicF5BuFfPbX7" "${result_files[@]}"
 
-# source config
-LCDB_OPENML_ID=${LCDB_OPENML_ID_ARRAY[$SLURM_ARRAY_TASK_ID]}
-echo ""$LCDB_OPENML_ID""
-
-export LCDB_OUTPUT_DATASET=$LCDB_OUTPUT_WORKFLOW/$LCDB_OPENML_ID
-export LCDB_OUTPUT_RUN=$LCDB_OUTPUT_DATASET/$LCDB_VALID_SEED-$LCDB_TEST_SEED-$LCDB_WORKFLOW_SEED
+# campaing_name="data_probing- and exported MEM parameter
+campaign_name="data_probing-$MEM"
 
 
-echo ""$LCDB_OUTPUT_RUN""
+# Define the path to the .env file (e.g., one level up)
+ENV_PATH="../../../.env"  # Adjust as needed
 
-# Run the srun command with all the paths
-srun lcdb add -c snellius $LCDB_OUTPUT_RUN/"results.csv.gz"
+# Load the .env file if it exists
+if [ -f "$ENV_PATH" ]; then
+    export $(grep -v '^#' "$ENV_PATH" | xargs)
+fi
+
+
+for file in "${result_files[@]}"; do
+  srun lcdb add -c "$campaign_name" -t "$PCLOUD_TOKEN" "$file" || true
+done

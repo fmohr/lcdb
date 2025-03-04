@@ -1,76 +1,80 @@
 #!/bin/bash
 # set -xe
-# get the workflow
+
+# Workflow mapping
 declare -A mapping
 mapping=(
     ["libsvm"]="lcdb.workflow.sklearn.LibSVMWorkflow"
     ["randomforest"]="lcdb.workflow.sklearn.RandomForestWorkflow"
-    ["liblinear"]="lcdb.workflow.sklearn.LibLinearWorkflow"
     ["knn"]="lcdb.workflow.sklearn.KNNWorkflow"
     ["xgboost"]="lcdb.workflow.xgboost.XGBoostWorkflow"
     ["treesensemble"]="lcdb.workflow.sklearn.TreesEnsembleWorkflow"
+    ["liblinear"]="lcdb.workflow.sklearn.LibLinearWorkflow"
 )
 
-# retrieve the value based on the key
+# Validate workflow selection
 if [[ -n "${mapping[$1]}" ]]; then
     export LCDB_WORKFLOW=${mapping[$1]}
     export LCDB_OUTPUT_WORKFLOW=$PWD/$1/output/$LCDB_WORKFLOW
-
 else
     echo "Invalid algorithm: '$1'"
+    exit 1
 fi
 
 echo "'$LCDB_WORKFLOW' and '$LCDB_OUTPUT_WORKFLOW'"
 
-# redirecting output and error to the appropriate log file
+# Redirect output and error logs
 log_dir="$PWD/$1"
 mkdir -p "$log_dir"
 exec > >(tee -a "$log_dir/wrapper.log") 2>&1
 
-val_seeds=(0 1 2 3 4)
-test_seeds=(0 1 2 3 4)
-
-# create the configs to be executed
+# Load config
 source scripts/config.sh
-./scripts/create.sh
+
+# Submit create.sh as a Slurm job
+create_job_id=$(sbatch --export=ALL --parsable scripts/create.sh)
+echo "Submitted create.sh with Job ID: $create_job_id"
+
+val_seeds=(0)
+test_seeds=(0 1)
 
 # Number of nodes
-# TODO: Not yet supported but should investigate
 NODES=1
 
 for val_seed in "${val_seeds[@]}"; do
     for test_seed in "${test_seeds[@]}"; do
-
-        # default setting 128
-        CPUS_PER_TASK=32   
-        # total memory per node in GB
-        MEMORY_PER_NODE_GB=224
+        CPUS_PER_TASK=192
+        export DESIRED_CORES=6
+        MEMORY_PER_NODE_GB=336
         
-        # calculate total memory across all nodes and convert to MB
+        # Memory calculations
         TOTAL_MEMORY_GB=$((MEMORY_PER_NODE_GB * NODES))
         TOTAL_MEMORY_MB=$((TOTAL_MEMORY_GB * 1024))
+        MEMORY_PER_CORE=$((TOTAL_MEMORY_MB / DESIRED_CORES))
+        export LCDB_WORKFLOW_MEMORY_LIMIT=$MEMORY_PER_CORE
 
         initial_memory_per_task_mb=$((TOTAL_MEMORY_MB / CPUS_PER_TASK))
         LCDB_EVALUATION_MEMORY_LIMIT=$((initial_memory_per_task_mb - 128))
+        echo "Memory per core/config: $LCDB_EVALUATION_MEMORY_LIMIT"
+        echo "Total memory: $TOTAL_MEMORY_MB"
+        echo "CPUS_PER_TASK: $CPUS_PER_TASK"
 
         export LCDB_VALID_SEED=$val_seed
         export LCDB_TEST_SEED=$test_seed
-
-        # number of datasets will be slurm job array
         array_size=$((${#LCDB_OPENML_ID_ARRAY[@]} - 1))
 
         WRAPPER_SCRIPT='scripts/run.sh'
+        jobname="$1-$CPUS_PER_TASK"
 
-        # jobname is the workflow name 
-        jobname=''$1''
-
+        # Submit run.sh with dependency on create.sh
         sbatch --export=all --job-name=$jobname \
+            --dependency=afterok:$create_job_id \
             --array=0-$array_size \
             --cpus-per-task=$CPUS_PER_TASK \
             --mem-per-cpu=$LCDB_EVALUATION_MEMORY_LIMIT \
             --nodes=$NODES \
-            --output=%x/logs/out/%x_openml_idx-%a_workflow-${LCDB_WORKFLOW_SEED}_val-${val_seed}_test-${test_seed}.log \
-            --error=%x/logs/err/%x_openml_idx-%a_workflow-${LCDB_WORKFLOW_SEED}_val-${val_seed}_test-${test_seed}.err \
+            --output=logs/out/%x/openml_idx-%a_workflow-${LCDB_WORKFLOW_SEED}_val-${val_seed}_test-${test_seed}_mem-${MEMORY_PER_CORE}.log \
+            --error=logs/err/%x/openml_idx-%a_workflow-${LCDB_WORKFLOW_SEED}_val-${val_seed}_test-${test_seed}_mem-${MEMORY_PER_CORE}.err \
             "$WRAPPER_SCRIPT"
     done
 done

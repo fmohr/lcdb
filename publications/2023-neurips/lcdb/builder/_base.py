@@ -386,8 +386,10 @@ class LearningCurveBuilder:
 
                 if isinstance(exception, FunctionCallTimeoutError):
                     self.objective += "_function_call_timeout_error"
+                # TODO: work in progress
                 elif isinstance(exception, MemoryError):
-                    self.objective += "_memory_error"
+                    self.objective = -10
+                    # self.objective += "_memory_error"
 
             error_code = 1
 

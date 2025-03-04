@@ -5,14 +5,11 @@ import gzip
 import logging
 import io
 import time
-import os
 
 import pandas as pd
 
 from lcdb.db._dataframe import deserialize_dataframe
 from lcdb.db._repository import Repository
-import tempfile
-
 
 import requests
 import jmespath
@@ -26,10 +23,9 @@ class PCloudRepository(Repository):
         self.repo_code = repo_code
         self.content = None
         self.token = token
+
         # update content
         self.update_content()
-        self.root_folder_id = self.content['metadata'].get('folderid')
-        print(f"repo code: {self.repo_code}")
 
     def update_content(self):
         self.content = requests.get(f"https://eapi.pcloud.com/showpublink?code={self.repo_code}").json()
@@ -81,27 +77,28 @@ class PCloudRepository(Repository):
         else:
             print(f"Failed to fetch the file. Status code: {response.status_code}")
 
-    def _get_folder_id(self, path=None, root=False):
-        """Returns the folder ID for a specified full path within the repository."""
-        if root:
-            # return the "data" folder ID
-            return jmespath.compile("metadata.contents[? name == 'data'] | [0] .folderid").search(self.content)
-        if path is None:
-            raise ValueError("Path must be specified to get a folder ID.")
+    def _get_folder_id(self, workflow=None, campaign=None, openmlid=None):
+        """
+            Returns the folderid of the folder containing the data for this context.
+            Returns None if that folder does not exist
+        """
 
-        parts = path.split('/')  # Split the path into parts: [dataset, model_size, anchor]
-        folder_id = self.root_folder_id
+        # create query
+        query = "metadata .contents[? name == 'data'] | [0]"
+        if workflow is not None:
+            query += f".contents | [? name == '{workflow}'] | [0]"
+            if campaign is not None:
+                query += f".contents | [? name == '{campaign}'] | [0]"
+                if openmlid is not None:
+                    query += f".contents | [? name == '{openmlid}'] | [0]"
 
-        for part in parts:
-            query = f"metadata.contents[?name=='{part}'] | [0].folderid"
-            folder_id = jmespath.compile(query).search(self.content)
-            if folder_id is None:
-                return None  # Folder not found
-            self.content = requests.get(
-                f"https://eapi.pcloud.com/listfolder?code={self.repo_code}&auth={self.token}&folderid={folder_id}"
-            ).json()  # Update content to current folder
+            elif openmlid is not None:
+                raise ValueError("openmlid can be only set if both a workflow and a campaign are given.")
 
-        return folder_id
+        elif campaign is not None or openmlid is not None:
+            raise ValueError("campaign or openmlid can be only set if a workflow is given.")
+
+        return jmespath.compile(f"{query}.folderid").search(self.content)
 
     def _create_folder(self, parent_folder_id, name):
         self.update_content()
@@ -114,49 +111,11 @@ class PCloudRepository(Repository):
             raise ValueError(f"Could not create folder '{name}', received invalid response: {response}")
         self.update_content()
         return response["metadata"]["folderid"]
-    
 
-    def _get_or_create_folder_id(self, full_path):
-        """Gets or creates the folder ID for the specified path."""
-        self.update_content()
-        print(f"Updated content: {self.content}")  # Debugging
-
-        parts = full_path.split("/")
-        parent_folder_id = self.root_folder_id
-        print(f"Root folder ID: {parent_folder_id}")  # Debugging
-
-        for part in parts:
-            print(f"Checking folder: '{part}' in parent {parent_folder_id}")  # Debugging
-
-            # Fetch folder contents for the current parent folder ID
-            response = requests.get(
-                f"https://eapi.pcloud.com/listfolder?code={self.repo_code}&auth={self.token}&folderid={parent_folder_id}"
-            ).json()
-            print(f"API Response: {response}")  # Debugging
-
-            # Check for error in the response
-            if response.get("result") != 0:
-                print(f"Error fetching folder contents: {response.get('error')}")
-                return None
-
-            folder = next((item for item in response.get("metadata", {}).get("contents", [])
-                           if item["name"] == part and item["isfolder"]), None)
-
-            if folder:
-                parent_folder_id = folder["folderid"]
-            else:
-                parent_folder_id = self._create_folder(parent_folder_id, part)
-                
-
-        # If all parts are found, return the final parent_folder_id
-        return parent_folder_id
-
-
-    
     def add_results(self, campaign, *result_files):
-        """Uploads results as a CSV file to pCloud."""
-        self.update_content()
+        self.update_content()  # make sure that we have the current file structure at pCloud
         for result_file in result_files:
+
             # read result file
             if result_file.endswith((".gz", ".gzip")):
                 with gzip.GzipFile(result_file, "rb") as f:
@@ -164,14 +123,36 @@ class PCloudRepository(Repository):
             else:
                 df = pd.read_csv(result_file)
 
-            # decompose the dataframe to have results for a single workflow/openmlid and seeds
+            # decompose this dataframe so that we have results only for a single workflow/openmlid and seeds
             for (workflow, openmlid, workflow_seed, valid_seed, test_seed), group in df.groupby(
                     ["m:workflow", "m:openmlid", "m:workflow_seed", "m:valid_seed", "m:test_seed"]
             ):
                 name = f"{int(workflow_seed)}-{int(test_seed)}-{int(valid_seed)}.csv.gz"
                 print(f"Adding results for {workflow}/{campaign}/{openmlid}/{name}")
-                path = f"data/{workflow}/{campaign}/{openmlid}"
-                folder_id = self._get_or_create_folder_id(path)
+                folder_id = self._get_folder_id(workflow=workflow, campaign=campaign, openmlid=openmlid)
+
+                # if the folder does not exist, create one
+                if folder_id is None:
+
+                    folder_id_root = self._get_folder_id()
+
+                    # create workflow folder if necessary
+                    folder_id_workflow = self._get_folder_id(workflow=workflow)
+                    if folder_id_workflow is None:
+                        print(f"create workflow folder {workflow} in folder id {folder_id_root}")
+                        folder_id_workflow = self._create_folder(parent_folder_id=folder_id_root, name=workflow)
+
+                    # create campaign folder if necessary
+                    folder_id_campaign = self._get_folder_id(workflow=workflow, campaign=campaign)
+                    if folder_id_campaign is None:
+                        print(f"create campaign folder inside {folder_id_workflow}")
+                        folder_id_campaign = self._create_folder(parent_folder_id=folder_id_workflow, name=campaign)
+
+                    # create dataset folder if necessary
+                    folder_id_dataset = self._get_folder_id(workflow=workflow, campaign=campaign, openmlid=openmlid)
+                    if folder_id_dataset is None:
+                        print(f"create dataset folder inside {folder_id_campaign}")
+                        folder_id = self._create_folder(parent_folder_id=folder_id_campaign, name=openmlid)
 
                 # Create a BytesIO object to hold the CSV in binary format
                 csv_buffer = io.BytesIO()
@@ -195,16 +176,6 @@ class PCloudRepository(Repository):
                     )
                 if status["result"] != 0:
                     raise ValueError(f"Could not add result. Received an error response from pCloud: {status}")
-                
-
-
-    def _upload_file(self, folder_id, file_path, file_name):
-        """Uploads a file to a specific pCloud folder."""
-        url = f"https://eapi.pcloud.com/uploadfile?code={self.repo_code}&auth={self.token}&folderid={folder_id}&filename={file_name}"
-        with open(file_path, "rb") as f:
-            response = requests.post(url, files={"file": (file_name, f)}).json()
-            if response.get("result") != 0:
-                raise ValueError(f"Failed to upload file '{file_name}': {response}")
 
     def get_workflows(self):
         return jmespath.compile("metadata.contents[? name == 'data'] | [0] .contents | [*].name").search(self.content)

@@ -33,8 +33,7 @@ pip install mpi4py --no-cache-dir
 which mpicc
 
 # Install the DeepHyper's Python package
-git clone -b develop git@github.com:deephyper/deephyper.git
-pip install -e "deephyper/[hps,mpi]"
+pip install deephyper==0.8.1
 
 # Install LCDB Package
 cd ..

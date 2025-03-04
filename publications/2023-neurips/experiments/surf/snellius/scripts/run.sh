@@ -1,22 +1,26 @@
 #!/bin/bash
-#SBATCH --partition=rome
-#SBATCH --time=24:00:00
+#SBATCH --partition=genoa
+#SBATCH --time=5:00:00
 #SBATCH --threads-per-core=1
 
 module load 2023
 module load OpenMPI/4.1.5-GCC-12.3.0
-source /home/$USER/projects/lcdb/publications/2023-neurips/build/activate-dhenv.sh
+source /home/$USER/workspace/lcdb/publications/2023-neurips/build/activate-dhenv.sh
 
 #!!! CONFIGURATION - START
 source scripts/config.sh
 
 export timeout=3500
-export NTOTRANKS=$(( $SLURM_JOB_NUM_NODES * $SLURM_CPUS_PER_TASK ))
+# export NTOTRANKS=$(( $SLURM_JOB_NUM_NODES * $SLURM_CPUS_PER_TASK ))
+export NTOTRANKS=$DESIRED_CORES
+
+
 #!!! CONFIGURATION - END
 
 mkdir -p $LCDB_OUTPUT_RUN
 pushd $LCDB_OUTPUT_RUN
 
+    # --workflow-memory-limit $SLURM_MEM_PER_CPU \ 
 # Run experiment
 srun -n ${NTOTRANKS} -N ${SLURM_JOB_NUM_NODES} \
      --cpus-per-task 1 \
@@ -30,16 +34,11 @@ srun -n ${NTOTRANKS} -N ${SLURM_JOB_NUM_NODES} \
     --initial-configs $LCDB_INITIAL_CONFIGS \
     --timeout-on-fit 300 \
     --workflow-seed $LCDB_WORKFLOW_SEED \
-    --workflow-memory-limit $SLURM_MEM_PER_CPU \
+    --workflow-memory-limit $LCDB_WORKFLOW_MEMORY_LIMIT \
     --valid-seed $LCDB_VALID_SEED \
+    --no-exception-on-unsuitable-preprocessor \
     --test-seed $LCDB_TEST_SEED \
     --evaluator mpicomm \
-    $( [ "$LCDB_WORKFLOW" == "lcdb.workflow.sklearn.TreesEnsembleWorkflow" ] && echo "--epoch-schedule=power-2-0.25-0" ) 
+    --epoch-schedule=power-2-0.25-0
 
 gzip --best results.csv 
-
-
-# srun -n 1 lcdb plot \
-#     --results-path $LCDB_OUTPUT_RUN \
-#     --output-path $LCDB_OUTPUT_RUN \
-#     --plot-type $PLOT_TYPE
