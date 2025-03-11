@@ -303,9 +303,10 @@ class LearningCurveBuilder:
                         break
 
                     # Predict and Score
-                    self.logger.info("Predicting and scoring...")
+                    self.logger.info("Starting computation for predictions and scoring functions...")
                     try:
                         self.compute_metrics_for_workflow()
+                        self.logger.info("Finished computation for predictions and scoring functions...")
                     except Exception as exception:
                         # Cancel timers that were started in 'try' block
                         self.timer.cancel(anchor_timer.id, only_children=True)
@@ -345,7 +346,7 @@ class LearningCurveBuilder:
             self.workflow = self.workflow_factory()
 
         self.logger.info(
-            f"Fitting workflow {self.workflow.__class__.__name__} on sample anchor {self.cur_anchor} which is {self.cur_anchor / self.X_train.shape[0] * 100:.2f}% of the dataset."
+            f"Starting with fitting workflow {self.workflow.__class__.__name__} on sample anchor {self.cur_anchor} which is {self.cur_anchor / self.X_train.shape[0] * 100:.2f}% of the dataset."
         )
 
         if self.timeout_on_fit > 0:
@@ -392,7 +393,9 @@ class LearningCurveBuilder:
                     # self.objective += "_memory_error"
 
             error_code = 1
-
+        self.logger.info(
+            f"Finished with fitting workflow {self.workflow.__class__.__name__} on sample anchor {self.cur_anchor}. Output code was {error_code}"
+        )
         return error_code
 
     def compute_metrics_for_workflow(self):
@@ -401,6 +404,7 @@ class LearningCurveBuilder:
         return self.score_predictions(**predictions)
 
     def get_predictions(self):
+        self.logger.info(f"Starting prediction computation.")
         keys = {}
         labels = (
             self.workflow.infos["classes_overall"] if self.is_classification else None
@@ -412,6 +416,7 @@ class LearningCurveBuilder:
                 (self.X_valid, "val"),
                 (self.X_test, "test"),
             ]:
+                self.logger.debug(f"Computing predictions for {label_split} fold.")
                 with warnings.catch_warnings(), self.timer.time(label_split):
                     warnings.simplefilter("ignore")
 
@@ -429,6 +434,7 @@ class LearningCurveBuilder:
                         )
                     )
 
+        self.logger.info(f"Finished prediction computation.")
         return keys, labels
 
     def score_predictions(
@@ -449,12 +455,14 @@ class LearningCurveBuilder:
         else:
             scorer = RegressionScorer(timer=self.timer)
 
+        self.logger.info(f"Starting metric computation for the given predictions.")
         with self.timer.time("metrics"):
             for y_true, y_pred, y_pred_proba, label_split in [
                 (self.y_train_at_anchor, y_pred_train, y_pred_proba_train, "train"),
                 (self.y_valid, y_pred_val, y_pred_proba_val, "val"),
                 (self.y_test, y_pred_test, y_pred_proba_test, "test"),
             ]:
+                self.logger.debug(f"Starting metric computation for the given predictions on {label_split} fold.")
                 with self.timer.time(label_split) as split_timer:
                     if self.is_classification:
                         scores = scorer.score(y_true, y_pred, y_pred_proba)
@@ -464,5 +472,6 @@ class LearningCurveBuilder:
                         scores = scorer.score(y_true, y_pred)
                         if label_split == "val":
                             self.objective = -scores["mean_squared_error"]
-
+                self.logger.debug(f"Finished metric computation for the given predictions on {label_split} fold.")
+        self.logger.info(f"Finished metric computation for the given predictions. Objective is {self.objective}")
         return 0  # no error occurred
