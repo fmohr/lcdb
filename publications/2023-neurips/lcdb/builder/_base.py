@@ -281,7 +281,9 @@ class LearningCurveBuilder:
         self.y_train_at_anchor = y_train[:anchor]
 
     def build_curves(self):
+
         # Build sample-wise learning curve
+        self.logger.info(f"Starting curve construction. Sample sizes will be: {self.anchors}")
 
         with self.timer.time("build_curves"):
             for anchor in tqdm(self.anchors, disable=True):
@@ -332,6 +334,8 @@ class LearningCurveBuilder:
 
                         error_code = 1
                         break
+        
+        self.logger.info(f"Finished curve construction.")
 
     def fit_workflow_on_current_anchor(self) -> int:
         """Fit the workflow on the current anchor.
