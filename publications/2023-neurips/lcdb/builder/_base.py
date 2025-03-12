@@ -38,6 +38,7 @@ def run_learning_workflow(
     raise_exception_on_unsuitable_preprocessor: bool = True,
     anchor_schedule: str = "power",
     epoch_schedule: str = "power",
+    memory_limit_in_bytes: int = 32 * 1024**3,  # 32 GB by default
     logger=None,
 ):
     """This function trains the workflow on a dataset and returns performance metrics.
@@ -99,6 +100,7 @@ def run_learning_workflow(
         workflow_kwargs["raise_exception_on_unsuitable_preprocessor"] = raise_exception_on_unsuitable_preprocessor
 
     workflow_kwargs["logger"] = logger
+    workflow_kwargs["memory_limit_in_bytes"] = memory_limit_in_bytes
 
     def workflow_factory():
         return WorkflowClass(timer=timer, **workflow_kwargs)
@@ -135,6 +137,7 @@ def run_learning_workflow(
         stratify=stratify,
         raise_errors=raise_errors,
         anchor_schedule=anchor_schedule,
+        memory_limit_in_bytes=memory_limit_in_bytes,
         logger=logger
     )
 
@@ -176,6 +179,7 @@ class LearningCurveBuilder:
         known_categories: bool = True,
         raise_errors: bool = False,
         anchor_schedule: str = "power",
+        memory_limit_in_bytes: int = 32 * 1024**3,  # 32GB by default
         logger=None,
     ):
 
@@ -218,6 +222,7 @@ class LearningCurveBuilder:
             name=anchor_schedule, n=len(self.X_train)
         )
         self.logger.info(f"Using sample-wise schedule {self.anchors} based on anchor schedule definition {anchor_schedule}")
+        self.memory_limit_in_bytes = memory_limit_in_bytes
 
         # state variables
         self.cur_anchor = None

@@ -282,3 +282,29 @@ def decision_fun_to_proba(decision_fun_vals):
     else:  # if the decision function values is only a vector, then these are the probs of the positive class
         a = sigmoid(decision_fun_vals)
         return np.column_stack([1 - a, a])
+
+def estimate_memory_consumption_for_dataset(shape, dtype=np.float64, unit="B"):
+
+    if dtype == np.float64:
+        memory_per_field = 8
+    elif dtype == np.float16:
+        memory_per_field = 2
+    else:
+        raise ValueError(f"Cannot estimate the memory consumption for an array of type {dtype}")
+
+    # Compute memory usage
+    num_elements = np.prod(shape)  # Total number of elements
+    memory_bytes = num_elements * memory_per_field
+
+    if unit == "B":
+        pass
+    elif unit == "KB":
+        memory_bytes /= 1024
+    elif unit == "MB":
+        memory_bytes /= (1024**2)  # Convert to MB
+    elif unit == "GB":
+        memory_bytes /= (1024**3)  # Convert to GB
+    else:
+        raise ValueError(f"Unit must be 'B', 'KB', 'MB' or 'GB' but is {unit}")
+    return memory_bytes
+    

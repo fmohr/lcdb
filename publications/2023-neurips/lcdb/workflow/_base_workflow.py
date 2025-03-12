@@ -13,7 +13,7 @@ NP_ARRAY = np.ndarray
 
 class BaseWorkflow(abc.ABC):
 
-    def __init__(self, timer=None, logger=None, random_state=None) -> None:
+    def __init__(self, timer=None, logger=None, random_state=None, memory_limit_in_bytes=None) -> None:
         super().__init__()
         if timer is None:
             self.timer = Timer()
@@ -21,6 +21,9 @@ class BaseWorkflow(abc.ABC):
             raise ValueError(f"timer must be None or object of Timer but is {type(timer)}")
         else:
             self.timer = timer
+        
+        # set memory limit
+        self.memory_limit_in_bytes = memory_limit_in_bytes
 
         # generate warning if the randomness is not seeded
         if self.__class__.is_randomizable() and random_state is None and logger is not None:
@@ -61,7 +64,6 @@ class BaseWorkflow(abc.ABC):
         self.infos["classes_test_orig"] = np.unique(y_test).tolist()
 
         # replace labels
-        y_old = y
         y = self.label_encoder.transform(y)
         y_valid = self.label_encoder.transform(y_valid)
         y_test = self.label_encoder.transform(y_test)

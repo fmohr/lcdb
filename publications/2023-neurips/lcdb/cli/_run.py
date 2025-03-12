@@ -175,6 +175,15 @@ def add_subparser(subparsers):
         help="If set, no exception will be generated if a pre-processor that is irrelevant or useless for the data is being used, e.g., a categorical encoder for a dataset with numerical features only."
     )
 
+    subparser.add_argument(
+        "-ll",
+        "--log-level",
+        type=str,
+        default="info",
+        required=False,
+        help="Controls the log level of the LCDB logger."
+    )
+
     subparser.set_defaults(func=function_to_call)
 
 
@@ -195,6 +204,7 @@ def run_learning_workflow_from_deephyper(
         raise_exception_on_unsuitable_preprocessor: bool = True,
         anchor_schedule: str = "power",
         epoch_schedule: str = "power",
+        memory_limit_in_bytes: int = 32 * (1024**3),  # 32 GB by default
         logger=None,
 ):
     """This function trains the workflow on a dataset and returns performance metrics.
@@ -240,7 +250,8 @@ def run_learning_workflow_from_deephyper(
         raise_errors=raise_errors,
         raise_exception_on_unsuitable_preprocessor=raise_exception_on_unsuitable_preprocessor,
         anchor_schedule=anchor_schedule,
-        epoch_schedule=epoch_schedule
+        epoch_schedule=epoch_schedule,
+        memory_limit_in_bytes=memory_limit_in_bytes
     )
 
 
@@ -445,14 +456,27 @@ def main(**kwargs):
 
     # setup logger
     ch = logging.StreamHandler()
-    ch.setLevel(logging.DEBUG)
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     ch.setFormatter(formatter)
 
     logger = logging.getLogger("LCDB")
     logger.handlers.clear()
     logger.addHandler(ch)
-    logger.setLevel(logging.INFO)
+
+    accepted_log_levels = ["debug", "info", "warn", "error"]
+    if log_level not in accepted_log_levels:
+        raise ValueError(f"--log-level must be in {accepted_log_levels} but is {log_level}")
+    if log_level == "debug":
+        log_level = logging.DEBUG
+    elif log_level == "info":
+        log_level = logging.INFO
+    elif log_level == "warn":
+        log_level = logging.WARN
+    elif log_level == "error":
+        log_level = logging.ERROR
+
+    ch.setLevel(log_level)
+    logger.setLevel(log_level)
 
     # there is no point in making the logger configurable at the CLI, the log level maybe
     kwargs["logger"] = logger

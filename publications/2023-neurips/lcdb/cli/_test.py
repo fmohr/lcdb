@@ -111,10 +111,19 @@ def add_subparser(subparsers):
         help="JSON-parsable string with a dictionary that maps parameter names to their values."
     )
     subparser.add_argument(
-        "--verbose",
-        action="store_true",
-        default=False,
+        "--workflow-memory-limit",
+        type=float,
+        default=1750.0,
         required=False,
+        help="Memory limit per config (MBs).",
+    )
+    subparser.add_argument(
+        "-ll",
+        "--log-level",
+        type=str,
+        default="info",
+        required=False,
+        help="Controls the log level of the LCDB logger."
     )
     subparser.add_argument(
         "--anchor-schedule",
@@ -152,7 +161,8 @@ def main(
     test_prop,
     timeout_on_fit,
     parameters,
-    verbose,
+    workflow_memory_limit,
+    log_level,
     anchor_schedule,
     epoch_schedule,
     no_exception_on_unsuitable_preprocessor
@@ -160,14 +170,26 @@ def main(
 
     # define stream handler
     ch = logging.StreamHandler()
-    ch.setLevel(logging.DEBUG)
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     ch.setFormatter(formatter)
 
     logger = logging.getLogger("LCDB")
     logger.handlers.clear()
     logger.addHandler(ch)
-    logger.setLevel(logging.INFO)
+    accepted_log_levels = ["debug", "info", "warn", "error"]
+    if log_level not in accepted_log_levels:
+        raise ValueError(f"--log-level must be in {accepted_log_levels} but is {log_level}")
+    if log_level == "debug":
+        log_level = logging.DEBUG
+    elif log_level == "info":
+        log_level = logging.INFO
+    elif log_level == "warn":
+        log_level = logging.WARN
+    elif log_level == "error":
+        log_level = logging.ERROR
+
+    ch.setLevel(log_level)
+    logger.setLevel(log_level)
 
     # No parameters are given the default configuration is used
     WorkflowClass = import_attr_from_module(workflow_class)
@@ -210,6 +232,7 @@ def main(
         timeout_on_fit=timeout_on_fit,
         anchor_schedule=anchor_schedule,
         epoch_schedule=epoch_schedule,
+        memory_limit_in_bytes=workflow_memory_limit * 1024**2,
         logger=logger,
         raise_exception_on_unsuitable_preprocessor=not no_exception_on_unsuitable_preprocessor
     )

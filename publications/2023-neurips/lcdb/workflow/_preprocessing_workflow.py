@@ -17,7 +17,7 @@ from ConfigSpace import (
 )
 from sklearn.cluster import FeatureAgglomeration
 from sklearn.compose import ColumnTransformer
-from sklearn.decomposition import FastICA, KernelPCA
+from sklearn.decomposition import FastICA, PCA, KernelPCA
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.feature_selection import SelectPercentile
 from sklearn.impute import SimpleImputer
@@ -32,6 +32,7 @@ from sklearn.preprocessing import (
 )
 
 from ._base_workflow import BaseWorkflow
+from lcdb.builder.utils import estimate_memory_consumption_for_dataset
 
 KEY_CAT_ENCODER = "cat_encoder"
 KEY_SCALER = "scaler"
@@ -113,6 +114,7 @@ class PreprocessedWorkflow(BaseWorkflow, ABC):
         timer=None,
         logger=None,
         random_state=None,
+        memory_limit_in_bytes=None,
         kernel_pca_kernel="linear",
         kernel_pca_n_components=1.0,
         selectp_percentile=100,
@@ -121,7 +123,7 @@ class PreprocessedWorkflow(BaseWorkflow, ABC):
         raise_exception_on_unsuitable_preprocessor=True,
         **kwargs,
     ):
-        super().__init__(timer=timer, logger=logger, random_state=random_state)
+        super().__init__(timer=timer, logger=logger, random_state=random_state, memory_limit_in_bytes=memory_limit_in_bytes)
 
         # extract preprocessing hyperparameters
         self.pp_kws = kwargs
@@ -154,26 +156,106 @@ class PreprocessedWorkflow(BaseWorkflow, ABC):
             if hp.name in techniques:
                 cs.add_hyperparameter(hp)
         return cs
+    
+    def _anticipate_required_memory_for_fit(self, input_shape, pre_processor):
+        if isinstance(pre_processor, PolynomialFeatures):
+            poly = pre_processor
+            num_created_features = poly._num_combinations(
+                n_features=input_shape[1],
+                min_degree=0,
+                max_degree=poly.degree,
+                interaction_only=poly.interaction_only,
+                include_bias=poly.include_bias,
+            )
+            return estimate_memory_consumption_for_dataset((input_shape[0], input_shape[1] + num_created_features))
+        
+        if isinstance(pre_processor, FeatureAgglomeration) or isinstance(pre_processor, PCA):
+            
+            # Will test `num_features**2` possible "links" (translating the memory complexity)
+            return (
+                estimate_memory_consumption_for_dataset(input_shape) +
+                estimate_memory_consumption_for_dataset((input_shape[1], input_shape[1])) # n_features²
+            )
+        
+        if isinstance(pre_processor, KernelPCA):
+            return estimate_memory_consumption_for_dataset((input_shape[0], input_shape[0]))  # n_samples²
+        
+        # if no transformation is known, anticipate that the shape will not be changed
+        return estimate_memory_consumption_for_dataset(input_shape)
+    
+    def _anticipate_required_memory_for_transform(self, input_shape, pre_processor):
+        if isinstance(pre_processor, PolynomialFeatures):
+            poly = pre_processor
+            num_created_features = poly._num_combinations(
+                n_features=input_shape[1],
+                min_degree=0,
+                max_degree=poly.degree,
+                interaction_only=poly.interaction_only,
+                include_bias=poly.include_bias,
+            )
+            return estimate_memory_consumption_for_dataset((input_shape[0], input_shape[1] + num_created_features))
+        
+        if isinstance(pre_processor, FeatureAgglomeration) or isinstance(pre_processor, PCA):
+            
+            # Will test `num_features**2` possible "links" (translating the memory complexity)
+            return (
+                estimate_memory_consumption_for_dataset(input_shape) +
+                estimate_memory_consumption_for_dataset((input_shape[1], input_shape[1])) # n_features²
+            )
+        
+        if isinstance(pre_processor, KernelPCA):
+            return estimate_memory_consumption_for_dataset((pre_processor.eigenvectors_.shape[0], input_shape[0]))  # n_train * n_new
+        
+        # if no transformation is known, anticipate that the shape will not be changed
+        return estimate_memory_consumption_for_dataset(input_shape)
 
     def _transform(self, X, y, metadata):
 
+        self.logger.info(f"Starting data transformation.")
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", UserWarning)
 
             if not self.transform_fitted:
 
+                self.logger.debug(f"Fitting the pre-processors of the pipeline.")
+
                 # get further pre-processing steps
                 pp_steps = self.get_pp_steps(X, y, metadata, **self.pp_kws)
                 for step_name, step_fun in pp_steps:
+
+                    # anticipate memory usage and possibly avoid execution
+                    used_memory_bytes = self._anticipate_required_memory_for_fit(X.shape, step_fun)
+                    self.logger.info(f"Expected memory usage run pre-processor {step_fun.__class__.__name__}: {used_memory_bytes / (1024**3)}GB.")
+                    if used_memory_bytes > self.memory_limit_in_bytes:
+                        raise RuntimeError(
+                            f"{step_name} ({step_fun.__class__.__name__}) is predicted to consume approximately {used_memory_bytes/(1024**3):.3f} GB. "
+                            f"The permitted maximum is {self.memory_limit_in_bytes/(1024**3):.3f} GB!"
+                            )
+
+                    # transform the data
                     with self.timer.time(step_name) as node:
                         X = step_fun.fit_transform(X, y=y)
                         node["new_shape"] = {"rows": X.shape[0], "cols": X.shape[1]}
+                        self.logger.debug(f"New data shape is {X.shape}")
                 self.pp_pipeline = Pipeline(steps=pp_steps)
             else:
+                self.logger.debug(f"Starting data transformation with input size {X.shape}")
                 for step_name, step_fun in self.pp_pipeline.steps:
+
+                    # anticipate memory usage and possibly avoid execution
+                    used_memory_bytes = self._anticipate_required_memory_for_transform(X.shape, step_fun)
+                    self.logger.info(f"Expected memory usage run pre-processor {step_fun.__class__.__name__}: {used_memory_bytes / (1024**3)}GB.")
+                    if used_memory_bytes > self.memory_limit_in_bytes:
+                        raise RuntimeError(
+                            f"{step_name} ({step_fun.__class__.__name__}) is predicted to consume approximately {used_memory_bytes/(1024**3):.3f} GB. "
+                            f"The permitted maximum is {self.memory_limit_in_bytes/(1024**3):.3f} GB!"
+                            )
+
                     with self.timer.time(step_name) as node:
                         X = step_fun.transform(X)
                         node["new_shape"] = {"rows": X.shape[0], "cols": X.shape[1]}
+                        self.logger.debug(f"Finished data transformation of {step_fun.__class__.__name__}. New data size is {X.shape}")
+        self.logger.info(f"Finished data transformation. New data size is {X.shape}")
         return X
 
     def get_pp_steps(self, X, y, metadata, **kwargs):
@@ -296,7 +378,10 @@ class PreprocessedWorkflow(BaseWorkflow, ABC):
             if featuremapper_val == "kernel_pca":
                 # kernel_pca_n_components is a float in [0, 1] that represents the ratio of
                 # components we keep. we map it back to an integer.
-                featuremapper = KernelPCA(
+                if self.kernel_pca_kernel == "linear":
+                    featuremapper = PCA(n_components=min(X.shape[0], max(1, int(self.kernel_pca_n_components * X.shape[1]))))
+                else:
+                    featuremapper = KernelPCA(
                     kernel=self.kernel_pca_kernel,
                     n_components=max(1, int(self.kernel_pca_n_components * X.shape[1])),
                 )
@@ -335,10 +420,18 @@ class PreprocessedWorkflow(BaseWorkflow, ABC):
         X, y = self._transform_train_data_prior_to_standard_preprocessing(X, y)
 
         # transform all the data and store them
+        self.logger.info(f"Starting transformation of training data of size {X.shape}")
         X_train_transformed = self.transform(X=X, y=y, metadata=metadata, timer_suffix="_train").astype(np.float32)  # create + fit pp pipeline
+        self.logger.info(f"Finished transformation of training data. New size is {X_train_transformed.shape}")
+        self.logger.info(f"Starting transformation of validation data of size {X_valid.shape}")
         X_valid_transformed = self.transform(X_valid, y_valid, metadata, timer_suffix="_valid").astype(np.float32)
+        self.logger.info(f"Finished transformation of validation data. New size is {X_valid_transformed.shape}")
+        self.logger.info(f"Starting transformation of test data of size {X_test.shape}")
         X_test_transformed = self.transform(X_test, y_test, metadata, timer_suffix="_test").astype(np.float32)
-
+        self.logger.info(f"Finished transformation of test data. New size is {X_test_transformed.shape}")
+        
+        # fit main model
+        self.logger.info(f"Now fitting the main model.")
         self._fit_model_after_transformation(X_train_transformed, y, X_valid_transformed, y_valid, X_test_transformed, y_test, metadata)
 
     def _transform_train_data_prior_to_standard_preprocessing(self, X, y):
