@@ -211,7 +211,7 @@ class PreprocessedWorkflow(BaseWorkflow, ABC):
 
     def _transform(self, X, y, metadata):
 
-        self.logger.info(f"Starting data transformation.")
+        self.logger.info(f"Starting data transformation. Configured memory limit: {self.memory_limit_in_bytes // 1024**2}MB")
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", UserWarning)
 

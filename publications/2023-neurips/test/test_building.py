@@ -183,7 +183,7 @@ class TestBuildFunctionalities(unittest.TestCase):
             max_num_cols_expected_after_first_step,
             num_cols_expected_after_last_step):
 
-        from lcdb.builder.utils import import_attr_from_module, terminate_on_memory_exceeded
+        from lcdb.builder.utils import import_attr_from_module
 
         WorkflowClass = import_attr_from_module(workflow)
         config_space = WorkflowClass.config_space()

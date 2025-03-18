@@ -228,9 +228,11 @@ def run_learning_workflow_from_deephyper(
     Returns:
         dict: a dictionary with 2 keys (objective, metadata) where objective is the objective maximized by deephyper (if used) and metadata is a JSON serializable sub-dictionnary which are complementary information about the workflow.
     """
+    import json
+
     if logger is None:
         logger = logging.getLogger("LCDB")
-    logger.info(f"Running job {job.id} with parameters: {job.parameters}")
+    logger.info(f"Running job {job.id} with parameters: {json.dumps(job.parameters)}")
 
     from lcdb.builder import run_learning_workflow
 
@@ -405,6 +407,7 @@ def run_experiment(
         "anchor_schedule": anchor_schedule,
         "epoch_schedule": epoch_schedule,
         "logger": logger,
+        "memory_limit_in_bytes": workflow_memory_limit * 1024**2,
         "raise_exception_on_unsuitable_preprocessor": not no_exception_on_unsuitable_preprocessor
     }
 
@@ -414,6 +417,7 @@ def run_experiment(
     # Convert from MBs to Bytes
     memory_limit = workflow_memory_limit * (1024**2)
     memory_tracing_interval = 0.1
+    log_interval = 5
     raise_exception = False
     run_function = functools.partial(
         terminate_on_memory_exceeded,
@@ -421,6 +425,7 @@ def run_experiment(
         memory_tracing_interval,
         raise_exception,
         run_learning_workflow_from_deephyper,
+        log_interval,
     )
 
     print("method_kwargs", method_kwargs)
@@ -464,6 +469,7 @@ def main(**kwargs):
     logger.addHandler(ch)
 
     accepted_log_levels = ["debug", "info", "warn", "error"]
+    log_level = kwargs.pop("log_level")
     if log_level not in accepted_log_levels:
         raise ValueError(f"--log-level must be in {accepted_log_levels} but is {log_level}")
     if log_level == "debug":

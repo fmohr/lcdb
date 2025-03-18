@@ -146,6 +146,7 @@ def terminate_on_memory_exceeded(
     memory_tracing_interval,
     raise_exception,
     func,
+    log_interval=5,
     *args,
     **kwargs,
 ):
@@ -162,6 +163,7 @@ def terminate_on_memory_exceeded(
     logger = logging.getLogger("LCDB")
 
     timestamp_start = time.time()
+    timestamp_last_log_message = -np.inf
 
     p = psutil.Process()  # get the current process
 
@@ -181,6 +183,10 @@ def terminate_on_memory_exceeded(
 
                 # in bytes (not the peak memory but last snapshot)
                 memory_peak = max(p.memory_info().rss, memory_peak)
+                now = time.time()
+                if now - timestamp_last_log_message > log_interval:
+                    logger.debug(f"Current memory consumption: {memory_peak // 1024**2}MB ({np.round(100.0 * memory_peak / memory_limit, 2)}% of the defined limit)")
+                    timestamp_last_log_message = now
 
                 if memory_limit > 0 and memory_peak > memory_limit:
                     output = "F_memory_limit_exceeded"

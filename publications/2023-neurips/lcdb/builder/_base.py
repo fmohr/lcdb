@@ -1,6 +1,7 @@
 import functools
 import numpy as np
 import logging
+import json
 
 from lcdb.data import load_task
 from lcdb.builder.utils import import_attr_from_module
@@ -65,7 +66,10 @@ def run_learning_workflow(
     """
     if logger is None:
         logger = logging.getLogger("LCDB")
-    logger.info(f"Running workflow {workflow_class} with parameters: {workflow_parameters}")
+    logger.info(
+        f"Running workflow {workflow_class} with parameters: {json.dumps(workflow_parameters)}. "
+        f"Memory limit is {memory_limit_in_bytes // 1024**2}MB"
+    )
 
     timer = Timer(precision=4)
     run_timer_id = timer.start("run")
@@ -79,8 +83,9 @@ def run_learning_workflow(
         load_timer["num_classes"] = dataset_metadata["num_classes"]
 
     # Create and fit the workflow
-    logger.info("Importing the workflow...")
+    logger.info("Getting workflow class...")
     WorkflowClass = import_attr_from_module(workflow_class) if isinstance(workflow_class, str) else workflow_class
+    logger.info(f"Preparing workflow kwargs ...")
     if workflow_parameters is not None and not isinstance(workflow_parameters, dict):
         raise ValueError(f"workflow_parameters must be None or a dict but is {type(workflow_parameters)}")
     workflow_kwargs = workflow_parameters.copy() if workflow_parameters is not None else {}
@@ -102,6 +107,7 @@ def run_learning_workflow(
     workflow_kwargs["logger"] = logger
     workflow_kwargs["memory_limit_in_bytes"] = memory_limit_in_bytes
 
+    logger.info("Preparing factory ...")
     def workflow_factory():
         return WorkflowClass(timer=timer, **workflow_kwargs)
 
@@ -120,6 +126,7 @@ def run_learning_workflow(
     is_classification = task_type == "classification"
     stratify = is_classification
 
+    logger.info(f"Creating LearningCurveBuilder")
     builder = LearningCurveBuilder(
         timer=timer,
         workflow_factory=workflow_factory,
@@ -193,6 +200,7 @@ class LearningCurveBuilder:
         self.num_instances = X.shape[0]
         self.dataset_metadata = dataset_metadata
 
+        self.logger.info(f"Splitting data of shape {X.shape} into train/validation/test")
         self.X = X
         self.y = y
         self.labels = list(np.unique(y))

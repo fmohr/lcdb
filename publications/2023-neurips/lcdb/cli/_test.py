@@ -204,15 +204,11 @@ def main(
             f"Task type must be 'classification' or 'regression' but is {task_type}."
         )
 
-    memory_limit_giga_bytes = float(
-        os.environ.get("LCDB_EVALUATION_MEMORY_LIMIT", 10)
-    )  # in GB
-    memory_limit = memory_limit_giga_bytes * (1024**3)
     memory_tracing_interval = 0.1
     raise_exception = False
     run_function = functools.partial(
         terminate_on_memory_exceeded,
-        memory_limit,
+        workflow_memory_limit * (1024**2),  # was given in MB initially
         memory_tracing_interval,
         raise_exception,
         run_learning_workflow,
