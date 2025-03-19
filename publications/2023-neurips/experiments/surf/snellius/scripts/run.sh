@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --partition=genoa
-#SBATCH --time=5:00:00
+#SBATCH --time=24:00:00
 #SBATCH --threads-per-core=1
 
 module load 2023
@@ -11,9 +11,7 @@ source /home/$USER/workspace/lcdb/publications/2023-neurips/build/activate-dhenv
 source scripts/config.sh
 
 export timeout=3500
-# export NTOTRANKS=$(( $SLURM_JOB_NUM_NODES * $SLURM_CPUS_PER_TASK ))
 export NTOTRANKS=$DESIRED_CORES
-
 
 #!!! CONFIGURATION - END
 
@@ -21,9 +19,14 @@ mkdir -p $LCDB_OUTPUT_RUN
 pushd $LCDB_OUTPUT_RUN
 
 # Run experiment
+# Documenting arguments of srun
+# https://slurm.schedmd.com/srun.html
+# -n --ntasks: number of tasks/ranks to run globally
+# -N --nodes: number of nodes
+# therefore the number of tasks/node is n/N
 srun -n ${NTOTRANKS} -N ${SLURM_JOB_NUM_NODES} \
-     --cpus-per-task 1 \
-     --threads-per-core 1 \
+        --cpus-per-task 1 \
+        --threads-per-core 1 \
     lcdb run \
     --openml-id $LCDB_OPENML_ID \
     --workflow-class $LCDB_WORKFLOW \
@@ -37,7 +40,8 @@ srun -n ${NTOTRANKS} -N ${SLURM_JOB_NUM_NODES} \
     --valid-seed $LCDB_VALID_SEED \
     --no-exception-on-unsuitable-preprocessor \
     --test-seed $LCDB_TEST_SEED \
+    --log-level debug \
     --evaluator mpicomm \
-    --epoch-schedule=power-2-0.25-0
-
+    --epoch-schedule=power-2-0.25-0 
+    
 gzip --best results.csv 

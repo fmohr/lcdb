@@ -4,9 +4,9 @@
     # ["libsvm"]="lcdb.workflow.sklearn.LibSVMWorkflow"
     # ["knn"]="lcdb.workflow.sklearn.KNNWorkflow"
     # ["xgboost"]="lcdb.workflow.xgboost.XGBoostWorkflow"
-    # ["liblinear"]="lcdb.workflow.sklearn.LibLinearWorkflow"
+    # ["treesensemble"]="lcdb.workflow.sklearn.TreesEnsembleWorkflow"
 declare -A mapping=(
-    ["treesensemble"]="lcdb.workflow.sklearn.TreesEnsembleWorkflow"
+    ["liblinear"]="lcdb.workflow.sklearn.LibLinearWorkflow"
 )
 
 # add memory limit (input parameter) to the workflow

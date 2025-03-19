@@ -2,7 +2,7 @@
 #SBATCH --job-name=create_datasets
 #SBATCH --output=logs/out/create_datasets.log
 #SBATCH --error=logs/err/create_datasets.err
-#SBATCH --partition=rome
+#SBATCH --partition=genoa
 #SBATCH --time=01:00:00  # Adjust as needed
 
 # Load Python Environment

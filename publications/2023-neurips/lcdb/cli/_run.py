@@ -439,9 +439,7 @@ def run_experiment(
     ) as evaluator:
         # Required for MPI just the root rank will execute the search
         # other ranks will be considered as workers
-        if evaluator is not None:
-            # Set the search algorithm
-
+        if evaluator.is_master:
             # Set the search algorithm
             search = CBO(
                 problem,

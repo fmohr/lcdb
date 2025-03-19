@@ -168,6 +168,7 @@ class PCloudRepository(Repository):
             for (workflow, openmlid, workflow_seed, valid_seed, test_seed), group in df.groupby(
                     ["m:workflow", "m:openmlid", "m:workflow_seed", "m:valid_seed", "m:test_seed"]
             ):
+                openmlid = int(openmlid)
                 name = f"{int(workflow_seed)}-{int(test_seed)}-{int(valid_seed)}.csv.gz"
                 print(f"Adding results for {workflow}/{campaign}/{openmlid}/{name}")
                 path = f"data/{workflow}/{campaign}/{openmlid}"
