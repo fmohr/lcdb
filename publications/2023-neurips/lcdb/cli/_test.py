@@ -240,3 +240,7 @@ def main(
     traceback = output["metadata"].get("traceback")
     if traceback is not None and len(traceback) > 0:
         print(traceback[1:-1])
+
+    build_issues = output["metadata"].get("build_issues")
+    if build_issues is not None and len(build_issues) > 0:
+        print(build_issues)

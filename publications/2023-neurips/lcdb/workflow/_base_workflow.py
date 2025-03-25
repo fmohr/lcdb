@@ -49,6 +49,24 @@ class BaseWorkflow(abc.ABC):
 
         self.logger = logging.getLogger("LCDB") if logger is None else logger
 
+    def get_reason_why_workflow_cannot_be_fit_on_dataset(self, X, y):
+        """
+            Determines whether the workflow can be fitted on given data.
+            Overwrite this with a check and return False if you anticipate that this workflow cannot be fitted on the given data (at any anchor)
+
+            :return: `None` if the workflow can be built. Otherwise a string with the reason why it cannot be built.
+        """
+        return None
+    
+    def get_reason_why_workflow_cannot_be_built_at_anchor(self, X, y, a):
+        """
+            Determines whether the workflow can be fitted on given data at a specific anchor.
+            This should only be called if it is known already that the workflow is generally fittable on the dataset.
+
+            :return: `None` if the workflow can be built at the given anchor. Otherwise a string with the reason why it cannot.
+        """
+        return None
+    
     def fit(self, X, y, X_valid, y_valid, X_test, y_test, metadata) -> "BaseWorkflow":
 
         # get label-encoded versions of target

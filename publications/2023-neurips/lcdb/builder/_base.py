@@ -110,6 +110,16 @@ def run_learning_workflow(
     logger.info("Preparing factory ...")
     def workflow_factory():
         return WorkflowClass(timer=timer, **workflow_kwargs)
+    
+    # check whether the workflow can be fitted on this data
+    workflow = workflow_factory()
+    reason_to_not_build = workflow.get_reason_why_workflow_cannot_be_fit_on_dataset(X=X, y=y)
+    if reason_to_not_build is not None:
+        logger.info(
+            "Not building the curve for this workflow as it confirms that the curve cannot be built."
+            f"The following reason is given:\n{reason_to_not_build}."
+        )
+        results = {"objective": "F", "metadata": {"reason_for_fail": reason_to_not_build}}
 
     # Initialize information to be returned
     infos = {
@@ -298,66 +308,71 @@ class LearningCurveBuilder:
         # Build sample-wise learning curve
         self.logger.info(f"Starting curve construction. Sample sizes will be: {self.anchors}")
 
+        self.report["build_issues"] = {}
+
         with self.timer.time("build_curves"):
             for anchor in tqdm(self.anchors, disable=True):
                 self.set_anchor(anchor)
 
                 with self.timer.time("anchor", {"value": anchor}) as anchor_timer:
-                    error_code = self.fit_workflow_on_current_anchor()
+                    
+                    try:
+                        self.fit_workflow_on_current_anchor()
+                        self.compute_metrics_for_workflow()
+                        self.timer.active_node["status"] = "ok"
+                        
+                    except Exception as exception:
+                        if self.raise_errors:
+                            raise
 
-                    if error_code != 0:
                         # Cancel timers that were started in fit_workflow_on_current_anchor
                         self.timer.cancel(anchor_timer.id, only_children=True)
+                        assert (
+                            self.timer.active_node.id == anchor_timer.id
+                        ), f"The active timer is not correct, it is {self.timer.active_node} when it should be {anchor_timer} "
 
-                    assert (
-                        self.timer.active_node.id == anchor_timer.id
-                    ), f"The active timer is not correct, it is {self.timer.active_node} when it should be {anchor_timer} "
-
-                    # If an error was detected then skip scoring...
-                    if error_code != 0:
-                        break
-
-                    # Predict and Score
-                    self.logger.info("Starting computation for predictions and scoring functions...")
-                    try:
-                        self.compute_metrics_for_workflow()
-                        self.logger.info("Finished computation for predictions and scoring functions...")
-                    except Exception as exception:
-                        # Cancel timers that were started in 'try' block
-                        self.timer.cancel(anchor_timer.id, only_children=True)
-
-                        # Collect traceback
-                        self.report["traceback"] = traceback.format_exc()
-
+                        # configure the traceback
+                        traceback_of_error = traceback.format_exc()
+                        self.timer.active_node["status"] = "failed"
                         self.logger.error(
-                            f"Error while fitting the workflow: \n{self.report['traceback']}"
+                            f"Error while fitting the workflow: \n{traceback_of_error}\n\nObjective is {self.objective}."
                         )
 
-                        self.report["traceback"] = r'"{}"'.format(
-                            self.report["traceback"]
-                        )
+                        # Decide on how to proceed after this error, depending on whether the error may go away on higher anchors
+                        # Also notify in the objective function value that the run has failed (unless we have results on earlier anchors)
+                        if isinstance(exception, (FunctionCallTimeoutError, MemoryError)):
+                            if isinstance(exception, FunctionCallTimeoutError):
+                                self.timer.active_node["cause"] = "timeout"
+                                self.report["build_issues"][anchor] = "timeout"
+                                if self.objective is None:
+                                        self.objective = "F_function_call_timeout_error"
+                            elif isinstance(exception, MemoryError):
+                                self.timer.active_node["cause"] = "memory"
+                                self.report["build_issues"][anchor] = "memory"
+                                if self.objective is None:
+                                    self.objective = "F_memory_error"
+                            self.logger.info("Stopping building process due to this exception, because the same problem is expected for higher anchors.")
+                            break
+                        else:
+                            self.timer.active_node["cause"] = "exception"
+                            self.timer.active_node["traceback"] = traceback_of_error
+                            self.report["build_issues"][anchor] = r'"{}"'.format(traceback_of_error)
+                            if self.objective is None:
+                                self.objective = "F"
+                                if isinstance(exception, ValueError):
+                                    self.objective += "_value_error"
+                            self.logger.info("Continuing building process, because the same problem is not necessarily expected for higher anchors.")
+                            continue
 
-                        # The evaluation is considered a total failure only if
-                        # None of the anchors returned scored.
-                        if self.objective is None:
-                            self.objective = "F"
-
-                            if isinstance(exception, ValueError):
-                                self.objective += "_value_error"
-
-                        error_code = 1
-                        break
-        
+        # turn the build summary into a string
+        self.report["build_issues"] = None if not self.report["build_issues"] else json.dumps(self.report["build_issues"])
         self.logger.info(f"Finished curve construction.")
 
     def fit_workflow_on_current_anchor(self) -> int:
-        """Fit the workflow on the current anchor.
-
-        Returns 0 if the workflow was fitted successfully, 1 otherwise.
+        """
+            Fit the workflow on the current anchor.
         """
 
-        # Represent success (0) or failure (1) while fitting the workflow
-        error_code = 0
 
         with self.timer.time("create_workflow"):
             self.workflow = self.workflow_factory()
@@ -371,54 +386,29 @@ class LearningCurveBuilder:
                 terminate_on_timeout, self.timeout_on_fit, self.workflow.fit
             )
 
-        try:
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore")
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
 
-                self.workflow.fit(
-                    self.X_train_at_anchor,
-                    self.y_train_at_anchor,
-                    X_valid=self.X_valid,
-                    y_valid=self.y_valid,
-                    X_test=self.X_test,
-                    y_test=self.y_test,
-                    metadata=self.dataset_metadata,
-                )
-
-        except Exception as exception:
-            if self.raise_errors:
-                raise
-
-            self.report["traceback"] = traceback.format_exc()
-
-            self.logger.error(
-                f"Error while fitting the workflow: \n{self.report['traceback']}"
+            self.workflow.fit(
+                self.X_train_at_anchor,
+                self.y_train_at_anchor,
+                X_valid=self.X_valid,
+                y_valid=self.y_valid,
+                X_test=self.X_test,
+                y_test=self.y_test,
+                metadata=self.dataset_metadata,
             )
-
-            self.report["traceback"] = r'"{}"'.format(self.report["traceback"])
-
-            # The evaluation is considered a total failure only if
-            # None of the anchors returned scored.
-            if self.objective is None:
-                self.objective = "F"
-
-                if isinstance(exception, FunctionCallTimeoutError):
-                    self.objective += "_function_call_timeout_error"
-                # TODO: work in progress
-                elif isinstance(exception, MemoryError):
-                    self.objective = -10
-                    # self.objective += "_memory_error"
-
-            error_code = 1
         self.logger.info(
-            f"Finished with fitting workflow {self.workflow.__class__.__name__} on sample anchor {self.cur_anchor}. Output code was {error_code}"
+            f"Successfully finished with fitting workflow {self.workflow.__class__.__name__} on sample anchor {self.cur_anchor}."
         )
-        return error_code
 
     def compute_metrics_for_workflow(self):
+        self.logger.info("Starting computation for predictions and scoring functions...")
         predictions, labels = self.get_predictions()
         self.labels_as_used_by_workflow = labels
-        return self.score_predictions(**predictions)
+        out = self.score_predictions(**predictions)
+        self.logger.info("Finished computation for predictions and scoring functions...")
+        return out
 
     def get_predictions(self):
         self.logger.info(f"Starting prediction computation.")

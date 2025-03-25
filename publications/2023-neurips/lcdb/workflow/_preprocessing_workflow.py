@@ -71,10 +71,10 @@ CONFIG_SPACE = ConfigurationSpace(
             "kernel_pca_kernel", items=["linear", "rbf"], default="linear"
         ),
         "kernel_pca_n_components": Float(
-            "kernel_pca_n_components", bounds=(0.25, 1.0), default=1.0
+            "kernel_pca_n_components", bounds=(0.01, 1.0), default=1.0
         ),
         "selectp_percentile": Integer(
-            "selectp_percentile", bounds=(25, 100), default=100
+            "selectp_percentile", bounds=(1, 100), default=100
         ),
         "poly_degree": Constant("poly_degree", 2),#Integer("poly_degree", bounds=(2, 2), default=2),
         "std_with_std": Categorical("std_with_std", [True, False], default=True),
@@ -329,16 +329,19 @@ class PreprocessedWorkflow(BaseWorkflow, ABC):
             if fs_val == "selectp":
                 # as we want to keep a minimum of 1 feature, we need to ensure that
                 # percentile >= int(100 / X.shape[1]) + 1) which is the percentile corresponding to 1 feature
-                featureselector = SelectPercentile(
-                    percentile=max(self.selectp_percentile, int(100 / X.shape[1]) + 1)
-                )
+                percentile = max(self.selectp_percentile, int(100 / X.shape[1]) + 1)
+                featureselector = SelectPercentile(percentile=percentile)
+                num_features_after_feature_selector = int(X.shape[1] * percentile / 100)
             elif fs_val == "none":
                 featureselector = None
+                num_features_after_feature_selector = X.shape[1]
             else:
                 raise ValueError(f"Unknown {KEY_FEATURESELECTOR} technique {fs_val}")
             if featureselector is not None:
                 steps.append((KEY_FEATURESELECTOR, featureselector))
             treated_kws.append(KEY_FEATURESELECTOR)
+        else:
+            num_features_after_feature_selector = X.shape[1]
 
         # step 3, feature generation
         if KEY_FEATUREGEN in kwargs:
@@ -349,13 +352,23 @@ class PreprocessedWorkflow(BaseWorkflow, ABC):
                 featuregen = PolynomialFeatures(
                     degree=self.poly_degree, include_bias=False
                 )
+                num_features_after_feature_generation =  featuregen._num_combinations(
+                    n_features=num_features_after_feature_selector,
+                    min_degree=0,
+                    max_degree=featuregen.degree,
+                    interaction_only=featuregen.interaction_only,
+                    include_bias=featuregen.include_bias,
+                )
             elif featuregen_val == "none":
                 featuregen = None
+                num_features_after_feature_generation = num_features_after_feature_selector
             else:
                 raise ValueError(f"Unknown {KEY_FEATUREGEN} technique {featuregen_val}")
             if featuregen is not None:
                 steps.append((KEY_FEATUREGEN, featuregen))
             treated_kws.append(KEY_FEATUREGEN)
+        else:
+            num_features_after_feature_generation = num_features_after_feature_selector
 
         # step 4: scaling
         if KEY_SCALER in kwargs:
@@ -376,14 +389,17 @@ class PreprocessedWorkflow(BaseWorkflow, ABC):
         if KEY_FEATUREMAPPER in kwargs:
             featuremapper_val = kwargs[KEY_FEATUREMAPPER]
             if featuremapper_val == "kernel_pca":
-                # kernel_pca_n_components is a float in [0, 1] that represents the ratio of
-                # components we keep. we map it back to an integer.
+                # kernel_pca_n_components is a float in [0, 1] that represents the ratio of components we keep.
+                # the problem is:
+                #   - if the number is close to 0, then we are eliminating all the features (motivating to move to the absolute number of components).
+                #   - if we create a mapping to absolute values, we do not know exactly how many features will be left (motivating a relative number of components).
+                # solution: we pre-compute the shape of the data after previous pre-processing steps and then employ the mapping to integer level.
                 if self.kernel_pca_kernel == "linear":
-                    featuremapper = PCA(n_components=min(X.shape[0], max(1, int(self.kernel_pca_n_components * X.shape[1]))))
+                    featuremapper = PCA(n_components=min(X.shape[0], max(1, int(self.kernel_pca_n_components * num_features_after_feature_generation))))
                 else:
                     featuremapper = KernelPCA(
                     kernel=self.kernel_pca_kernel,
-                    n_components=max(1, int(self.kernel_pca_n_components * X.shape[1])),
+                    n_components=max(1, int(self.kernel_pca_n_components * num_features_after_feature_generation)),
                 )
             elif featuremapper_val == "lda":
                 featuremapper = LinearDiscriminantAnalysis()
@@ -415,7 +431,7 @@ class PreprocessedWorkflow(BaseWorkflow, ABC):
         return steps if steps else None
 
     def _fit(self, X, y, X_valid, y_valid, X_test, y_test, metadata):
-
+        
         # first give the workflow a chance to transform the data, e.g., with data augmentation
         X, y = self._transform_train_data_prior_to_standard_preprocessing(X, y)
 
