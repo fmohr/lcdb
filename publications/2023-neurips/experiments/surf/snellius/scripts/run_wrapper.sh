@@ -1,5 +1,7 @@
 #!/bin/bash
 # set -xe
+source ~/.bashrc
+conda activate lcdb
 
 # Workflow mapping
 declare -A mapping
@@ -27,11 +29,22 @@ log_dir="$PWD/$1"
 mkdir -p "$log_dir"
 exec > >(tee -a "$log_dir/wrapper.log") 2>&1
 
+# load  configuration
+CONFIG_FILE="scripts/config.yaml"
+
+if [[ ! -f "$CONFIG_FILE" ]]; then
+    echo "Config file not found: $CONFIG_FILE"
+    exit 1
+fi
+
+export DESIRED_CORES=$(yq '.desired_cores' "$CONFIG_FILE")
+val_seeds=($(yq '.val_seeds[]' "$CONFIG_FILE"))
+test_seeds=($(yq '.test_seeds[]' "$CONFIG_FILE"))
+
 # *********MEMORY CALCULATIONS*********
 # Number of nodes
 NODES=1
 CPUS_PER_TASK=192
-export DESIRED_CORES=11
 MEMORY_PER_NODE_GB=336
 
 # Memory calculations
@@ -47,9 +60,6 @@ source scripts/config.sh
 # submit create.sh as a Slurm job and force next jobs to wait
 create_job_id=$(sbatch --export=ALL --parsable scripts/create.sh)
 echo "Submitted create.sh with Job ID: $create_job_id"
-
-val_seeds=(0)
-test_seeds=(0)
 
 
 for val_seed in "${val_seeds[@]}"; do

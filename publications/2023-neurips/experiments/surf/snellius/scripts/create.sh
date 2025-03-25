@@ -6,7 +6,8 @@
 #SBATCH --time=01:00:00  # Adjust as needed
 
 # Load Python Environment
-source /home/$USER/workspace/lcdb/publications/2023-neurips/build/activate-dhenv.sh
+source ~/.bashrc
+conda activate lcdb
 
 # Load Experiment Configuration
 source scripts/config.sh
