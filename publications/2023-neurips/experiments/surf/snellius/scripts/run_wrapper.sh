@@ -31,7 +31,7 @@ exec > >(tee -a "$log_dir/wrapper.log") 2>&1
 # Number of nodes
 NODES=1
 CPUS_PER_TASK=192
-export DESIRED_CORES=11
+export DESIRED_CORES=5
 MEMORY_PER_NODE_GB=336
 
 # Memory calculations

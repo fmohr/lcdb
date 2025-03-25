@@ -19,7 +19,7 @@ exec > >(tee -a "$log_dir/wrapper_campaign.log") 2>&1
 # val_seeds=(0 1 2 3 4)
 # test_seeds=(0 1 2 3 4)
 val_seeds=(0)
-test_seeds=(0 1)
+test_seeds=(0)
 
 source scripts/config.sh
 

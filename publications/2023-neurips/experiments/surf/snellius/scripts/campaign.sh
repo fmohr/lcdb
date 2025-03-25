@@ -5,7 +5,9 @@
 
 module load 2023
 module load OpenMPI/4.1.5-GCC-12.3.0
-source /home/$USER/workspace/lcdb/publications/2023-neurips/build/activate-dhenv.sh
+# source /home/$USER/workspace/lcdb/publications/2023-neurips/build/activate-dhenv.sh
+source ~/.bashrc
+conda activate dhenv
 
 declare -a result_files=("$@")
 # srun lcdb add -c data_probing -t "e7E1H7ZiFqSZR6Rfh7L38FRhOdBuicF5BuFfPbX7" "${result_files[@]}"

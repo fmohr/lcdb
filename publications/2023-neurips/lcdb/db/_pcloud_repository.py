@@ -6,6 +6,7 @@ import logging
 import io
 import time
 import os
+import json
 
 import pandas as pd
 
@@ -241,6 +242,7 @@ class PCloudRepository(Repository):
             test_seeds=None,
             validation_seeds=None
     ):
+        # print(f"Getting result files for {workflow}/{campaign}/{openmlid}")
         result_files_unfiltered = jmespath.compile(
             f"""
                 metadata.contents[? name == 'data'] | [0]
@@ -249,6 +251,10 @@ class PCloudRepository(Repository):
                 .contents | [? name == '{openmlid}'] | [0]
                 .contents | [*]
             """).search(self.content)
+
+        # If result_files_unfiltered is None, assign an empty list
+        if result_files_unfiltered is None:
+            result_files_unfiltered = []
 
         # now collect file ids of matching files
         result_files = []
@@ -262,6 +268,8 @@ class PCloudRepository(Repository):
                 if test_seeds is not None and _test_seed not in test_seeds:
                     continue
                 if validation_seeds is not None and _val_seed not in validation_seeds:
+                    continue
+                if openmlid is not None and openmlid != int(openmlid):
                     continue
             except ValueError:
                 print(f"Invalid filename {filename}")
@@ -390,6 +398,7 @@ class PCloudRepository(Repository):
                 if total_entries > 10 ** 6:
                     raise ValueError(f"Cannot read in more than 10**6 results.")
                 df = self.read_result_file(file_desc["fileid"])
+ 
                 try:
                     df_deserialized = deserialize_dataframe(df)
                 except Exception as e:

@@ -283,7 +283,8 @@ class LCDB:
             workflow_seeds=None,
             test_seeds=None,
             validation_seeds=None,
-            show_progress=False
+            show_progress=False,
+            num_configs=None
     ):
         """
         Retrieves only rows that contain a traceback and their associated configs.
@@ -341,22 +342,33 @@ class LCDB:
         # Create a generator function
         def generator():
             for gen in result_generators:
-                yield from gen
+                try:
+                    yield from gen
+                except Exception as e:
+                    print(f"Error processing generator: {e}")  # Log error and continue
 
         try:
-            gen = CountAwareGenerator(sum(len(g) for g in result_generators), generator())
+            total_count = sum(len(g) for g in result_generators if hasattr(g, '__len__'))
+            gen = CountAwareGenerator(total_count, generator())
         except TypeError:
             print("Error: One of the generators is invalid.")
             return pd.DataFrame()
 
         records = []  # Stores structured data for CSV output
 
-        def process_traceback(df):
+ 
+
+        def process_traceback(df, num_configs=None):
             """Extracts traceback messages, errors, configs, execution times, and metadata."""
-            num_configs = len(df)
+            if num_configs is None:
+                num_configs = len(df)
             traceback_rows = df[df["m:traceback"].notna()]
             num_errors = len(traceback_rows)
-            error_rate = num_errors / num_configs if num_configs else 0
+            # instead of number of error measure number of non-nan m:json 
+            successfull_configs = df[df["m:json"].notna()]
+            num_success_configs = len(successfull_configs)
+            error_rate = (num_configs - num_success_configs) / num_configs if num_configs else 0
+            # error_rate = num_errors / num_configs if num_configs else 0
 
             tracebacks, errors = [], []
             for _, row in traceback_rows.iterrows():
@@ -370,20 +382,45 @@ class LCDB:
                 errors.append(error_message)
 
             # Extract metadata fields
-            workflow = df["m:workflow"].iloc[0] if "m:workflow" in df.columns else None
-            openmlid = df["m:openmlid"].iloc[0] if "m:openmlid" in df.columns else None
+
+            # get unique openmlids
+            openmlids = df["m:openmlid"].unique()
+            # dop nan values 
+            # print if it has nans
+            if any(pd.isnull(openmlids)):
+                print(f"openmlids: {openmlids} has nans")
+            openmlids = [x for x in openmlids if str(x) != 'nan']
+
+            # get openmlid if it exists
+            openmlid = openmlids[0] 
+
+            if len(openmlids) > 1:
+                print(f"Warning: Multiple OpenML IDs found in dataframe: {openmlids}")
+            # get unique workflows
+            workflows = df["m:workflow"].unique()
+            # dop nan values
+            workflows = [x for x in workflows if str(x) != 'nan']
+            workflow = workflows[0] 
+
+            if len(workflows) > 1:
+                print(f"Warning: Multiple workflows found in dataframe: {workflows}")
+
             # ensure openmlids column is integers
             if openmlid is not None:
                 openmlid = int(openmlid)
-            memory = df["m:memory"].iloc[0] if "m:memory" in df.columns else None
 
-            # Calculate execution times
+            # take median and max memory usage
+            if "m:memory" in df.columns:
+                df["m:memory"] = pd.to_numeric(df["m:memory"], errors="coerce")  # Convert to numeric safely
+                median_memory = df["m:memory"].median(skipna=True)  # Skip NaN values
+                max_memory = df["m:memory"].max(skipna=True)
+
             if "m:timestamp_start" in df.columns and "m:timestamp_end" in df.columns:
                 df["execution_time"] = df["m:timestamp_end"] - df["m:timestamp_start"]
-                avg_config_time = df["execution_time"].mean()
+                median_config_time = df["execution_time"].median()
                 max_config_time = df["execution_time"].max()
             else:
-                avg_config_time, max_config_time = None, None
+                median_config_time, max_config_time = None, None
 
             # Append structured data
             records.append({
@@ -393,18 +430,18 @@ class LCDB:
                 "error_rate": error_rate,
                 "tracebacks": tracebacks,
                 "errors": errors,
-                "memory": memory,
-                "avg_config_time": avg_config_time,
+                "median_memory": median_memory,
+                "max_memory": max_memory,
+                "median_config_time": median_config_time,
                 "max_config_time": max_config_time
             })
 
         for df in tqdm(gen, disable=not show_progress):
             if df is not None and "m:traceback" in df.columns:
-                process_traceback(df)
+                process_traceback(df, num_configs)
             elif df is not None:
                 print("Warning: No 'm:traceback' column in dataframe")
 
-        # Convert to DataFrame
         result_df = pd.DataFrame(records)
 
         return result_df
