@@ -160,19 +160,25 @@ def run_learning_workflow(
 
     # build the curves
     builder.build_curves()
-
+    logger.info("Cleaning up.")
     assert (
         timer.active_node.id == run_timer_id
     ), f"Timer is not at the right place: {timer.active_node}"
+    logger.info("Stopping timer")
     timer.stop()
 
     # update infos based on report
+    logger.info("Preparing final report (serializing information in timer).")
     infos.update(builder.report)
-
-    infos["json"] = timer.as_json()
+    try:
+        infos["json"] = timer.as_json()
+    except Exception as e:
+        msg = f"SERIALIZATION FAILED: {e}"
+        logger.error(msg)
+        infos["json"] = msg
 
     results = {"objective": builder.objective, "metadata": infos}
-
+    logger.info("Job finished, returning control to deephyper.")
     return results
 
 

@@ -205,17 +205,10 @@ class Timer:
         return self.root.as_dict(timestamp_offset=self.root.timestamp_start)
 
     def as_json(self):
-        # try:
-        json_dumped = lcdb.json.dumps(self.as_dict())
-        # except Exception as e:
-        #     print(f'JSON dump failed')
-        #     print(self.as_dict())
-        # try:
-        json_data = lcdb.json.loads(json_dumped)
-        # except Exception as e:
-        #     print(f"Json serialization failed!")
-        #     print(json_dumped)
-        return json_data
+        """
+            returns JSON string for the time content
+        """
+        return lcdb.json.dumps(self.as_dict())
 
     @contextmanager
     def time(

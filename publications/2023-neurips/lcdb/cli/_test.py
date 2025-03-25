@@ -234,7 +234,7 @@ def main(
     )
 
     # check that the output can indeed be compiled into a string using JSON
-    out = lcdb.json.dumps(output, indent=2)
+    out = lcdb.json.dumps(json.loads(output["metadata"]["json"]), indent=2)
     print(out)
 
     traceback = output["metadata"].get("traceback")
