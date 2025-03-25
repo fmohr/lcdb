@@ -12,8 +12,8 @@ source ~/.bashrc
 module load 2024
 module load OpenMPI/5.0.3-GCC-13.3.0 
 
-conda create -n dhenv python=3.11
-conda activate dhenv
+conda create -n lcdb python=3.11
+conda activate lcdb
 pip install --upgrade pip
 python --version
 
@@ -29,15 +29,3 @@ which mpicc
 cd ..
 ls
 pip install -e "../"
-ls
-# cd build
-
-# Create activation script
-# touch activate-dhenv.sh
-# echo "file generated"
-# echo "#!/bin/bash" >> activate-dhenv.sh
-
-# # Append modules loading and conda activation
-# echo "" >> activate-dhenv.sh
-# echo "source ~/.bashrc" >> activate-dhenv.sh
-# echo "conda activate $PWD/dhenv/" >> activate-dhenv.sh

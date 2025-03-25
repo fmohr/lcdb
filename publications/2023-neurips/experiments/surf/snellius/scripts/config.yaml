@@ -1,0 +1,3 @@
+desired_cores: 5
+val_seeds: [0]
+test_seeds: [0]

@@ -3,11 +3,11 @@
 #SBATCH --time=24:00:00
 #SBATCH --threads-per-core=1
 
-module load 2023
-module load OpenMPI/4.1.5-GCC-12.3.0
-# source /home/$USER/workspace/lcdb/publications/2023-neurips/build/activate-dhenv.sh
+module load 2024
+module load OpenMPI/5.0.3-GCC-13.3.0 
+
 source ~/.bashrc
-conda activate dhenv
+conda activate lcdb
 
 #!!! CONFIGURATION - START
 source scripts/config.sh
