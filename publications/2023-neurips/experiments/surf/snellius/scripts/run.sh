@@ -3,8 +3,11 @@
 #SBATCH --time=24:00:00
 #SBATCH --threads-per-core=1
 
-module load 2024
-module load OpenMPI/5.0.3-GCC-13.3.0 
+# module load 2024
+# module load OpenMPI/5.0.3-GCC-13.3.0 
+
+module load 2023
+module load OpenMPI/4.1.5-GCC-12.3.0 
 
 source ~/.bashrc
 conda activate lcdb

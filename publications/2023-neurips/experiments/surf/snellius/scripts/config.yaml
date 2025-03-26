@@ -1,3 +1,9 @@
-desired_cores: 5
-val_seeds: [0]
-test_seeds: [0]
+workflow_name: libsvm
+desired_memory_GB: 80
+config_num: 20
+workflow_seed: 42
+val_seeds:
+  - 0
+test_seeds:
+  - 0
+  - 1

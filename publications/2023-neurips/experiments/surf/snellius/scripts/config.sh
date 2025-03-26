@@ -1,9 +1,16 @@
 #!/bin/bash
 
-export LCDB_NUM_CONFIGS=20
-export LCDB_WORKFLOW_SEED=42
-# export LCDB_VALID_SEED=42
-# export LCDB_TEST_SEED=42
+# load  configuration
+CONFIG_FILE="scripts/config.yaml"
+
+if [[ ! -f "$CONFIG_FILE" ]]; then
+    echo "Config file not found: $CONFIG_FILE"
+    exit 1
+fi
+
+export LCDB_NUM_CONFIGS=$(yq '.config_num' "$CONFIG_FILE")
+export LCDB_WORKFLOW_SEED=($(yq '.workflow_seed' "$CONFIG_FILE"))
+
 # Read the CSV file and load into an array
 declare -a values
 while IFS= read -r line || [[ -n "$line" ]]; do
