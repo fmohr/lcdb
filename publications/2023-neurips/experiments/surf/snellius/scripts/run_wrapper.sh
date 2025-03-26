@@ -63,7 +63,7 @@ TOTAL_MEMORY_MB=$((TOTAL_MEMORY_GB * 1024))
 DESIRED_CORES=$((TOTAL_MEMORY_GB / DESIRED_MEMORY_GB))
 
 # Ensure that the number of cores does not exceed the available cores (CPUS_PER_TASK)
-DESIRED_CORES=$((DESIRED_CORES > CPUS_PER_TASK ? CPUS_PER_TASK : DESIRED_CORES))
+export DESIRED_CORES=$((DESIRED_CORES > CPUS_PER_TASK ? CPUS_PER_TASK : DESIRED_CORES))
 
 # Memory per core based on the desired memory and number of cores
 MEMORY_PER_CORE_GB=$((TOTAL_MEMORY_GB / DESIRED_CORES))
@@ -72,11 +72,10 @@ export LCDB_WORKFLOW_MEMORY_LIMIT=$MEMORY_PER_CORE_MB
 export LCDB_WORKFLOW_MEMORY_LIMIT_GB=$MEMORY_PER_CORE_GB
 
 # Write the memory per core back to the YAML file
-# yq ".desired_memory_GB = '$LCDB_WORKFLOW_MEMORY_LIMIT_GB'" scripts/config.yaml  -i -y
+yq ".desired_memory_GB = $LCDB_WORKFLOW_MEMORY_LIMIT_GB" scripts/config.yaml -i -y
 echo "Using $DESIRED_CORES cores and $LCDB_WORKFLOW_MEMORY_LIMIT_GB GB of memory per core."
 
 # *********MEMORY CALCULATIONS*********
-
 # Load config for additional settings
 source scripts/config.sh
 
