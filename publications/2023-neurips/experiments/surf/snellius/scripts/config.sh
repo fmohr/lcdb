@@ -1,7 +1,6 @@
 #!/bin/bash
 
 # load  configuration
-export path_to_snellius=$(pwd)
 CONFIG_FILE="$path_to_snellius/scripts/config.yaml"
 
 if [[ ! -f "$CONFIG_FILE" ]]; then
