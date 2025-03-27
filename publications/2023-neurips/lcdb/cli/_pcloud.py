@@ -40,11 +40,10 @@ def main(**kwargs):
   try:
     repo = PCloudRepository(repo_code=repo_code)
     output = repo.authenticate(username=pcloud_username, password=pcloud_password, authexpire=86400*2)
-    print(output)
+    set_key(dotenv_path, "PCLOUD_TOKEN", repo.token)
   except ValueError as e:
       if "Authentication failed" in str(e):
           print(f"Error: {e}")
           exit(1)  # Exit the script if authentication fails
 
   # Set the token in the .env file
-  set_key(dotenv_path, "PCLOUD_TOKEN", repo.token)
