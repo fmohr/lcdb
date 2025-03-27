@@ -30,7 +30,6 @@ class PCloudRepository(Repository):
         # update content
         self.update_content()
         self.root_folder_id = self.content['metadata'].get('folderid')
-        print(f"repo code: {self.repo_code}")
 
     def update_content(self):
         self.content = requests.get(f"https://eapi.pcloud.com/showpublink?code={self.repo_code}").json()

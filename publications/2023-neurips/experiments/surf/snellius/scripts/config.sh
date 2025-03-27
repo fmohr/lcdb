@@ -1,7 +1,8 @@
 #!/bin/bash
 
 # load  configuration
-CONFIG_FILE="scripts/config.yaml"
+export path_to_snellius="/home/$USER/workspace/lcdb/publications/2023-neurips/experiments/surf/snellius"
+CONFIG_FILE="$path_to_snellius/scripts/config.yaml"
 
 if [[ ! -f "$CONFIG_FILE" ]]; then
     echo "Config file not found: $CONFIG_FILE"
@@ -15,7 +16,7 @@ export LCDB_WORKFLOW_SEED=($(yq '.workflow_seed' "$CONFIG_FILE"))
 declare -a values
 while IFS= read -r line || [[ -n "$line" ]]; do
     values+=("$line")
-done < "./datasets_to_test.csv"
+done < "$path_to_snellius/datasets_to_test.csv"
 export LCDB_OPENML_ID_ARRAY=(${values[@]})
 
 if [[ -z "${SLURM_ARRAY_TASK_ID}" ]]; then

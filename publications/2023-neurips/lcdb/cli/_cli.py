@@ -5,7 +5,7 @@ $ lcdb run ...
 """
 import argparse
 
-from . import _init, _space, _create, _fetch, _results, _run, _test, _add, _plot
+from . import _init, _space, _create, _fetch, _results, _run, _test, _add, _plot, _pcloud
 
 
 def create_parser():
@@ -42,6 +42,9 @@ def create_parser():
 
     # plot results
     _plot.add_subparser(subparsers)
+
+    # pcloud
+    _pcloud.add_subparser(subparsers)
 
     return parser
 

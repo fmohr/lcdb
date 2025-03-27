@@ -1,16 +1,14 @@
 #!/bin/bash
 #SBATCH --job-name=create_datasets
-#SBATCH --output=logs/out/create_datasets.log
-#SBATCH --error=logs/err/create_datasets.err
 #SBATCH --partition=genoa
-#SBATCH --time=01:00:00  # Adjust as needed
+#SBATCH --time=01:00:00
 
 # Load Python Environment
 source ~/.bashrc
 conda activate lcdb
 
 # Load Experiment Configuration
-source scripts/config.sh
+source "$path_to_snellius/scripts/config.sh"
 
 # Create Configurations
 echo "Creating $LCDB_NUM_CONFIGS configurations for $LCDB_WORKFLOW in $LCDB_INITIAL_CONFIGS"

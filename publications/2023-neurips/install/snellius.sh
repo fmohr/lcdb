@@ -15,6 +15,7 @@ conda activate lcdb
 pip install --upgrade pip
 pip install yq
 pip install python-dotenv
+pip install pyyaml
 
 # install mpi4py
 export MPICC=$(which mpicc)

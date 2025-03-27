@@ -3,6 +3,9 @@
 source ~/.bashrc
 conda activate lcdb
 
+export path_to_snellius=$(pwd)
+export output_path="/gpfs/nvme1/0/prjs1064/LCDB2"
+
 # Workflow mapping
 declare -A mapping
 mapping=(
@@ -15,7 +18,8 @@ mapping=(
 )
 
 # Load configuration
-CONFIG_FILE="scripts/config.yaml"
+CONFIG_FILE="$path_to_snellius/scripts/config.yaml"
+
 
 if [[ ! -f "$CONFIG_FILE" ]]; then
     echo "Config file not found: $CONFIG_FILE"
@@ -28,7 +32,7 @@ WORKFLOW_NAME=$(yq -r '.workflow_name' "$CONFIG_FILE")
 # Ensure that the workflow name exists in the mapping
 if [[ -n "${mapping[$WORKFLOW_NAME]}" ]]; then
     export LCDB_WORKFLOW=${mapping[$WORKFLOW_NAME]}
-    export LCDB_OUTPUT_WORKFLOW=$PWD/$WORKFLOW_NAME/output/$LCDB_WORKFLOW
+    export LCDB_OUTPUT_WORKFLOW=$output_path/results/$WORKFLOW_NAME/output/$LCDB_WORKFLOW
 else
     echo "Invalid workflow name: '$WORKFLOW_NAME'"
     exit 1
@@ -40,10 +44,6 @@ echo "'$LCDB_WORKFLOW' and '$LCDB_OUTPUT_WORKFLOW'"
 DESIRED_MEMORY_GB=$(yq -r '.desired_memory_GB' "$CONFIG_FILE")
 val_seeds=($(yq -r '.val_seeds[]' "$CONFIG_FILE"))
 test_seeds=($(yq -r '.test_seeds[]' "$CONFIG_FILE"))
-
-log_dir="$PWD/$WORKFLOW_NAME"
-mkdir -p "$log_dir"
-exec > >(tee -a "$log_dir/wrapper.log") 2>&1
 
 # *********MEMORY CALCULATIONS*********
 # Number of nodes
@@ -74,11 +74,22 @@ echo "Using $DESIRED_CORES cores and $LCDB_WORKFLOW_MEMORY_LIMIT_GB GB of memory
 echo "The updated memory usage has been saved to your config.yaml file."
 
 # *********MEMORY CALCULATIONS*********
-# Load config for additional settings
-source scripts/config.sh
 
+log_dir="$output_path/logs/$WORKFLOW_NAME-$LCDB_WORKFLOW_MEMORY_LIMIT_GB"
+echo "Log directory: $log_dir"
+mkdir -p "$log_dir"
+exec > >(tee -a "$log_dir/run_wrapper.log") 2>&1
+
+# Load config for additional settings
+source "$path_to_snellius/scripts/config.sh"
+# 1. Create the output directory and fetch datasets
 # Submit create.sh as a Slurm job and force next jobs to wait
-create_job_id=$(sbatch --export=ALL --parsable scripts/create.sh)
+create_job_id=$(sbatch --export=ALL \
+                        --output=${output_path}/logs/${WORKFLOW_NAME}-${LCDB_WORKFLOW_MEMORY_LIMIT_GB}/out/create_datasets.log \
+                        --error=${output_path}/logs/${WORKFLOW_NAME}-${LCDB_WORKFLOW_MEMORY_LIMIT_GB}/err/create_datasets.err \
+                        --chdir=${output_path} \
+                        --parsable \
+                        scripts/create.sh)
 echo "Submitted create.sh with Job ID: $create_job_id"
 
 for val_seed in "${val_seeds[@]}"; do
@@ -87,7 +98,7 @@ for val_seed in "${val_seeds[@]}"; do
         export LCDB_TEST_SEED=$test_seed
         array_size=$((${#LCDB_OPENML_ID_ARRAY[@]} - 1))
 
-        WRAPPER_SCRIPT='scripts/run.sh'
+        WRAPPER_SCRIPT="$path_to_snellius/scripts/run.sh"
         jobname="$WORKFLOW_NAME-$LCDB_WORKFLOW_MEMORY_LIMIT_GB"
 
         # Submit run.sh with dependency on create.sh
@@ -98,8 +109,9 @@ for val_seed in "${val_seeds[@]}"; do
             --ntasks=$DESIRED_CORES \
             --mem=0 \
             --nodes=$NODES \
-            --output=logs/out/%x/openml_idx-%a_workflow-${LCDB_WORKFLOW_SEED}_val-${val_seed}_test-${test_seed}_mem-${LCDB_WORKFLOW_MEMORY_LIMIT_GB}.log \
-            --error=logs/err/%x/openml_idx-%a_workflow-${LCDB_WORKFLOW_SEED}_val-${val_seed}_test-${test_seed}_mem-${LCDB_WORKFLOW_MEMORY_LIMIT_GB}.err \
+            --chdir=$output_path \
+            --output=${output_path}/logs/${WORKFLOW_NAME}-${LCDB_WORKFLOW_MEMORY_LIMIT_GB}/out/openml_idx-%a_workflow-${LCDB_WORKFLOW_SEED}_val-${val_seed}_test-${test_seed}.log \
+            --error=${output_path}/logs/${WORKFLOW_NAME}-${LCDB_WORKFLOW_MEMORY_LIMIT_GB}/err/openml_idx-%a_workflow-${LCDB_WORKFLOW_SEED}_val-${val_seed}_test-${test_seed}.err \
             "$WRAPPER_SCRIPT"
     done
 done

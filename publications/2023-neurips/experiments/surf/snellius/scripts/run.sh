@@ -10,7 +10,7 @@ source ~/.bashrc
 conda activate lcdb
 
 #!!! CONFIGURATION - START
-source scripts/config.sh
+source "$path_to_snellius/scripts/config.sh"
 
 export timeout=3500
 export NTOTRANKS=$DESIRED_CORES
@@ -28,6 +28,7 @@ pushd $LCDB_OUTPUT_RUN
 srun -n ${NTOTRANKS} -N ${SLURM_JOB_NUM_NODES:-1} \
         --cpus-per-task 1 \
         --threads-per-core 1 \
+        --exclusive \
     lcdb run \
     --openml-id $LCDB_OPENML_ID \
     --workflow-class $LCDB_WORKFLOW \

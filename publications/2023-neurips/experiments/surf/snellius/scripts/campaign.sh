@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --partition=rome
+#SBATCH --partition=genoa
 #SBATCH --time=48:00:00
 #SBATCH --threads-per-core=1
 
@@ -9,11 +9,15 @@ conda activate lcdb
 declare -a result_files=("$@")
 
 
-
-# Define the path to the .env file (e.g., one level up)
-ENV_PATH="../../../.env"  # Adjust as needed
-
 # Load the .env file if it exists
+if [ -f "$ENV_PATH" ]; then
+    export $(grep -v '^#' "$ENV_PATH" | xargs)
+fi
+
+# update token before uploading data
+srun lcdb pcloud -p "$ENV_PATH" || { echo "Authentication failed in lcdb pcloud, exiting."; exit 1; }
+
+# re-load the .env file if it exists
 if [ -f "$ENV_PATH" ]; then
     export $(grep -v '^#' "$ENV_PATH" | xargs)
 fi

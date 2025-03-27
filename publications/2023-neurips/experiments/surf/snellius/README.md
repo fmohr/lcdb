@@ -37,7 +37,7 @@ To set up the environment and install necessary dependencies, follow these steps
     ```bash
     ./scripts/run_wrapper.sh
     ```
-    - To collect results and upload to pcloud, you need to first ensure that the `pcloud_token` is updated (they have an expiration time). To do update this run the notebook `lcdb/publications/2023-neurips/repo_connect.ipynb`. This will update `.env` variables. Then run the following script:
+    - To collect results and upload to pcloud:
     ```bash
     ./scripts/campaign_wrapper.sh
     ```
