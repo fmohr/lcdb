@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # load  configuration
-export path_to_snellius="/home/$USER/workspace/lcdb/publications/2023-neurips/experiments/surf/snellius"
+export path_to_snellius=$(pwd)
 CONFIG_FILE="$path_to_snellius/scripts/config.yaml"
 
 if [[ ! -f "$CONFIG_FILE" ]]; then
