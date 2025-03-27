@@ -41,9 +41,6 @@ DESIRED_MEMORY_GB=$(yq -r '.desired_memory_GB' "$CONFIG_FILE")
 val_seeds=($(yq -r '.val_seeds[]' "$CONFIG_FILE"))
 test_seeds=($(yq -r '.test_seeds[]' "$CONFIG_FILE"))
 
-# Print the array values
-echo "Test seeds: ${test_seeds[@]}"
-
 log_dir="$PWD/$WORKFLOW_NAME"
 mkdir -p "$log_dir"
 exec > >(tee -a "$log_dir/wrapper.log") 2>&1
@@ -74,6 +71,7 @@ export LCDB_WORKFLOW_MEMORY_LIMIT_GB=$MEMORY_PER_CORE_GB
 # Write the memory per core back to the YAML file
 yq ".desired_memory_GB = $LCDB_WORKFLOW_MEMORY_LIMIT_GB" scripts/config.yaml -i -y
 echo "Using $DESIRED_CORES cores and $LCDB_WORKFLOW_MEMORY_LIMIT_GB GB of memory per core."
+echo "The updated memory usage has been saved to your config.yaml file."
 
 # *********MEMORY CALCULATIONS*********
 # Load config for additional settings
