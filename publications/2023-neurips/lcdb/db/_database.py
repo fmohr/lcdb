@@ -386,9 +386,6 @@ class LCDB:
             # get unique openmlids
             openmlids = df["m:openmlid"].unique()
             # dop nan values 
-            # print if it has nans
-            if any(pd.isnull(openmlids)):
-                print(f"openmlids: {openmlids} has nans")
             openmlids = [x for x in openmlids if str(x) != 'nan']
 
             # get openmlid if it exists
