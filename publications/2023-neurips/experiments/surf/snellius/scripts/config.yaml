@@ -1,4 +1,4 @@
-workflow_name: libsvm
+workflow_name: treesensemble
 desired_memory_GB: 67
 config_num: 20
 workflow_seed: 42

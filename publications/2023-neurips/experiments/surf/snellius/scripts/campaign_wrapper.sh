@@ -80,7 +80,7 @@ echo "Env path $ENV_PATH"
 
 # Submit the job with the list of result files for this dataset
 sbatch --export=ALL --job-name="campaigns_${WORKFLOW_NAME}" \
-    --output=${output_path}/logs/${WORKFLOW_NAME}-${MEM}/out/%x_workflow-${WORKFLOW_NAME}.log \
-    --error=${output_path}/logs/${WORKFLOW_NAME}-${MEM}/err/%x_workflow-${WORKFLOW_NAME}.err \
+    --output=${output_path}/logs/${WORKFLOW_NAME}-${MEM}/out/campaign.log \
+    --error=${output_path}/logs/${WORKFLOW_NAME}-${MEM}/err/campaign.err \
     --chdir=${output_path} \
     scripts/campaign.sh "${result_files[@]}"
