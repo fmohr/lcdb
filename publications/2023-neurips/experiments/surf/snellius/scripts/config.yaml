@@ -1,4 +1,4 @@
-workflow_name: knn
+workflow_name: libsvm
 desired_memory_GB: 67
 config_num: 20
 workflow_seed: 42
