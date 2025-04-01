@@ -225,7 +225,7 @@ class PreprocessedWorkflow(BaseWorkflow, ABC):
 
                     # anticipate memory usage and possibly avoid execution
                     used_memory_bytes = self._anticipate_required_memory_for_fit(X.shape, step_fun)
-                    self.logger.info(f"Expected memory usage run pre-processor {step_fun.__class__.__name__}: {used_memory_bytes / (1024**3)}GB.")
+                    self.logger.info(f"Expected memory usage run pre-processor {step_fun.__class__.__name__}: {used_memory_bytes / (1024**3):.3f}GB.")
                     if used_memory_bytes > self.memory_limit_in_bytes:
                         raise RuntimeError(
                             f"{step_name} ({step_fun.__class__.__name__}) is predicted to consume approximately {used_memory_bytes/(1024**3):.3f} GB. "
@@ -244,7 +244,7 @@ class PreprocessedWorkflow(BaseWorkflow, ABC):
 
                     # anticipate memory usage and possibly avoid execution
                     used_memory_bytes = self._anticipate_required_memory_for_transform(X.shape, step_fun)
-                    self.logger.info(f"Expected memory usage run pre-processor {step_fun.__class__.__name__}: {used_memory_bytes / (1024**3)}GB.")
+                    self.logger.info(f"Expected memory usage run pre-processor {step_fun.__class__.__name__}: {used_memory_bytes / (1024**3):.3f}GB.")
                     if used_memory_bytes > self.memory_limit_in_bytes:
                         raise RuntimeError(
                             f"{step_name} ({step_fun.__class__.__name__}) is predicted to consume approximately {used_memory_bytes/(1024**3):.3f} GB. "
@@ -322,28 +322,36 @@ class PreprocessedWorkflow(BaseWorkflow, ABC):
             )
         ]
 
-        # step 6: feature selector
+        # simulate this encoding
+        num_features_after_categorical_encoding = Pipeline(steps).fit_transform(X, y).shape[1]
+        if num_features_after_categorical_encoding != X.shape[1]:
+            self.logger.info(f"Categorical encoding will change number of features from {X.shape[1]} to {num_features_after_categorical_encoding}")
+
+        # step 2: feature selector
+        num_features_after_feature_selector = num_features_after_categorical_encoding
         if KEY_FEATURESELECTOR in kwargs:
             fs_val = kwargs[KEY_FEATURESELECTOR]
 
             if fs_val == "selectp":
                 # as we want to keep a minimum of 1 feature, we need to ensure that
                 # percentile >= int(100 / X.shape[1]) + 1) which is the percentile corresponding to 1 feature
-                percentile = max(self.selectp_percentile, int(100 / X.shape[1]) + 1)
+                percentile = max(self.selectp_percentile, int(100 / num_features_after_categorical_encoding) + 1)
                 featureselector = SelectPercentile(percentile=percentile)
-                num_features_after_feature_selector = int(X.shape[1] * percentile / 100)
+                num_fractional_features_after_feature_selector = num_features_after_categorical_encoding * percentile / 100
+                num_features_after_feature_selector = int(np.round(num_fractional_features_after_feature_selector))  # enforce round up at exactly x.5
+                self.logger.debug(f"Feature selector would use percentile {percentile} and reduce number of features to {num_fractional_features_after_feature_selector}")
             elif fs_val == "none":
                 featureselector = None
-                num_features_after_feature_selector = X.shape[1]
             else:
                 raise ValueError(f"Unknown {KEY_FEATURESELECTOR} technique {fs_val}")
             if featureselector is not None:
                 steps.append((KEY_FEATURESELECTOR, featureselector))
             treated_kws.append(KEY_FEATURESELECTOR)
-        else:
-            num_features_after_feature_selector = X.shape[1]
+        if num_features_after_feature_selector != num_features_after_categorical_encoding:
+            self.logger.info(f"Feature selection will change number of features from {num_features_after_categorical_encoding} to {num_features_after_feature_selector}")
 
         # step 3, feature generation
+        num_features_after_feature_generation = num_features_after_feature_selector
         if KEY_FEATUREGEN in kwargs:
             featuregen_val = kwargs[KEY_FEATUREGEN]
             if featuregen_val == "poly":
@@ -361,14 +369,14 @@ class PreprocessedWorkflow(BaseWorkflow, ABC):
                 )
             elif featuregen_val == "none":
                 featuregen = None
-                num_features_after_feature_generation = num_features_after_feature_selector
             else:
                 raise ValueError(f"Unknown {KEY_FEATUREGEN} technique {featuregen_val}")
             if featuregen is not None:
                 steps.append((KEY_FEATUREGEN, featuregen))
             treated_kws.append(KEY_FEATUREGEN)
-        else:
-            num_features_after_feature_generation = num_features_after_feature_selector
+        
+        if num_features_after_feature_generation != num_features_after_feature_selector:
+            self.logger.info(f"Feature generation will change number of features from {num_features_after_feature_selector} to {num_features_after_feature_generation}")
 
         # step 4: scaling
         if KEY_SCALER in kwargs:
@@ -395,12 +403,16 @@ class PreprocessedWorkflow(BaseWorkflow, ABC):
                 #   - if we create a mapping to absolute values, we do not know exactly how many features will be left (motivating a relative number of components).
                 # solution: we pre-compute the shape of the data after previous pre-processing steps and then employ the mapping to integer level.
                 if self.kernel_pca_kernel == "linear":
-                    featuremapper = PCA(n_components=min(X.shape[0], max(1, int(self.kernel_pca_n_components * num_features_after_feature_generation))))
+                    n_components = min(X.shape[0], max(1, int(self.kernel_pca_n_components * num_features_after_feature_generation)))
+                    featuremapper = PCA(n_components=n_components)
                 else:
+                    n_components = max(1, int(self.kernel_pca_n_components * num_features_after_feature_generation))
                     featuremapper = KernelPCA(
-                    kernel=self.kernel_pca_kernel,
-                    n_components=max(1, int(self.kernel_pca_n_components * num_features_after_feature_generation)),
-                )
+                        kernel=self.kernel_pca_kernel,
+                        n_components=n_components,
+                    )
+                if n_components != num_features_after_feature_generation:
+                    self.logger.info(f"Feature mapper will change number of features from {num_features_after_feature_generation} to {n_components}")
             elif featuremapper_val == "lda":
                 featuremapper = LinearDiscriminantAnalysis()
             elif featuremapper_val == "fastica":

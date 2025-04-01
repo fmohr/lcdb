@@ -7,6 +7,7 @@ from lcdb.workflow._preprocessing_workflow import PreprocessedWorkflow
 from lcdb.builder import run_learning_workflow
 from lcdb.builder.utils import import_attr_from_module
 import itertools as it
+import json
 
 from lcdb.analysis.json import QueryPreprocessorResults, QueryDatasetMetadata, QueryAnchorValues
 import numpy as np
@@ -79,7 +80,9 @@ class TestBuildFunctionalities(unittest.TestCase):
                 epoch_schedule="power-2-2-2"
             )
 
-            final_node = out["metadata"]["json"]["children"][-1]
+            parsed_json = json.loads(out["metadata"]["json"])
+
+            final_node = parsed_json["children"][-1]
             self.assertEqual("build_curves", final_node["tag"])
             first_anchor_in_final_node = final_node["children"][0]
             self.assertEqual("anchor", first_anchor_in_final_node["tag"])
@@ -103,7 +106,7 @@ class TestBuildFunctionalities(unittest.TestCase):
                     self.assertTrue(t_cur <= ts_end)
                 return ts_end
 
-            test_timestamp_consistency(out["metadata"]["json"])
+            test_timestamp_consistency(parsed_json)
 
         except Exception as e:
             msg = str(e)
@@ -138,7 +141,9 @@ class TestBuildFunctionalities(unittest.TestCase):
                 epoch_schedule="power-2-2-2"
             )
 
-            final_node = out["metadata"]["json"]["children"][-1]
+            parsed_json = json.loads(out["metadata"]["json"])
+
+            final_node = parsed_json["children"][-1]
             self.assertEqual("build_curves", final_node["tag"])
             first_anchor_in_final_node = final_node["children"][0]
             self.assertEqual("anchor", first_anchor_in_final_node["tag"])
@@ -162,7 +167,7 @@ class TestBuildFunctionalities(unittest.TestCase):
                     self.assertTrue(t_cur <= ts_end)
                 return ts_end
 
-            test_timestamp_consistency(out["metadata"]["json"])
+            test_timestamp_consistency(parsed_json)
 
         except Exception as e:
             msg = str(e)
@@ -172,22 +177,23 @@ class TestBuildFunctionalities(unittest.TestCase):
                 raise e
 
     @parameterized.expand([
-        (3, "lcdb.workflow.sklearn.KNNWorkflow", 25, 40, 9),
-        (188, "lcdb.workflow.sklearn.KNNWorkflow", 55, 90, 4)
+        (3, "lcdb.workflow.sklearn.KNNWorkflow", 25, 40),
+        (188, "lcdb.workflow.sklearn.KNNWorkflow", 55, 90)
     ])
     def test_that_preprocessors_are_logged_in_output(
             self,
             openmlid,
             workflow,
             min_num_cols_expected_after_first_step,
-            max_num_cols_expected_after_first_step,
-            num_cols_expected_after_last_step):
+            max_num_cols_expected_after_first_step):
 
         from lcdb.builder.utils import import_attr_from_module
 
         WorkflowClass = import_attr_from_module(workflow)
         config_space = WorkflowClass.config_space()
         config = dict(config_space.get_default_configuration())
+
+        portion_retained_in_feature_selection = 0.3
 
         config.update({
             "pp@cat_encoder": "onehot",
@@ -198,7 +204,7 @@ class TestBuildFunctionalities(unittest.TestCase):
             "pp@kernel_pca_kernel": "linear",
             "pp@kernel_pca_n_components": 0.25,
             "pp@poly_degree": 2,
-            "pp@selectp_percentile": 25,
+            "pp@selectp_percentile": int(100 * portion_retained_in_feature_selection),
             "pp@std_with_std": True
         })
 
@@ -220,12 +226,14 @@ class TestBuildFunctionalities(unittest.TestCase):
             logger=logger
         )
 
-        metadata = QueryDatasetMetadata()(output["metadata"]["json"])
+        parsed_json = json.loads(output["metadata"]["json"])
+
+        metadata = QueryDatasetMetadata()(parsed_json)
         init_cols = metadata["cols"]
-        anchors = QueryAnchorValues()(output["metadata"]["json"])
+        anchors = QueryAnchorValues()(parsed_json)
 
         pp_results_per_fold_and_anchor = [
-                QueryPreprocessorResults(fold=key)(output["metadata"]["json"])
+                QueryPreprocessorResults(fold=key)(parsed_json)
                 for key in ["train", "valid", "test"]
             ]
 
@@ -238,8 +246,10 @@ class TestBuildFunctionalities(unittest.TestCase):
         self.assertEqual((len(anchors), 3, 5), pp_matrix.shape)
 
         for anchor_index, (anchor, pp_results_of_anchor) in enumerate(zip(anchors, pp_matrix)):
+            
+            num_cols_received_from_previous_step = None
 
-            for i in range(5):
+            for i in range(5):  # go over the five pre-processing steps
 
                 # check consistency (in pp names and dimensionality) across train, validation, and test folds
                 self.assertEqual(pp_results_of_anchor[0, i]["tag"], pp_results_of_anchor[1, i]["tag"])  # same pp applied to train and validation
@@ -249,11 +259,14 @@ class TestBuildFunctionalities(unittest.TestCase):
                                  pp_results_of_anchor[1, i]["metadata"]["new_shape"]["cols"])  # same dimensionality in train and validation
                 self.assertEqual(pp_results_of_anchor[0, i]["metadata"]["new_shape"]["cols"],
                                  pp_results_of_anchor[1, i]["metadata"]["new_shape"]["cols"])  # same dimensionality in train and test
-
+                
                 # due to consistency, we only get the information of the train fold
                 pp_name = pp_results_of_anchor[0, i]["tag"]
                 cols_after_pp = pp_results_of_anchor[0, i]["metadata"]["new_shape"]["cols"]
                 train_rows_after_pp_train = pp_results_of_anchor[0, i]["metadata"]["new_shape"]["rows"]
+
+                # check that the right number of rows were used for training
+                self.assertEqual(anchor, train_rows_after_pp_train)
 
                 # after numeric pre-processing, the shape should not have changed
                 if i == 0:
@@ -265,7 +278,34 @@ class TestBuildFunctionalities(unittest.TestCase):
                             f" columns at anchor {anchor}. This could be because there are no distinct values in those."
                         )
                     self.assertGreaterEqual(max_num_cols_expected_after_first_step, cols_after_pp)
-                self.assertEqual(anchor, train_rows_after_pp_train)
-
-                if i == 4:  # after last step
-                    self.assertEqual(num_cols_expected_after_last_step, cols_after_pp)
+                    num_features_accepted = [cols_after_pp]  # disable the check here since we cannot know the exact value
+                    
+                elif i == 1: # feature selection
+                    num_features_accepted = [
+                        int(np.floor(num_cols_received_from_previous_step * portion_retained_in_feature_selection)),
+                        int(np.ceil(num_cols_received_from_previous_step * portion_retained_in_feature_selection))
+                    ] # we select 25% of the features
+                    
+                    # this is only used for the PCA since the number of components are configured based on this
+                    num_features_expected_after_feature_selection = np.round(num_cols_received_from_previous_step * portion_retained_in_feature_selection)
+                
+                elif i == 2: # feature generation
+                    num_features_accepted = [2 * num_cols_received_from_previous_step + (num_cols_received_from_previous_step * (num_cols_received_from_previous_step - 1)) // 2]
+                    num_features_expected_after_generation = 2 * num_features_expected_after_feature_selection + (num_features_expected_after_feature_selection * (num_features_expected_after_feature_selection - 1)) // 2
+                
+                elif i == 3: # feature scaling
+                    num_features_accepted = [num_cols_received_from_previous_step]
+                elif i == 4:  # PCA
+                    num_features_accepted = [
+                        min(anchor, int(np.floor(num_features_expected_after_generation / 4))),
+                        min(anchor, int(np.ceil(num_features_expected_after_generation / 4)))
+                    ] # we project to 25% of the features
+                
+                self.assertIn(
+                    cols_after_pp,
+                    num_features_accepted,
+                    f"Expected {num_features_accepted} features after pre-processing step {i + 1} at anchor {anchor} but found {cols_after_pp}. "
+                    f"Received {num_cols_received_from_previous_step} features from previous step."
+                ) 
+                
+                num_cols_received_from_previous_step = cols_after_pp
