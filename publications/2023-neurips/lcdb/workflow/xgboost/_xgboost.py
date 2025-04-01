@@ -146,6 +146,7 @@ class XGBoostWorkflow(PreprocessedWorkflow):
         logger=None,
         epoch_schedule="power",
         raise_exception_on_unsuitable_preprocessor=True,
+        memory_limit_in_bytes=None,
         **kwargs,
     ):
         super().__init__(
@@ -153,6 +154,7 @@ class XGBoostWorkflow(PreprocessedWorkflow):
             logger=logger,
             random_state=random_state,
             raise_exception_on_unsuitable_preprocessor=raise_exception_on_unsuitable_preprocessor,
+            memory_limit_in_bytes=memory_limit_in_bytes,
             **filter_keys_with_prefix(kwargs, prefix="pp@")
         )
 
