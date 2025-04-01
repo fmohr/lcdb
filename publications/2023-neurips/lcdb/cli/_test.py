@@ -140,6 +140,13 @@ def add_subparser(subparsers):
         " If 'power', you can also specify 'power-<base>-<power>-<delay>' to be more specific. Default is 2-0.5-7",
     )
     subparser.add_argument(
+        "--suppress-json-output",
+        action="store_true",
+        default=False,
+        required=False,
+        help="If set, the JSON that contains the details of the curve and process will not be shown at the end."
+    )
+    subparser.add_argument(
         "--no-exception-on-unsuitable-preprocessor",
         action="store_true",
         default=False,
@@ -165,7 +172,8 @@ def main(
     log_level,
     anchor_schedule,
     epoch_schedule,
-    no_exception_on_unsuitable_preprocessor
+    no_exception_on_unsuitable_preprocessor,
+    suppress_json_output
 ):
 
     # define stream handler
@@ -230,12 +238,13 @@ def main(
         epoch_schedule=epoch_schedule,
         memory_limit_in_bytes=workflow_memory_limit * 1024**2,
         logger=logger,
-        raise_exception_on_unsuitable_preprocessor=not no_exception_on_unsuitable_preprocessor
+        raise_exception_on_unsuitable_preprocessor=not no_exception_on_unsuitable_preprocessor,
     )
 
     # check that the output can indeed be compiled into a string using JSON
     out = lcdb.json.dumps(json.loads(output["metadata"]["json"]), indent=2)
-    print(out)
+    if not suppress_json_output:
+        print(out)
 
     traceback = output["metadata"].get("traceback")
     if traceback is not None and len(traceback) > 0:

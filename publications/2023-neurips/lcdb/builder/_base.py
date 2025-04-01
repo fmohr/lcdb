@@ -172,13 +172,18 @@ def run_learning_workflow(
     infos.update(builder.report)
     try:
         infos["json"] = timer.as_json()
+
+        # sanity check for serialization
+        _ = json.loads(infos["json"])
+        logger.info("Confirmed successful deserialization of results.")
+
     except Exception as e:
         msg = f"SERIALIZATION FAILED: {e}"
         logger.error(msg)
         infos["json"] = msg
 
     results = {"objective": builder.objective, "metadata": infos}
-    logger.info("Job finished, returning control to deephyper.")
+    logger.info("Job finished, returning control.")
     return results
 
 

@@ -298,11 +298,23 @@ def run_experiment(
     import pathlib
 
     import pandas as pd
+    import json
 
-    from deephyper.evaluator import Evaluator
+    from deephyper.evaluator import Evaluator, HPOJob
     from deephyper.evaluator.callback import TqdmCallback
     from deephyper.hpo import CBO, HpProblem
     from deephyper.hpo._problem import convert_to_skopt_space
+
+    from deephyper.evaluator.callback import Callback
+    class JsonSanityCheckCallback(Callback):
+
+        def on_done(self, job: HPOJob):
+            logger.info(f"Checking sanity of metadata.")
+            try:
+                json.loads(job.metadata["json"])
+                logger.info(f"Done, detected proper and deserializable JSON. Proceeding.")
+            except Exception as e:
+                logger.exception(e)
 
     from lcdb.builder.utils import import_attr_from_module, terminate_on_memory_exceeded
 
@@ -334,6 +346,7 @@ def run_experiment(
             }
         else:
             method_kwargs = {"num_workers": num_workers}
+    
     elif evaluator == "mpicomm":
         # MPI Parallelism: all processes will run this code
         method_kwargs = {}
@@ -412,7 +425,9 @@ def run_experiment(
     }
 
     method_kwargs["run_function_kwargs"] = run_function_kwargs
-    method_kwargs["callbacks"] = [TqdmCallback()] if verbose else []
+    method_kwargs["callbacks"] = [JsonSanityCheckCallback()]
+    if verbose:
+        method_kwargs["callbacks"].append(TqdmCallback())
 
     # Convert from MBs to Bytes
     memory_limit = workflow_memory_limit * (1024**2)
