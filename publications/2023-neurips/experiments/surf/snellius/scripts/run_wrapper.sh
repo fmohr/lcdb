@@ -14,7 +14,7 @@ mapping=(
     ["knn"]="lcdb.workflow.sklearn.KNNWorkflow"
     ["xgboost"]="lcdb.workflow.xgboost.XGBoostWorkflow"
     ["treesensemble"]="lcdb.workflow.sklearn.TreesEnsembleWorkflow"
-    ["liblinear"]="lcdb.workflow.sklearn.LibLinearWorkflow"  # Ensure this line exists
+    ["liblinear"]="lcdb.workflow.sklearn.LibLinearWorkflow"
 )
 
 # Load configuration
@@ -55,7 +55,6 @@ MEMORY_PER_NODE_GB=336
 TOTAL_MEMORY_GB=$((MEMORY_PER_NODE_GB * NODES))
 TOTAL_MEMORY_MB=$((TOTAL_MEMORY_GB * 1024))
 
-# Fix: Assign the desired number of cores directly based on desired memory
 # Calculate the number of cores to use based on the desired memory
 DESIRED_CORES=$((TOTAL_MEMORY_GB / DESIRED_MEMORY_GB))
 
@@ -82,7 +81,6 @@ exec > >(tee -a "$log_dir/run_wrapper.log") 2>&1
 
 # Load config for additional settings
 source "$path_to_snellius/scripts/config.sh"
-# 1. Create the output directory and fetch datasets
 # Submit create.sh as a Slurm job and force next jobs to wait
 create_job_id=$(sbatch --export=ALL \
                         --output=${output_path}/logs/${WORKFLOW_NAME}-${LCDB_WORKFLOW_MEMORY_LIMIT_GB}/out/create_datasets.log \
