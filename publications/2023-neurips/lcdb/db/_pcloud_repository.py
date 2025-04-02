@@ -9,9 +9,9 @@ import os
 import json
 
 import pandas as pd
+import numpy as np
 
 from lcdb.db._repository import Repository
-import tempfile
 
 
 import requests
@@ -397,7 +397,12 @@ class PCloudRepository(Repository):
                 df = self.read_result_file(file_desc["fileid"])
  
                 try:
-                    df["m:json"] = df["m:json"].apply(json.loads)
+                    df["m:json"] = df["m:json"].apply(
+                        lambda s: json.loads(s)
+                        if s is not None and isinstance(s, str)
+                        else (None if type(s) == float and np.isnan(s) else s)
+                    )
+                    df["has_result"] = [isinstance(e, dict) and e.get("tag") == "run" for e in df["m:json"]]
                 except Exception as e:
                     is_parsing_error = isinstance(e, JSONDecodeError)
                     if is_parsing_error:

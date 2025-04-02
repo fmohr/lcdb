@@ -1,5 +1,7 @@
 import numpy as np
 import pandas as pd
+import json
+
 from lcdb.analysis.json import (
     QueryAnchorValues,
     QueryEpochValues,
@@ -158,6 +160,7 @@ class LearningCurveGroup:
                 self.add_curve(curve)
 
     def add_curve(self, curve):
+        print(f"Adding curve of shape {type(curve)} with anchors {curve.anchors_size}/{curve.anchors_iteration}")
 
         # check workflow compatibility
         if self.workflow is not None and self.workflow != curve.workflow:
@@ -298,6 +301,8 @@ class LearningCurveExtractor:
         """
         Computes the sample-wise learning curve for a specific metric for a set of configurations, possibly across workflows and datasets.
         """
+        if not row["has_result"]:
+            return None
 
         lc_dict = row["m:json"]
 
