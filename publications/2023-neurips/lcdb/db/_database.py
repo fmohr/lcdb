@@ -7,6 +7,10 @@ import pandas as pd
 from lcdb.db._repository import Repository
 from lcdb.db._util import get_path_to_lcdb,  CountAwareGenerator
 from tqdm import tqdm
+import logging
+
+
+logger = logging.getLogger("lcdb")
 
 
 class LCDB:
@@ -176,8 +180,12 @@ class LCDB:
         else:
             dfs_per_workflow = {}
             for df in tqdm(gen, disable=not show_progress):
-                workflow_class = df["m:workflow"].values[0]
-                dfs_per_workflow[workflow_class] = df if workflow_class not in dfs_per_workflow else pd.concat([dfs_per_workflow[workflow_class], df])
+                if df is None:
+                    logger.warning("Received empty result dataframe.")
+                    continue
+                else:
+                    workflow_class = df["m:workflow"].values[0]
+                    dfs_per_workflow[workflow_class] = df if workflow_class not in dfs_per_workflow else pd.concat([dfs_per_workflow[workflow_class], df])
             if workflows is not None and len(workflows) == 1:
                 return dfs_per_workflow[workflows[0]] if workflows[0] in dfs_per_workflow else None
             else:

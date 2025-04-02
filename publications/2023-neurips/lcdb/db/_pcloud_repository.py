@@ -10,7 +10,6 @@ import json
 
 import pandas as pd
 
-from lcdb.db._dataframe import deserialize_dataframe
 from lcdb.db._repository import Repository
 import tempfile
 
@@ -389,7 +388,6 @@ class PCloudRepository(Repository):
         )
 
         # read in all result files
-
         def gen_fun(raise_errors=False):
             total_entries = 0
 
@@ -399,7 +397,7 @@ class PCloudRepository(Repository):
                 df = self.read_result_file(file_desc["fileid"])
  
                 try:
-                    df_deserialized = deserialize_dataframe(df)
+                    df["m:json"] = df["m:json"].apply(json.loads)
                 except Exception as e:
                     is_parsing_error = isinstance(e, JSONDecodeError)
                     if is_parsing_error:
@@ -419,14 +417,14 @@ class PCloudRepository(Repository):
                         raise Exception(error_msg)
                     elif report_errors:
                         print(error_msg)
-                    df_deserialized = None
+                    df = None
 
                 if processors is not None:
                     for name, fun in processors.items():
                         df[name] = df.apply(fun, axis=1)  # apply the function to all rows in the dataframe
                     df.drop(columns="m:json", inplace=True)
 
-                total_entries += len(df_deserialized) if df_deserialized is not None else 0
-                yield df_deserialized
+                total_entries += len(df) if df is not None else 0
+                yield df
 
         return CountAwareGenerator(len(result_files), gen=gen_fun())

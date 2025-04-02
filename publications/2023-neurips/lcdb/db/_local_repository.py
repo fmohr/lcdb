@@ -6,7 +6,6 @@ import time
 
 import pandas as pd
 
-from lcdb.db._dataframe import deserialize_dataframe
 from lcdb.db._repository import Repository
 from ._util import CountAwareGenerator
 
