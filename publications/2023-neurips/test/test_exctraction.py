@@ -23,16 +23,17 @@ class TestExtractors(unittest.TestCase):
 
     @parameterized.expand(
         [
-            (6, "lcdb.workflow.sklearn.KNNWorkflow", 0, 0, 42),
+            (1111, "lcdb.workflow.sklearn.KNNWorkflow", 0, 0, 42),
             (3, "lcdb.workflow.sklearn.LibLinearWorkflow", 0, 0, 42),
             (3, "lcdb.workflow.sklearn.LibSVMWorkflow", 0, 0, 42),
-            (6, "lcdb.workflow.sklearn.TreesEnsembleWorkflow", 0, 1, 42),
+            (1111, "lcdb.workflow.sklearn.TreesEnsembleWorkflow", 0, 0, 42),
         ]
     )
     def test_learning_curve_extraction(
         self, openmlid, workflow, val_seed, test_seed, workflow_seed
     ):
 
+        logger.info(f"Starting test for extraction on {openmlid=}, {workflow=}, {val_seed=}, {test_seed=}, {workflow_seed=}.")
         metrics = ["error_rate"]  # , "balanced_error_rate"]
 
         lcdb = LCDB()
@@ -53,18 +54,21 @@ class TestExtractors(unittest.TestCase):
 
         oob_fold_expected = "TreesEnsembleWorkflow" in workflow
         num_oob_not_nan = 0
-        if df is not None:
+        print(df)
+        self.assertIsNotNone(df, f"No results found for {openmlid=}, {workflow=}, {val_seed=}, {test_seed=}, {workflow_seed=}")
+        
+        df = df[df["has_result"]] # filter out configs for which no results are available
 
-            # test that all curves are proper
-            for lc in df["learning_curve"]:
-                self.assertEqual(len(metrics), lc.values.shape[0])
-                self.assertEqual(4, lc.values.shape[1])
-                if lc.is_iteration_wise_curve:
-                    if not np.isnan(lc.values[0, 3, 0, 0, 0, 0, 0]):
-                        num_oob_not_nan += 1
-                else:
-                    if not np.isnan(lc.values[0, 3, 0, 0, 0, 0]):
-                        num_oob_not_nan += 1
+        # test that all curves are proper
+        for lc in df["learning_curve"]:
+            self.assertEqual(len(metrics), lc.values.shape[0])
+            self.assertEqual(4, lc.values.shape[1])
+            if lc.is_iteration_wise_curve:
+                if not np.isnan(lc.values[0, 3, 0, 0, 0, 0, 0]):
+                    num_oob_not_nan += 1
+            else:
+                if not np.isnan(lc.values[0, 3, 0, 0, 0, 0]):
+                    num_oob_not_nan += 1
 
         self.assertTrue(not oob_fold_expected or num_oob_not_nan > 0)
 

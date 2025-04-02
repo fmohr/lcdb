@@ -178,14 +178,19 @@ class LCDB:
         if return_generator:
             return gen
         else:
+            logger.info("Creating dataframe from stream.")
             dfs_per_workflow = {}
+            cnt = 0
             for df in tqdm(gen, disable=not show_progress):
+                cnt += 1
                 if df is None:
                     logger.warning("Received empty result dataframe.")
                     continue
                 else:
-                    workflow_class = df["m:workflow"].values[0]
+                    workflow_class = df[df["has_result"]]["m:workflow"].values[0]
                     dfs_per_workflow[workflow_class] = df if workflow_class not in dfs_per_workflow else pd.concat([dfs_per_workflow[workflow_class], df])
+                    logger.debug(f"Added results from dataframe with {len(df)} entries. New length of dataframe for {workflow_class=} is {len(dfs_per_workflow[workflow_class])}")
+            logger.info(f"Preparing results based on {cnt} seen dataframes for {len(dfs_per_workflow)} different workflows.")
             if workflows is not None and len(workflows) == 1:
                 return dfs_per_workflow[workflows[0]] if workflows[0] in dfs_per_workflow else None
             else:
