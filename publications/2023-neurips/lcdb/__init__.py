@@ -1,3 +1,1 @@
-from lcdb.db import LCDB
-
-__version__ = LCDB.get_version()
+__version__ = "0.0.1"
