@@ -25,6 +25,7 @@ pushd $LCDB_OUTPUT_RUN
 # -n --ntasks: number of tasks/ranks to run globally
 # -N --nodes: number of nodes
 # therefore the number of tasks/node is n/N
+# TODO: STARTED 
 srun -n ${NTOTRANKS} -N ${SLURM_JOB_NUM_NODES:-1} \
         --cpus-per-task 1 \
         --threads-per-core 1 \

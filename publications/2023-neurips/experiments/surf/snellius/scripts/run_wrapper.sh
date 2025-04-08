@@ -47,7 +47,7 @@ test_seeds=($(yq -r '.test_seeds[]' "$CONFIG_FILE"))
 
 # *********MEMORY CALCULATIONS*********
 # Number of nodes
-NODES=1
+NODES=4
 CPUS_PER_TASK=192
 MEMORY_PER_NODE_GB=336
 
@@ -94,6 +94,8 @@ for val_seed in "${val_seeds[@]}"; do
     for test_seed in "${test_seeds[@]}"; do
         export LCDB_VALID_SEED=$val_seed
         export LCDB_TEST_SEED=$test_seed
+        # TODO: use openml ids
+        # TODO: submitted status
         array_size=$((${#LCDB_OPENML_ID_ARRAY[@]} - 1))
 
         WRAPPER_SCRIPT="$path_to_snellius/scripts/run.sh"

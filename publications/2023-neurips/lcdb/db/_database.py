@@ -2,6 +2,7 @@ import json
 import os
 import pathlib
 import re
+from statistics import mean
 import trace
 import pandas as pd
 from lcdb.db._repository import Repository
@@ -286,7 +287,6 @@ class LCDB:
             "errors": pd.Series(errors) if errors else None  
         }
 
-
     def statistics(
             self,
             repositories=None,
@@ -376,12 +376,10 @@ class LCDB:
             if num_configs is None:
                 num_configs = len(df)
             traceback_rows = df[df["m:traceback"].notna()]
-            num_errors = len(traceback_rows)
-            # instead of number of error measure number of non-nan m:json 
+            # instead of number of error measure number of non-nan m:json (they should represent the same thing)
             successfull_configs = df[df["m:json"].notna()]
             num_success_configs = len(successfull_configs)
             error_rate = (num_configs - num_success_configs) / num_configs if num_configs else 0
-            # error_rate = num_errors / num_configs if num_configs else 0
 
             tracebacks, errors = [], []
             for _, row in traceback_rows.iterrows():
@@ -394,7 +392,7 @@ class LCDB:
                 tracebacks.append(traceback_str)
                 errors.append(error_message)
 
-            # Extract metadata fields
+            # metadata extraction
 
             # get unique openmlids
             openmlids = df["m:openmlid"].unique()
@@ -415,24 +413,46 @@ class LCDB:
             if len(workflows) > 1:
                 print(f"Warning: Multiple workflows found in dataframe: {workflows}")
 
-            # ensure openmlids column is integers
+            # convert to int
             if openmlid is not None:
                 openmlid = int(openmlid)
 
-            # take median and max memory usage
+            def get_mean_max_std(df, column_name):
+                from scipy import stats
+
+                # Convert to numeric and drop NaNs
+                values = pd.to_numeric(df[column_name], errors="coerce").dropna()
+                
+                if not values.empty:
+                    # mean
+                    mean = values.mean()
+
+                    # standard error and confidence interval
+                    confidence = 0.95
+                    n = len(values)
+                    ci_low, ci_high = stats.t.interval(
+                        confidence, df=n-1, loc=mean, scale=stats.sem(values)
+                    )
+
+                    # max
+                    maximum = values.max()
+
+                    return mean, ci_low, ci_high, maximum
+
+
             if "m:memory" in df.columns:
-                df["m:memory"] = pd.to_numeric(df["m:memory"], errors="coerce")  # Convert to numeric safely
-                median_memory = df["m:memory"].median(skipna=True)  # Skip NaN values
-                max_memory = df["m:memory"].max(skipna=True)
+                mean_memory, ci_low_memory, ci_high_memory, max_memory = get_mean_max_std(df, "m:memory")
+            else:
+                mean_memory, ci_low_memory, ci_high_memory, max_memory = None, None, None, None
 
             if "m:timestamp_start" in df.columns and "m:timestamp_end" in df.columns:
                 df["execution_time"] = df["m:timestamp_end"] - df["m:timestamp_start"]
-                median_config_time = df["execution_time"].median()
-                max_config_time = df["execution_time"].max()
+                mean_config_time, ci_low_config_time, ci_high_config_time, max_config_time = get_mean_max_std(df, "execution_time")
             else:
-                median_config_time, max_config_time = None, None
+                mean_config_time, ci_low_config_time, ci_high_config_time, max_config_time = None, None, None, None
 
-            # Append structured data
+
+            # append structured data
             records.append({
                 "workflow": workflow,
                 "openmlid": openmlid,
@@ -440,10 +460,14 @@ class LCDB:
                 "error_rate": error_rate,
                 "tracebacks": tracebacks,
                 "errors": errors,
-                "median_memory": median_memory,
+                "mean_memory": mean_memory,
+                "ci_low_memory": ci_low_memory,
+                "ci_high_memory": ci_high_memory,
                 "max_memory": max_memory,
-                "median_config_time": median_config_time,
-                "max_config_time": max_config_time
+                "mean_config_time": mean_config_time,
+                "ci_low_config_time": ci_low_config_time,
+                "ci_high_config_time": ci_high_config_time,
+                "max_config_time": max_config_time,
             })
 
         for df in tqdm(gen, disable=not show_progress):
