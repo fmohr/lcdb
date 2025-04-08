@@ -268,6 +268,7 @@ def run_learning_workflow_from_deephyper(
     logger.info(f"Running job {job.id} with parameters: {json.dumps(job.parameters)}")
 
     import functools
+    from lcdb import LCDB  # only to get the version of the code
     from lcdb.builder import run_learning_workflow
     from lcdb.builder.utils import terminate_on_memory_exceeded
 
@@ -309,6 +310,7 @@ def run_learning_workflow_from_deephyper(
 
     # adding these results is important to avoid that the field is missing if the config is killed
     experiment_data = {
+        "lcdb_version": LCDB.get_version(),
         "campaign": campaign,
         "openmlid": openml_id,
         "workflow_seed": workflow_seed,

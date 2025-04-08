@@ -1,7 +1,6 @@
 import json
 import os
 import pathlib
-import re
 from statistics import mean
 import trace
 import pandas as pd
@@ -93,6 +92,24 @@ class LCDB:
             self._repositories[repository_name] = Repository.get(repository_dir)
 
         self.loaded = True
+
+    @classmethod
+    def get_version(cls):
+
+        # first get path to lcdb package
+        path = pathlib.Path(__file__)
+        import subprocess
+
+        # check whether this folder is tracked with gut
+        try:
+            output = subprocess.check_output(
+                ["git", "log", "-n", "1", "--pretty=format:%H", "--", str(path)],
+                stderr=subprocess.DEVNULL
+            )
+            return output.decode().strip()
+
+        except subprocess.CalledProcessError:
+            return None
 
     @property
     def repositories(self):
@@ -209,83 +226,32 @@ class LCDB:
             validation_seeds=None,
             show_progress=False
     ):
+        
+        from lcdb.analysis.processors._traceback_extractor import TracebackExtractor
+
         """
         Retrieves only rows that contain a traceback and their associated configs.
         """
-        if not self.loaded:
-            self._load()
+        gen = self.query(
+            repositories=repositories,
+            campaigns=campaigns,
+            workflows=workflows,
+            openmlids=openmlids,
+            workflow_seeds=workflow_seeds,
+            test_seeds=test_seeds,
+            validation_seeds=validation_seeds,
+            show_progress=show_progress,
+            processors={
+                "traceback_summary": TracebackExtractor()
+            }
+        )
 
-        if repositories is None:
-            repositories = list(self.repositories.values())
-        else:
-            requested_repository_names = set(repositories)
-            existing_repository_names = set(self.repositories.keys())
-            if (
-                len(requested_repository_names.difference(existing_repository_names))
-                > 0
-            ):
-                raise Exception(
-                    f"The following repositories were included in the query but do not exist in this LCDB_debug: "
-                    f"{requested_repository_names.difference(existing_repository_names)}"
-                )
-            repositories = [self.repositories[k] for k in requested_repository_names]
-
-        if workflows is not None and isinstance(workflows, str):
-            workflows = [workflows]
-
-        result_generators = []
-        for repository in repositories:
-            if repository.exists():
-                result_generators.append(
-                    repository.query_results_as_stream(
-                        campaigns=campaigns,
-                        workflows=workflows,
-                        openmlids=openmlids,
-                        workflow_seeds=workflow_seeds,
-                        test_seeds=test_seeds,
-                        validation_seeds=validation_seeds,
-                    )
-                )
-
-        def generator():
-            for gen in result_generators:
-                for res in gen:
-                    yield res
-
-        gen = CountAwareGenerator(sum([len(g) for g in result_generators]), generator())
-
-        tracebacks, configs, errors = [], [], []
-
+        dfs = []
         for df in tqdm(gen, disable=not show_progress):
-
-            if df is not None:
-                # check if "traceback" column exists
-                if "m:traceback" in df.columns:
-                    traceback_rows = df[df["m:traceback"].notna()]
-
-                    # print(traceback_rows)
-                    for index, traceback_row in traceback_rows.iterrows():
-                        traceback_str = traceback_row["m:traceback"]
-                        traceback_frame = traceback_row.to_frame().T
-                        traceback_indices = traceback_rows.index.tolist()
-                        config_cols = [c for c in traceback_frame.columns if c.startswith("p:")]
-                        corresponding_configs_reset = traceback_rows.loc[traceback_indices, config_cols].drop_duplicates().reset_index(drop=True)
-                        configs.append(corresponding_configs_reset)
-                        # extract errors from traceback messages str format first
-                        try:
-                            error_message = re.search(r'(\w+Error): (.*)', traceback_str).group(0)
-                        except:
-                            error_message = traceback_str
-                        tracebacks.append(traceback_str)
-                        errors.append(error_message)
-                else:
-                    print("Error: no traceback column in dataframe")
-
-        return {
-            "configs": pd.concat(configs, ignore_index=True) if configs else None,
-            "tracebacks": pd.Series(tracebacks) if tracebacks else None,
-            "errors": pd.Series(errors) if errors else None  
-        }
+            df = df[df["traceback_summary"].notna()]
+            if df is not None and len(df) > 0:
+                dfs.append(df)
+        return pd.concat(dfs, axis=0)
 
     def statistics(
             self,
