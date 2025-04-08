@@ -245,6 +245,7 @@ def run_learning_workflow_from_deephyper(
     """
     import json
     import pathlib
+    from time import time
 
     if logger is None:
         logger = logging.getLogger("LCDB")
@@ -266,9 +267,26 @@ def run_learning_workflow_from_deephyper(
 
     logger.info(f"Running job {job.id} with parameters: {json.dumps(job.parameters)}")
 
+    import functools
     from lcdb.builder import run_learning_workflow
+    from lcdb.builder.utils import terminate_on_memory_exceeded
 
-    results = run_learning_workflow(
+    # Convert from MBs to Bytes
+    memory_tracing_interval = 0.1
+    log_interval = 5
+    raise_exception = False
+    run_function = functools.partial(
+        terminate_on_memory_exceeded,
+        memory_limit_in_bytes,
+        memory_tracing_interval,
+        raise_exception,
+        run_learning_workflow,
+        log_interval,
+    )
+
+    # compute the learning curve
+    t_start = time()
+    results = run_function(
         openml_id=openml_id,
         task_type=task_type,
         workflow_class=workflow_class,
@@ -287,6 +305,28 @@ def run_learning_workflow_from_deephyper(
         epoch_schedule=epoch_schedule,
         memory_limit_in_bytes=memory_limit_in_bytes
     )
+    t_end = time()
+
+    # adding these results is important to avoid that the field is missing if the config is killed
+    experiment_data = {
+        "campaign": campaign,
+        "openmlid": openml_id,
+        "workflow_seed": workflow_seed,
+        "workflow": workflow_class,
+        "valid_prop": valid_prop,
+        "test_prop": valid_prop,
+        "monotonic": monotonic,
+        "valid_seed": valid_seed,
+        "test_seed": test_seed
+    }
+    if "metadata" in results:  # this is just for ordering purposes
+        experiment_data.update(results["metadata"])
+    results["metadata"] = experiment_data
+    
+    # set json to none if it is not there
+    if "json" not in results["metadata"]:
+        results["metadata"]["json"] = None
+
     checkpoint_file_for_job.parent.mkdir(parents=True, exist_ok=True)
     with open(checkpoint_file_for_job, "w") as f:
         json.dump(results, f)
@@ -331,7 +371,6 @@ def run_experiment(
     except ModuleNotFoundError:
         MPI4PY_IMPORTED = False
 
-    import functools
     import pathlib
 
     import pandas as pd
@@ -347,13 +386,16 @@ def run_experiment(
 
         def on_done(self, job: HPOJob):
             logger.info(f"Checking sanity of metadata.")
+            if job.metadata["json"] is None:
+                logger.error("No JSON found in the output.")
+                return
             try:
                 json.loads(job.metadata["json"])
                 logger.info(f"Done, detected proper and deserializable JSON. Proceeding.")
             except Exception as e:
                 logger.exception(e)
 
-    from lcdb.builder.utils import import_attr_from_module, terminate_on_memory_exceeded, does_status_file_exist, create_status_file, EXPERIMENT_STATUS_RUNNING, EXPERIMENT_STATUS_COMPLETED
+    from lcdb.builder.utils import import_attr_from_module, does_status_file_exist, create_status_file, EXPERIMENT_STATUS_RUNNING, EXPERIMENT_STATUS_COMPLETED
 
     if evaluator in ["serial", "thread", "process", "ray"]:
         # Master-Worker Parallelism: only 1 process will run this code
@@ -477,26 +519,12 @@ def run_experiment(
     if verbose:
         method_kwargs["callbacks"].append(TqdmCallback())
 
-    # Convert from MBs to Bytes
-    memory_limit = workflow_memory_limit * (1024**2)
-    memory_tracing_interval = 0.1
-    log_interval = 5
-    raise_exception = False
-    run_function = functools.partial(
-        terminate_on_memory_exceeded,
-        memory_limit,
-        memory_tracing_interval,
-        raise_exception,
-        run_learning_workflow_from_deephyper,
-        log_interval,
-    )
 
     print("method_kwargs", method_kwargs)
     # print the run function setup
-    print("run_function", run_function)
     
     with Evaluator.create(
-        run_function,
+        run_learning_workflow_from_deephyper,
         method=evaluator,
         method_kwargs=method_kwargs,
     ) as evaluator:
@@ -524,9 +552,9 @@ def run_experiment(
                 valseed=valid_seed,
                 status=EXPERIMENT_STATUS_COMPLETED
                 )
-            import shutil
-            shutil.rmtree(
-                get_path_for_intermediate_results(
+
+            # remove checkpoint results if those exist
+            folder_with_checkpoint_results = get_path_for_intermediate_results(
                     workflow_class=workflow_class,
                     campaign=campaign,
                     openml_id=openml_id,
@@ -534,7 +562,10 @@ def run_experiment(
                     test_seed=test_seed,
                     valid_seed=valid_seed
                     )
-            )
+            
+            if folder_with_checkpoint_results.exists():
+                import shutil
+                shutil.rmtree(folder_with_checkpoint_results)
             
 
 

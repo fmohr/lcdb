@@ -394,9 +394,9 @@ class PCloudRepository(Repository):
             for i, file_desc in result_files.iterrows():
                 if total_entries > 10 ** 6:
                     raise ValueError(f"Cannot read in more than 10**6 results.")
-                df = self.read_result_file(file_desc["fileid"])
  
                 try:
+                    df = self.read_result_file(file_desc["fileid"])
                     df["m:json"] = df["m:json"].apply(
                         lambda s: json.loads(s)
                         if s is not None and isinstance(s, str)

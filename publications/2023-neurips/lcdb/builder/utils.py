@@ -14,6 +14,8 @@ import numpy as np
 import psutil
 from scipy.special import softmax
 
+import traceback
+
 EXPERIMENT_STATUS_SUBMITTED = "submitted"  # has been given to the scheduler
 EXPERIMENT_STATUS_STARTED = "started"   # has been invoked by the scheduler
 EXPERIMENT_STATUS_RUNNING = "running"   # execution has been started at Python level
@@ -167,7 +169,10 @@ def terminate_on_memory_exceeded(
         function: a decorated function.
     """
 
-    logger = logging.getLogger("LCDB")
+    if "logger" not in kwargs:
+        logger = logging.getLogger("LCDB")
+    else:
+        logger = kwargs["logger"]
 
     timestamp_start = time.time()
     timestamp_last_log_message = -np.inf
@@ -178,14 +183,18 @@ def terminate_on_memory_exceeded(
 
     try:
         with ProcessPoolExecutor(max_workers=1) as executor:
+
+            # trick to get the PID of the process that runs this job, to being able to kill it later
             future = executor.submit(os.getpid)
             pid = future.result()
             p = psutil.Process(pid)
 
+            # submit actual job
             future = executor.submit(func, *args, **kwargs)
 
             memory_peak = p.memory_info().rss
 
+            # start monitoring memory consumption of the process
             while not future.done():
 
                 # in bytes (not the peak memory but last snapshot)
@@ -214,7 +223,13 @@ def terminate_on_memory_exceeded(
                 time.sleep(memory_tracing_interval)
 
             if output is None:
-                output = future.result()
+                try:
+                    output = future.result()
+                except Exception as e:
+                    traceback_of_error = traceback.format_exc()
+                    output = {"objective": "F", "metadata": {"traceback": str(traceback_of_error)}}
+                    logger.exception(e)
+
     except BrokenExecutor:
         pass
 

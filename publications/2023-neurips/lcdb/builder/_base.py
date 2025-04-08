@@ -40,6 +40,7 @@ def run_learning_workflow(
     anchor_schedule: str = "power",
     epoch_schedule: str = "power",
     memory_limit_in_bytes: int = 32 * 1024**3,  # 32 GB by default
+    timer=None,
     logger=None,
 ):
     """This function trains the workflow on a dataset and returns performance metrics.
@@ -71,7 +72,10 @@ def run_learning_workflow(
         f"Memory limit is {memory_limit_in_bytes // 1024**2}MB"
     )
 
-    timer = Timer(precision=4)
+    if timer is None:
+        timer = Timer(precision=4)
+    else:
+        logger.info(f"Re-using given timer {timer}")
     run_timer_id = timer.start("run")
 
     # Load the raw dataset
@@ -121,13 +125,6 @@ def run_learning_workflow(
         )
         results = {"objective": "F", "metadata": {"reason_for_fail": reason_to_not_build}}
 
-    # Initialize information to be returned
-    infos = {
-        "openmlid": openml_id,
-        "workflow_seed": workflow_seed,
-        "workflow": workflow_class,
-    }
-
     # create builder
     if task_type not in ["classification", "regression"]:
         raise ValueError(
@@ -169,20 +166,20 @@ def run_learning_workflow(
 
     # update infos based on report
     logger.info("Preparing final report (serializing information in timer).")
-    infos.update(builder.report)
+    report = builder.report.copy()
     try:
-        infos["json"] = timer.as_json()
+        report["json"] = timer.as_json()
 
         # sanity check for serialization
-        _ = json.loads(infos["json"])
+        _ = json.loads(report["json"])
         logger.info("Confirmed successful deserialization of results.")
 
     except Exception as e:
         msg = f"SERIALIZATION FAILED: {e}"
         logger.error(msg)
-        infos["json"] = msg
+        report["json"] = msg
 
-    results = {"objective": builder.objective, "metadata": infos}
+    results = {"objective": builder.objective, "metadata": report}
     logger.info("Job finished, returning control.")
     return results
 
@@ -282,14 +279,7 @@ class LearningCurveBuilder:
                 dataset_metadata["categories"]["values"] = values_categories
 
         # create report
-        self.report = {
-            "valid_prop": valid_prop,
-            "test_prop": valid_prop,
-            "monotonic": monotonic,
-            "valid_seed": valid_seed,
-            "test_seed": test_seed,
-            "traceback": None,
-        }
+        self.report = {}
 
         self.objective = None
 

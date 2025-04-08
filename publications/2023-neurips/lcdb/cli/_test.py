@@ -211,7 +211,7 @@ def main(
         raise ValueError(
             f"Task type must be 'classification' or 'regression' but is {task_type}."
         )
-
+    
     memory_tracing_interval = 0.1
     raise_exception = False
     run_function = functools.partial(
@@ -219,7 +219,7 @@ def main(
         workflow_memory_limit * (1024**2),  # was given in MB initially
         memory_tracing_interval,
         raise_exception,
-        run_learning_workflow,
+        run_learning_workflow
     )
 
     output = run_function(
@@ -238,8 +238,21 @@ def main(
         epoch_schedule=epoch_schedule,
         memory_limit_in_bytes=workflow_memory_limit * 1024**2,
         logger=logger,
-        raise_exception_on_unsuitable_preprocessor=not no_exception_on_unsuitable_preprocessor,
+        raise_exception_on_unsuitable_preprocessor=not no_exception_on_unsuitable_preprocessor
     )
+
+    # adding these results is important to avoid that the field is missing if the config is killed
+    output.update({
+        "campaign": None,
+        "openmlid": openml_id,
+        "workflow_seed": workflow_seed,
+        "workflow": workflow_class,
+        "valid_prop": valid_prop,
+        "test_prop": valid_prop,
+        "monotonic": monotonic,
+        "valid_seed": valid_seed,
+        "test_seed": test_seed
+    })
 
     # check that the output can indeed be compiled into a string using JSON
     out = lcdb.json.dumps(json.loads(output["metadata"]["json"]), indent=2)
