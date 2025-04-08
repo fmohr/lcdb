@@ -197,9 +197,13 @@ def add_subparser(subparsers):
 
     subparser.set_defaults(func=function_to_call)
 
+def get_path_for_intermediate_results(campaign, workflow_class, openml_id, workflow_seed, test_seed, valid_seed, checkpoint_dir="./exp-checkpoints/"):
+    import pathlib
+    return pathlib.Path(f"{checkpoint_dir}/{campaign}/config-results/{workflow_class}/{openml_id}/{workflow_seed}-{test_seed}-{valid_seed}")
 
 def run_learning_workflow_from_deephyper(
         job,
+        campaign: str = "",
         openml_id: int = 3,
         task_type: str = "classification",
         workflow_class: str = "lcdb.workflow.sklearn.LibLinearWorkflow",
@@ -240,14 +244,31 @@ def run_learning_workflow_from_deephyper(
         dict: a dictionary with 2 keys (objective, metadata) where objective is the objective maximized by deephyper (if used) and metadata is a JSON serializable sub-dictionnary which are complementary information about the workflow.
     """
     import json
+    import pathlib
 
     if logger is None:
         logger = logging.getLogger("LCDB")
+
+    # if this job has been done in the past, skip computations
+    checkpoint_folder = get_path_for_intermediate_results(
+        campaign=campaign,
+        openml_id=openml_id,
+        workflow_class=workflow_class,
+        workflow_seed=workflow_seed,
+        test_seed=test_seed,
+        valid_seed=valid_seed
+    )
+    checkpoint_file_for_job = pathlib.Path(f"{checkpoint_folder}/{job.id}.json")
+    if checkpoint_file_for_job.exists():
+        with open(checkpoint_file_for_job, "r") as f:
+            logger.info(f"Reading results for job {job.id} with parameters: {json.dumps(job.parameters)}.")
+            return json.load(f)
+
     logger.info(f"Running job {job.id} with parameters: {json.dumps(job.parameters)}")
 
     from lcdb.builder import run_learning_workflow
 
-    return run_learning_workflow(
+    results = run_learning_workflow(
         openml_id=openml_id,
         task_type=task_type,
         workflow_class=workflow_class,
@@ -266,6 +287,10 @@ def run_learning_workflow_from_deephyper(
         epoch_schedule=epoch_schedule,
         memory_limit_in_bytes=memory_limit_in_bytes
     )
+    checkpoint_file_for_job.parent.mkdir(parents=True, exist_ok=True)
+    with open(checkpoint_file_for_job, "w") as f:
+        json.dump(results, f)
+    return results
 
 
 def run_experiment(
@@ -429,6 +454,7 @@ def run_experiment(
         initial_points.append(config_default)
 
     run_function_kwargs = {
+        "campaign": campaign,
         "openml_id": openml_id,
         "task_type": task_type,
         "workflow_class": workflow_class,
@@ -498,6 +524,18 @@ def run_experiment(
                 valseed=valid_seed,
                 status=EXPERIMENT_STATUS_COMPLETED
                 )
+            import shutil
+            shutil.rmtree(
+                get_path_for_intermediate_results(
+                    workflow_class=workflow_class,
+                    campaign=campaign,
+                    openml_id=openml_id,
+                    workflow_seed=workflow_seed,
+                    test_seed=test_seed,
+                    valid_seed=valid_seed
+                    )
+            )
+            
 
 
 def main(**kwargs):
