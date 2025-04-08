@@ -19,12 +19,22 @@ def add_subparser(subparsers):
     )
 
     subparser.add_argument(
+        "-c",
+        "--campaign",
+        type=str,
+        required=False,
+        default="default_campaign",
+        help="The name of the campaign, which is mostly used for status files. Neither folders for configs nor for result files are inferred from",
+    )
+
+    subparser.add_argument(
         "-id",
         "--openml-id",
         type=int,
         required=True,
         help="The identifier of the OpenML dataset.",
     )
+
     subparser.add_argument(
         "-w",
         "--workflow-class",
@@ -32,6 +42,7 @@ def add_subparser(subparsers):
         required=True,
         help="The 'path' of the workflow to train.",
     )
+
     subparser.add_argument(
         "-tt",
         "--task-type",
@@ -258,6 +269,7 @@ def run_learning_workflow_from_deephyper(
 
 
 def run_experiment(
+    campaign,
     openml_id,
     task_type,
     workflow_class,
@@ -316,7 +328,7 @@ def run_experiment(
             except Exception as e:
                 logger.exception(e)
 
-    from lcdb.builder.utils import import_attr_from_module, terminate_on_memory_exceeded
+    from lcdb.builder.utils import import_attr_from_module, terminate_on_memory_exceeded, does_status_file_exist, create_status_file, EXPERIMENT_STATUS_RUNNING, EXPERIMENT_STATUS_COMPLETED
 
     if evaluator in ["serial", "thread", "process", "ray"]:
         # Master-Worker Parallelism: only 1 process will run this code
@@ -377,6 +389,16 @@ def run_experiment(
     WorkflowClass = import_attr_from_module(workflow_class)
     config_space = WorkflowClass.config_space()
     config_default = config_space.get_default_configuration().get_dictionary()
+    
+    # check whether experiment has already run
+    if (
+        does_status_file_exist(workflow=workflow_class, campaign=campaign, openmlid=openml_id, workflowseed=workflow_seed, testseed=test_seed, valseed=valid_seed, status=EXPERIMENT_STATUS_RUNNING) or
+        does_status_file_exist(workflow=workflow_class, campaign=campaign, openmlid=openml_id, workflowseed=workflow_seed, testseed=test_seed, valseed=valid_seed, status=EXPERIMENT_STATUS_COMPLETED)
+    ):
+        logger.info(f"We have a status file for {workflow_class}-{campaign}-{openml_id}-{workflow_seed}-{test_seed}-{valid_seed} so the experiment is being skipped.")
+        return
+    create_status_file(workflow=workflow_class, campaign=campaign, openmlid=openml_id, workflowseed=workflow_seed, testseed=test_seed, valseed=valid_seed, status=EXPERIMENT_STATUS_RUNNING)
+    
 
     # Set the search space
     problem = HpProblem(config_space)
@@ -467,6 +489,15 @@ def run_experiment(
 
             # Execute the search
             results = search.search(max_evals, timeout=timeout, max_evals_strict=True)
+            create_status_file(
+                workflow=workflow_class,
+                campaign=campaign,
+                openmlid=openml_id,
+                workflowseed=workflow_seed,
+                testseed=test_seed,
+                valseed=valid_seed,
+                status=EXPERIMENT_STATUS_COMPLETED
+                )
 
 
 def main(**kwargs):

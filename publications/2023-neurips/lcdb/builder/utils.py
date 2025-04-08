@@ -1,4 +1,5 @@
 import importlib
+import pathlib
 import logging
 import multiprocessing
 import multiprocessing.pool
@@ -13,6 +14,12 @@ import numpy as np
 import psutil
 from scipy.special import softmax
 
+EXPERIMENT_STATUS_SUBMITTED = "submitted"  # has been given to the scheduler
+EXPERIMENT_STATUS_STARTED = "started"   # has been invoked by the scheduler
+EXPERIMENT_STATUS_RUNNING = "running"   # execution has been started at Python level
+EXPERIMENT_STATUS_COMPLETED= "completed"    # the results of all hyperparameter configurations are in
+
+VALID_STATI = [EXPERIMENT_STATUS_SUBMITTED,EXPERIMENT_STATUS_STARTED, EXPERIMENT_STATUS_RUNNING, EXPERIMENT_STATUS_COMPLETED]
 
 def standardize_run_function_output(
     output: Union[str, float, tuple, list, dict],
@@ -313,4 +320,18 @@ def estimate_memory_consumption_for_dataset(shape, dtype=np.float64, unit="B"):
     else:
         raise ValueError(f"Unit must be 'B', 'KB', 'MB' or 'GB' but is {unit}")
     return memory_bytes
-    
+
+def get_path_to_status_file(workflow, openmlid, campaign, workflowseed, testseed, valseed, status):
+    if status not in VALID_STATI:
+        raise ValueError(f"status must be in {VALID_STATI} but is {status}")
+    return pathlib.Path(f"exp-checkpoints/{campaign}/{workflow}-{openmlid}-{workflowseed}-{testseed}-{valseed}.{status}")
+
+def does_status_file_exist(workflow, openmlid, campaign, workflowseed, testseed, valseed, status):
+    return get_path_to_status_file(workflow, openmlid, campaign, workflowseed, testseed, valseed, status).exists()
+
+def create_status_file(workflow, openmlid, campaign, workflowseed, testseed, valseed, status):
+    path = get_path_to_status_file(workflow, openmlid, campaign, workflowseed, testseed, valseed, status)
+    path.parent.mkdir(exist_ok=True, parents=True)
+    if does_status_file_exist(workflow, openmlid, campaign, workflowseed, testseed, valseed, status):
+        raise ValueError(f"status file already exists for {workflow=}, {openmlid=}, {campaign=}, {workflowseed=}, {testseed=}, {valseed=}, {status=}")
+    path.touch()

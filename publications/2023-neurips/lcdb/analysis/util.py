@@ -299,7 +299,7 @@ class LearningCurveExtractor:
 
     def __call__(self, row):
         """
-        Computes the sample-wise learning curve for a specific metric for a set of configurations, possibly across workflows and datasets.
+            Computes the sample-wise learning curve for a specific metric for a set of configurations, possibly across workflows and datasets.
         """
         if not row["has_result"]:
             return None
