@@ -213,45 +213,6 @@ class LCDB:
                 return dfs_per_workflow[workflows[0]] if workflows[0] in dfs_per_workflow else None
             else:
                 return dfs_per_workflow
-        
-    
-    def debug(
-            self,
-            repositories=None,
-            campaigns=None,
-            workflows=None,
-            openmlids=None,
-            workflow_seeds=None,
-            test_seeds=None,
-            validation_seeds=None,
-            show_progress=False
-    ):
-        
-        from lcdb.analysis.processors._traceback_extractor import TracebackExtractor
-
-        """
-        Retrieves only rows that contain a traceback and their associated configs.
-        """
-        gen = self.query(
-            repositories=repositories,
-            campaigns=campaigns,
-            workflows=workflows,
-            openmlids=openmlids,
-            workflow_seeds=workflow_seeds,
-            test_seeds=test_seeds,
-            validation_seeds=validation_seeds,
-            show_progress=show_progress,
-            processors={
-                "traceback_summary": TracebackExtractor()
-            }
-        )
-
-        dfs = []
-        for df in tqdm(gen, disable=not show_progress):
-            df = df[df["traceback_summary"].notna()]
-            if df is not None and len(df) > 0:
-                dfs.append(df)
-        return pd.concat(dfs, axis=0)
 
     def statistics(
             self,

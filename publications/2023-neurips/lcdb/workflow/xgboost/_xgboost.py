@@ -175,7 +175,8 @@ class XGBoostWorkflow(PreprocessedWorkflow):
             random_state=random_state,
         )
 
-        self.learner = XGBClassifier(**learner_kwargs)
+        print("CUDA")
+        self.learner = XGBClassifier(device="cpu", **learner_kwargs)  # enforce CPU usage
 
         self.schedule = get_schedule(
             name=epoch_schedule, n=self.n_estimators
@@ -226,7 +227,9 @@ class XGBoostWorkflow(PreprocessedWorkflow):
             self.learner.set_params(objective="binary:logistic")
 
         # fit the learner
-        self.logger.info(f"Starting training of XGBoost with schedule {self.schedule}")
+        self.logger.info(f"Starting training of XGBoost with schedule {self.schedule}.")
+        self.logger.info(f"Objective function used for training is {self.learner.get_params().get('objective')}")
+        self.logger.info(f"Device used for training is {self.learner.get_params().get('device')}")
         self.learner.fit(X, self.encoder.transform(y))
         self.logger.info("Training of XGBoost finished")
 

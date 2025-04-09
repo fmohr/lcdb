@@ -3,7 +3,7 @@ import unittest
 
 import numpy as np
 from lcdb.analysis import LearningCurveExtractor, merge_curves
-from lcdb.db import LCDB
+from lcdb import LCDB, Debugger
 from parameterized import parameterized
 import logging
 
@@ -113,3 +113,22 @@ class TestExtractors(unittest.TestCase):
                 df.groupby(config_cols).agg({"learning_curve": merge_curves})
             )
             self.assertEqual(len_before, len_after * len(validation_seeds))
+
+
+@pytest.mark.db
+class TestDebugger(unittest.TestCase):
+
+    def test_cli_command_extraction(self):
+
+        openmlid = 1111
+        workflow = "lcdb.workflow.sklearn.LibLinearWorkflow"
+
+        debugger = Debugger()
+        debugger.load_data(
+            workflows=[workflow],
+            openmlids=[openmlid],
+            show_progress=True
+        )
+        self.assertTrue(len(debugger.df) > 0)
+        for cmd in debugger.get_cli_test_command():
+            self.assertTrue(cmd.startswith(f"lcdb test -i {openmlid} -w {workflow} --parameters='"))

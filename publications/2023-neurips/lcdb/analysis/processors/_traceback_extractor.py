@@ -7,7 +7,7 @@ class TracebackExtractor:
     def __init__(self):
         self.rows = []
     
-    def format_traceback(self, traceback_str):
+    def extract_error_message_from_traceback(self, traceback_str):
 
         # extract errors from traceback messages str format first
         try:
@@ -24,13 +24,15 @@ class TracebackExtractor:
         if isinstance(row["m:build_issues"], str):
             for anchor, traceback_at_anchor in json.loads(row["m:build_issues"]).items():
                 errors.append({
-                    "message": self.format_traceback(traceback_at_anchor),
-                    "location": f"anchor_{anchor}"
+                    "message": self.extract_error_message_from_traceback(traceback_at_anchor),
+                    "location": f"anchor_{anchor}",
+                    "traceback": traceback_at_anchor
                 })
         if isinstance(row["m:traceback"], str):
             errors.append({
-                "message": self.format_traceback(row["m:traceback"]),
-                "location": f"global"
+                "message": self.extract_error_message_from_traceback(row["m:traceback"]),
+                "location": f"global",
+                "traceback": traceback_at_anchor
             })
         return errors if errors else None
 
