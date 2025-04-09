@@ -312,40 +312,43 @@ class TestBuildFunctionalities(unittest.TestCase):
 
     @parameterized.expand([
         (1111, "lcdb.workflow.sklearn.LibLinearWorkflow", 0, 0, 0, 16),
+        (1457, "lcdb.workflow.sklearn.LibLinearWorkflow", 0, 0, 0, 16),
         (1457, "lcdb.workflow.sklearn.KNNWorkflow", 0, 0, 0, 16)
     ])
     def test_correct_behavior_on_degenerated_anchors(self, openmlid, workflow, val_seed, test_seed, workflow_seed, anchor):
 
-        workflow_class = import_attr_from_module(workflow)
+        for monotonic in [False, True]:
+            workflow_class = import_attr_from_module(workflow)
 
-        if issubclass(workflow_class, PreprocessedWorkflow) and openmlid in [3, 188]:
-            params = {
-                "pp@cat_encoder": "onehot"
-            }
-        else:
-            params = None
+            if issubclass(workflow_class, PreprocessedWorkflow) and openmlid in [3, 188]:
+                params = {
+                    "pp@cat_encoder": "onehot"
+                }
+            else:
+                params = None
 
-        logger.info(f"Starting test of workflow {workflow} on dataset {openmlid}")
-        out = run_learning_workflow(
-            openml_id=openmlid,
-            workflow_class=workflow,
-            workflow_parameters=params,
-            valid_seed=val_seed,
-            test_seed=test_seed,
-            workflow_seed=workflow_seed,
-            raise_errors=True,
-            anchor_schedule=str(anchor),
-            epoch_schedule="power-2-2-2"
-        )
+            logger.info(f"Starting test of workflow {workflow} on dataset {openmlid}")
+            out = run_learning_workflow(
+                openml_id=openmlid,
+                workflow_class=workflow,
+                workflow_parameters=params,
+                valid_seed=val_seed,
+                test_seed=test_seed,
+                workflow_seed=workflow_seed,
+                raise_errors=True,
+                monotonic=monotonic,
+                anchor_schedule=str(anchor),
+                epoch_schedule="power-2-2-2"
+            )
 
-        parsed_json = json.loads(out["metadata"]["json"])
+            parsed_json = json.loads(out["metadata"]["json"])
 
-        final_node = parsed_json["children"][-1]
-        self.assertEqual("build_curves", final_node["tag"])
-        first_anchor_in_final_node = final_node["children"][0]
-        self.assertEqual("anchor", first_anchor_in_final_node["tag"])
-        self.assertEqual(anchor, first_anchor_in_final_node["metadata"]["value"])
-        metrics_in_first_anchor_in_final_node = first_anchor_in_final_node["children"][-1]
-        self.assertEqual("metrics", metrics_in_first_anchor_in_final_node["tag"])
-        validation_confusion_matrix_in_first_anchor_in_final_node = metrics_in_first_anchor_in_final_node["children"][1]["children"][0]
-        self.assertEqual("confusion_matrix", validation_confusion_matrix_in_first_anchor_in_final_node["tag"])
+            final_node = parsed_json["children"][-1]
+            self.assertEqual("build_curves", final_node["tag"])
+            first_anchor_in_final_node = final_node["children"][0]
+            self.assertEqual("anchor", first_anchor_in_final_node["tag"])
+            self.assertEqual(anchor, first_anchor_in_final_node["metadata"]["value"])
+            metrics_in_first_anchor_in_final_node = first_anchor_in_final_node["children"][-1]
+            self.assertEqual("metrics", metrics_in_first_anchor_in_final_node["tag"])
+            validation_confusion_matrix_in_first_anchor_in_final_node = metrics_in_first_anchor_in_final_node["children"][1]["children"][0]
+            self.assertEqual("confusion_matrix", validation_confusion_matrix_in_first_anchor_in_final_node["tag"])

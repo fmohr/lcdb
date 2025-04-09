@@ -239,11 +239,14 @@ class LearningCurveBuilder:
         ) = train_valid_test_split(
             X, y, test_seed, valid_seed, test_prop, valid_prop, stratify=stratify
         )
+        self.num_classes_train = len(np.unique(self.y_train))
+        self.num_classes_valid = len(np.unique(self.y_valid))
+        self.num_classes_test = len(np.unique(self.y_test))
         self.logger.info(
             f"Original data of size {X.shape} was split into\n"
-            f"\t{self.X_train.shape} training fold\n"
-            f"\t{self.X_valid.shape} validation fold\n"
-            f"\t{self.X_test.shape} test fold"
+            f"\t{self.X_train.shape} training fold ({self.num_classes_train} unique targets)\n"
+            f"\t{self.X_valid.shape} validation fold ({self.num_classes_valid} unique targets)\n"
+            f"\t{self.X_test.shape} test fold ({self.num_classes_test} unique targets)"
         )
         self.valid_seed = valid_seed
         self.test_seed = test_seed
@@ -290,7 +293,7 @@ class LearningCurveBuilder:
         self.objective = None
 
     def set_anchor(self, anchor):
-        if anchor < self.X_train.shape[0] and not self.monotonic:
+        if anchor < self.X_train.shape[0]:
 
             train_idx = np.arange(self.X_train.shape[0])
             # If not monotonic, the training set should be shuffled differently for each anchor
@@ -301,14 +304,21 @@ class LearningCurveBuilder:
             random_seed_train_shuffle = np.random.RandomState(self.valid_seed).randint(
                     0, 2**32 - 1, size=len(self.anchors)
                 )[i]
+            if not self.monotonic:
+                random_seed_train_shuffle += (17 * (anchor + 1))
             rs = np.random.RandomState(random_seed_train_shuffle)
 
             # create a stratified split is this is a classification task
-            if self.is_classification:
-                indices = next(StratifiedShuffleSplit(n_splits=1, random_state=rs, train_size=anchor).split(self.X_train, self.y_train))[0]
+            if self.is_classification and anchor >= self.num_classes_train:
+                if self.monotonic :
+                    indices = list(range(anchor))
+                else:
+                    indices = next(StratifiedShuffleSplit(n_splits=1, random_state=rs, train_size=anchor).split(self.X_train, self.y_train))[0]
                 X_train = self.X_train[indices]
                 y_train = self.y_train[indices]
             else:
+                if anchor < self.num_classes_train:
+                    self.logger.warning(f"Less instances than classes. Using random {anchor} datapoints.")
                 rs.shuffle(train_idx)
                 X_train = self.X_train[train_idx]
                 y_train = self.y_train[train_idx]

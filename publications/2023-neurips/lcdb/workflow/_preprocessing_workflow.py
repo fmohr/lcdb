@@ -235,6 +235,10 @@ class PreprocessedWorkflow(BaseWorkflow, ABC):
 
                     # transform the data
                     with self.timer.time(step_name) as node:
+                        self.logger.debug(f"Applying fit_transform of {step_name} ({step_fun}) to data of shape {X.shape}")
+                        if X.dtype != object:
+                            assert not np.isnan(X).any(), "there are still nan values in the input"
+                            assert not np.isinf(X).any(), "there are still inf values in the input"
                         X = step_fun.fit_transform(X, y=y)
                         node["new_shape"] = {"rows": X.shape[0], "cols": X.shape[1]}
                         self.logger.debug(f"New data shape is {X.shape}")
@@ -410,7 +414,7 @@ class PreprocessedWorkflow(BaseWorkflow, ABC):
                     n_components = max(1, int(self.kernel_pca_n_components * num_features_after_feature_generation))
                     featuremapper = KernelPCA(
                         kernel=self.kernel_pca_kernel,
-                        n_components=n_components,
+                        n_components=n_components
                     )
                 if n_components != num_features_after_feature_generation:
                     self.logger.info(f"Feature mapper will change number of features from {num_features_after_feature_generation} to {n_components}")
