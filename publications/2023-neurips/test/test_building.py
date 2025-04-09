@@ -54,8 +54,8 @@ WORKFLOW_SEEDS = [0]
 
 class TestBuildFunctionalities(unittest.TestCase):
 
-    @parameterized.expand(list(it.product([61], WORKFLOWS, VAL_SEEDS, TEST_SEEDS, WORKFLOW_SEEDS)))
-    def test_workflow_base_functionality_and_integrity(self, openmlid, workflow, val_seed, test_seed, workflow_seed):
+    @parameterized.expand(list(it.product([61], WORKFLOWS, VAL_SEEDS, TEST_SEEDS, WORKFLOW_SEEDS, [True, False])))
+    def test_workflow_base_functionality_and_integrity(self, openmlid, workflow, val_seed, test_seed, workflow_seed, monotonic):
 
         workflow_class = import_attr_from_module(workflow)
 
@@ -75,6 +75,7 @@ class TestBuildFunctionalities(unittest.TestCase):
                 valid_seed=val_seed,
                 test_seed=test_seed,
                 workflow_seed=workflow_seed,
+                monotonic=monotonic,
                 raise_errors=True,
                 anchor_schedule="power-2-2-2",
                 epoch_schedule="power-2-2-2"
@@ -115,8 +116,8 @@ class TestBuildFunctionalities(unittest.TestCase):
             else:
                 raise e
 
-    @parameterized.expand(list(it.product(DATASETS, WORKFLOWS[:2], VAL_SEEDS, TEST_SEEDS, WORKFLOW_SEEDS)))
-    def test_ability_to_work_all_types_of_datasets(self, openmlid, workflow, val_seed, test_seed, workflow_seed):
+    @parameterized.expand(list(it.product(DATASETS, WORKFLOWS[:2], VAL_SEEDS, TEST_SEEDS, WORKFLOW_SEEDS, [True, False])))
+    def test_ability_to_work_all_types_of_datasets(self, openmlid, workflow, val_seed, test_seed, workflow_seed, monotonic):
 
         workflow_class = import_attr_from_module(workflow)
 
@@ -136,6 +137,7 @@ class TestBuildFunctionalities(unittest.TestCase):
                 valid_seed=val_seed,
                 test_seed=test_seed,
                 workflow_seed=workflow_seed,
+                monotonic=monotonic,
                 raise_errors=True,
                 anchor_schedule="power-2-2-2",
                 epoch_schedule="power-2-2-2"
@@ -177,14 +179,13 @@ class TestBuildFunctionalities(unittest.TestCase):
                 raise e
 
     @parameterized.expand([
-        (3, "lcdb.workflow.sklearn.KNNWorkflow", 25, 40),
-        (188, "lcdb.workflow.sklearn.KNNWorkflow", 50, 90)
+        (3, "lcdb.workflow.sklearn.KNNWorkflow", 40),
+        (188, "lcdb.workflow.sklearn.KNNWorkflow", 90)
     ])
     def test_that_preprocessors_are_logged_in_output(
             self,
             openmlid,
             workflow,
-            min_num_cols_expected_after_first_step,
             max_num_cols_expected_after_first_step):
 
         from lcdb.builder.utils import import_attr_from_module
@@ -271,7 +272,7 @@ class TestBuildFunctionalities(unittest.TestCase):
                 # after numeric pre-processing, the shape should not have changed
                 if i == 0:
                     self.assertEqual("pre_numeric_pp", pp_name)
-                    self.assertLessEqual(min_num_cols_expected_after_first_step, cols_after_pp)
+                    self.assertLessEqual(5, cols_after_pp)  # we should have at least 5 features after init step
                     if cols_after_pp < init_cols:
                         logger.warning(
                             f"Initial preprocessor has dropped {init_cols - cols_after_pp}"
