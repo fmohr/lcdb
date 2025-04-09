@@ -285,12 +285,13 @@ class LearningCurveBuilder:
         self.objective = None
 
     def set_anchor(self, anchor):
-        train_idx = np.arange(self.X_train.shape[0])
-        # If not monotonic, the training set should be shuffled differently for each anchor
-        # so that the training sets of different anchors do not contain eachother
-        i = self.anchors.index(anchor)
-        if not self.monotonic:
-
+        if anchor < self.X_train.shape[0] and not self.monotonic:
+            
+            train_idx = np.arange(self.X_train.shape[0])
+            # If not monotonic, the training set should be shuffled differently for each anchor
+            # so that the training sets of different anchors do not contain eachother
+            i = self.anchors.index(anchor)
+        
             # get random state
             random_seed_train_shuffle = np.random.RandomState(self.valid_seed).randint(
                     0, 2**32 - 1, size=len(self.anchors)
@@ -441,13 +442,14 @@ class LearningCurveBuilder:
                 with warnings.catch_warnings(), self.timer.time(label_split):
                     warnings.simplefilter("ignore")
 
+                    # get posterior probabilities
                     keys[f"y_pred_proba_{label_split}"] = (
                         self.workflow.predict_proba(X_split)
                         if self.is_classification
                         else None
                     )
-                    assert keys[f"y_pred_proba_{label_split}"].shape[1] <= len(self.workflow.infos["classes_overall"]),\
-                        "Prediction matrix has more columns than there are classes."
+                    assert keys[f"y_pred_proba_{label_split}"].shape[1] == len(self.workflow.infos["classes_overall"]),\
+                        "Prediction matrix has different number columns than there are classes."
 
                     keys[f"y_pred_{label_split}"] = (
                         self.workflow.get_predictions_from_probas(
@@ -486,11 +488,11 @@ class LearningCurveBuilder:
                 self.logger.debug(f"Starting metric computation for the given predictions on {label_split} fold.")
                 with self.timer.time(label_split) as split_timer:
                     if self.is_classification:
-                        scores = scorer.score(y_true, y_pred, y_pred_proba)
+                        scores = scorer.score(y_true, y_pred, y_pred_proba, logger=self.logger)
                         if label_split == "val":
                             self.objective = -scores["log_loss"]
                     else:
-                        scores = scorer.score(y_true, y_pred)
+                        scores = scorer.score(y_true, y_pred, logger=self.logger)
                         if label_split == "val":
                             self.objective = -scores["mean_squared_error"]
                 self.logger.debug(f"Finished metric computation for the given predictions on {label_split} fold.")

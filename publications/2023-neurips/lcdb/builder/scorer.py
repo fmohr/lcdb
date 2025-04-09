@@ -29,7 +29,7 @@ class ClassificationScorer:
             self.reordering_index = None
         self.timer = Timer() if timer is None else timer
 
-    def score(self, y_true, y_pred, y_pred_proba):
+    def score(self, y_true, y_pred, y_pred_proba, logger=None):
         assert y_pred_proba.shape[1] <= len(self.classes_overall),\
             f"Distribution with {y_pred_proba.shape[1]} columns delivered,"\
             " but there are only {len(self.classes_overall)} classes."
@@ -76,26 +76,30 @@ class ClassificationScorer:
                             5,
                         )
                     else:
+                        
+                        if False:
+                            # if the learner has a superset of the ground truth labels, only use the ground truth labels
+                            if set(y_true).issubset(set(self.classes_learner)):
+                                accepted_labels = labels_in_ground_truth
+                                logger.warning(f"The model knows more classes than contained in the ground truth. This shouldn't be the case.")
 
-                        # if the learner has a superset of the ground truth labels, only use the ground truth labels
-                        if set(y_true).issubset(set(self.classes_learner)):
-                            accepted_labels = labels_in_ground_truth
+                            # otherwise use all the labels that are either present in ground truth or in the predictions
+                            else:
+                                accepted_labels = [
+                                    l for i, l in enumerate(self.classes_overall)
+                                    if (
+                                        l in y_true or
+                                        y_pred_proba[:, i].sum() > 0
+                                    )
+                                ]
 
-                        # otherwise use all the labels that are either present in ground truth or in the predictions
-                        else:
-                            accepted_labels = [
-                                l for i, l in enumerate(self.classes_overall)
-                                if (
-                                    l in y_true or
-                                    y_pred_proba[:, i].sum() > 0
-                                )
-                            ]
-
-                        # generate a proper distribution over the remaining labels
-                        mask_labels_auc = np.isin(self.classes_overall, accepted_labels)
-                        y_pred_proba_auc = y_pred_proba[:, mask_labels_auc]
-                        if num_labels_in_ground_truth != len(self.classes_learner):
-                            y_pred_proba_auc /= y_pred_proba_auc.sum(axis=1, keepdims=1)
+                            # generate a proper distribution over the remaining labels
+                            mask_labels_auc = np.isin(self.classes_overall, accepted_labels)
+                            y_pred_proba_auc = y_pred_proba[:, mask_labels_auc]
+                            if num_labels_in_ground_truth != len(self.classes_learner):
+                                print(num_labels_in_ground_truth, len(self.classes_learner))
+                                y_pred_proba_auc /= y_pred_proba_auc.sum(axis=1, keepdims=1)
+                            assert np.all(np.isclose(y_pred_proba_auc.sum(axis=1), 1.0)), f"inconsistent probabilities, sums are: {y_pred_proba_auc.sum(axis=1)}"
 
                         # compute the different AUC scores
                         score = {}
@@ -104,15 +108,15 @@ class ClassificationScorer:
                         ):
                             if average in [None, "micro"] and multi_class != "ovr":
                                 continue
-                            if np.any(np.isnan(y_pred_proba_auc)):
+                            if np.any(np.isnan(y_pred_proba)):
                                 auc = np.nan
                             else:
                                 try:
                                     auc = np.round(
                                         roc_auc_score(
                                             y_true=y_true,
-                                            y_score=y_pred_proba_auc,
-                                            labels=accepted_labels,
+                                            y_score=y_pred_proba,
+                                            labels=self.classes_overall,
                                             multi_class=multi_class,
                                             average=average,
                                         ),

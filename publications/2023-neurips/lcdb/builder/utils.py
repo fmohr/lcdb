@@ -260,6 +260,8 @@ def get_schedule(name, **kwargs):
         return get_linear_schedule(**kwargs)
     elif name == "linear":
         return get_linear_schedule(**kwargs)
+    elif name == "first":
+        return get_schedule("power")[0]
     elif name == "last":
         return [kwargs["n"]]
     elif name.startswith("power"):
@@ -274,6 +276,10 @@ def get_schedule(name, **kwargs):
             kwargs["delay"] = int(exploded_name[3])
         return sorted(set(get_power_schedule(**kwargs)))
     else:
+        try:
+            return [int(name)]
+        except:
+            pass
         raise ValueError(f"Unknown schedule: {name}")
 
 

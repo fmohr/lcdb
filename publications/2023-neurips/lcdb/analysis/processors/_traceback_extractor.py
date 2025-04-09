@@ -1,6 +1,8 @@
 import re
 import json
 
+from lcdb.analysis.views._util import get_cli_test_command
+
 
 class TracebackExtractor:
 
@@ -20,19 +22,22 @@ class TracebackExtractor:
         """
             Computes the sample-wise learning curve for a specific metric for a set of configurations, possibly across workflows and datasets.
         """
+        base_test_command = get_cli_test_command(row)
         errors = []
         if isinstance(row["m:build_issues"], str):
             for anchor, traceback_at_anchor in json.loads(row["m:build_issues"]).items():
                 errors.append({
                     "message": self.extract_error_message_from_traceback(traceback_at_anchor),
                     "location": f"anchor_{anchor}",
-                    "traceback": traceback_at_anchor
+                    "traceback": traceback_at_anchor,
+                    "cli_test_command": base_test_command + f" --anchor-schedule={anchor}"
                 })
         if isinstance(row["m:traceback"], str):
             errors.append({
                 "message": self.extract_error_message_from_traceback(row["m:traceback"]),
                 "location": f"global",
-                "traceback": traceback_at_anchor
+                "traceback": traceback_at_anchor,
+                "cli_test_command": base_test_command
             })
         return errors if errors else None
 

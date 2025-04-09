@@ -129,14 +129,14 @@ def add_subparser(subparsers):
         "--anchor-schedule",
         default="power",
         type=str,
-        help="""The type of schedule for anchors (over samples of the dataset). Value in ['linear', 'last', 'power'].
+        help="""The type of schedule for anchors (over samples of the dataset). Value is either an int or in ['linear', 'first', 'last', 'power'].
         If 'power', you can also specify 'power-<base>-<power>-<delay>' to be more specific. Default is 2-0.5-7""",
     )
     subparser.add_argument(
         "--epoch-schedule",
         default="full",
         type=str,
-        help="The type of schedule for anchors (over learning iterations of the workflow). Value in ['linear', 'last', 'power']."
+        help="The type of schedule for anchors (over learning iterations of the workflow). Value is either an int or in ['linear', 'first', 'last', 'power']."
         " If 'power', you can also specify 'power-<base>-<power>-<delay>' to be more specific. Default is 2-0.5-7",
     )
     subparser.add_argument(

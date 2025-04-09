@@ -146,15 +146,30 @@ class BaseWorkflow(abc.ABC):
         raise NotImplementedError
 
     def predict_proba(self, *args, **kwargs) -> NP_ARRAY:
-        """Predict from the data."""
+        """
+            Predict probabilities from the data.
+            The number of columns returned by this method is always the number of classes in the dataset,
+            even if the workflow has not seen all classes during training.
+        """
         with self.timer.time("predict_proba"):
 
             # if there is a constant prediction, do not refer to the actual workflow
             if self.constant_prediction is not None:
+                self.logger.info(f"Only one class is known, so predicting only label {self.infos['classes_train'][0]} on all instances, without even looking at the model.")
                 X = kwargs["X"] if "X" in kwargs else args[0]
-                y_pred = np.ones(X.shape[0])
+                y_pred = np.ones((X.shape[0], 1))
             else:
                 y_pred = self._predict_proba(*args, **kwargs)
+            
+            # if the model has not seen all labels, extend the prediction matrix respectively
+            if len(self.infos["classes_train"]) < len(self.infos["classes_overall"]):
+                X = kwargs["X"] if "X" in kwargs else args[0]
+                y_pred_extended = np.zeros((X.shape[0], len(self.infos["classes_overall"])))
+                y_pred_extended[:, self.infos["classes_train"]] = y_pred
+                self.logger.info(f"Extended output shape from originally {y_pred.shape} to {y_pred_extended.shape}")
+                y_pred = y_pred_extended
+
+        assert np.all(np.isclose(y_pred.sum(axis=1), 1.0)), f"inconsistent probabilities, sums are: {y_pred.sum(axis=1)}"
         return y_pred
 
     @abc.abstractmethod

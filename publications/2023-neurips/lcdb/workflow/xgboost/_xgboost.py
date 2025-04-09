@@ -175,7 +175,6 @@ class XGBoostWorkflow(PreprocessedWorkflow):
             random_state=random_state,
         )
 
-        print("CUDA")
         self.learner = XGBClassifier(device="cpu", **learner_kwargs)  # enforce CPU usage
 
         self.schedule = get_schedule(

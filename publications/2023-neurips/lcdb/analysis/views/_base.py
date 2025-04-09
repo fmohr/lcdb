@@ -1,6 +1,7 @@
 from abc import ABC
 
 from lcdb.db import LCDB
+from lcdb.analysis.views._util import get_cli_test_command
 from tqdm import tqdm
 
 import pandas as pd
@@ -75,10 +76,5 @@ class JsonBasedLCDBView(ABC):
         if isinstance(iter, list):
             return [self.get_cli_test_command(e) for e in iter]
         if isinstance(iter, (pd.Series, dict)):
-            return (
-                f"lcdb test"
-                f" -i {int(iter['m:openmlid']) if iter['m:openmlid'] is not None else None}"
-                f" -w {iter['m:workflow']}"
-                f" --parameters='{json.dumps({k: v for k, v in iter.items() if k.startswith('p:')})}'"
-            )
+            return get_cli_test_command(iter)
         raise ValueError(f"Unsupported data type {type(iter)}")
