@@ -11,5 +11,6 @@ def get_cli_test_command(entry):
         f"lcdb test"
         f" -i {openmlid}"
         f" -w {entry['m:workflow']}"
-        f" --parameters='{json.dumps({k: v for k, v in entry.items() if k.startswith('p:')})}'"
+        f" --parameters='{json.dumps({k[2:]: v for k, v in entry.items() if k.startswith('p:')})}'"
+        f" --no-exception-on-unsuitable-preprocessor"
     )

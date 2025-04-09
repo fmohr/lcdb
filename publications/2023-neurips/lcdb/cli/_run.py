@@ -397,7 +397,7 @@ def run_experiment(
             except Exception as e:
                 logger.exception(e)
 
-    from lcdb.builder.utils import import_attr_from_module, does_status_file_exist, create_status_file, EXPERIMENT_STATUS_RUNNING, EXPERIMENT_STATUS_COMPLETED
+    from lcdb.builder.utils import import_attr_from_module, get_path_to_status_file, does_status_file_exist, create_status_file, EXPERIMENT_STATUS_RUNNING, EXPERIMENT_STATUS_COMPLETED
 
     if evaluator in ["serial", "thread", "process", "ray"]:
         # Master-Worker Parallelism: only 1 process will run this code
@@ -460,12 +460,13 @@ def run_experiment(
     config_default = config_space.get_default_configuration().get_dictionary()
     
     # check whether experiment has already run
-    if (
-        does_status_file_exist(workflow=workflow_class, campaign=campaign, openmlid=openml_id, workflowseed=workflow_seed, testseed=test_seed, valseed=valid_seed, status=EXPERIMENT_STATUS_RUNNING) or
-        does_status_file_exist(workflow=workflow_class, campaign=campaign, openmlid=openml_id, workflowseed=workflow_seed, testseed=test_seed, valseed=valid_seed, status=EXPERIMENT_STATUS_COMPLETED)
-    ):
-        logger.info(f"We have a status file for {workflow_class}-{campaign}-{openml_id}-{workflow_seed}-{test_seed}-{valid_seed} so the experiment is being skipped.")
-        return
+    for status in [EXPERIMENT_STATUS_RUNNING, EXPERIMENT_STATUS_COMPLETED]:
+        if does_status_file_exist(workflow=workflow_class, campaign=campaign, openmlid=openml_id, workflowseed=workflow_seed, testseed=test_seed, valseed=valid_seed, status=status):
+            filename = get_path_for_intermediate_results(workflow=workflow_class, campaign=campaign, openmlid=openml_id, workflowseed=workflow_seed, testseed=test_seed, valseed=valid_seed, status=status)
+            logger.info(f"We have a status file {filename} for {workflow_class}-{campaign}-{openml_id}-{workflow_seed}-{test_seed}-{valid_seed} so the experiment is being skipped.")
+            return
+    filename = get_path_for_intermediate_results(workflow=workflow_class, campaign=campaign, openmlid=openml_id, workflowseed=workflow_seed, testseed=test_seed, valseed=valid_seed, status=EXPERIMENT_STATUS_RUNNING)
+    logger.info(f"Creating RUNNING status file {filename} for {workflow_class}-{campaign}-{openml_id}-{workflow_seed}-{test_seed}-{valid_seed}.")
     create_status_file(workflow=workflow_class, campaign=campaign, openmlid=openml_id, workflowseed=workflow_seed, testseed=test_seed, valseed=valid_seed, status=EXPERIMENT_STATUS_RUNNING)
     
 
@@ -545,6 +546,8 @@ def run_experiment(
 
             # Execute the search
             results = search.search(max_evals, timeout=timeout, max_evals_strict=True)
+            filename = get_path_for_intermediate_results(workflow=workflow_class, campaign=campaign, openmlid=openml_id, workflowseed=workflow_seed, testseed=test_seed, valseed=valid_seed, status=EXPERIMENT_STATUS_COMPLETED)
+            logger.info(f"Creating COMPLETED status file {filename} for {workflow_class}-{campaign}-{openml_id}-{workflow_seed}-{test_seed}-{valid_seed}.")
             create_status_file(
                 workflow=workflow_class,
                 campaign=campaign,

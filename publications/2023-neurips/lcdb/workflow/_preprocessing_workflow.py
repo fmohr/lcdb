@@ -33,6 +33,7 @@ from sklearn.preprocessing import (
 
 from ._base_workflow import BaseWorkflow
 from lcdb.builder.utils import estimate_memory_consumption_for_dataset
+from lcdb.builder._base import AnticipatedMemoryError
 
 KEY_CAT_ENCODER = "cat_encoder"
 KEY_SCALER = "scaler"
@@ -227,7 +228,7 @@ class PreprocessedWorkflow(BaseWorkflow, ABC):
                     used_memory_bytes = self._anticipate_required_memory_for_fit(X.shape, step_fun)
                     self.logger.info(f"Expected memory usage run pre-processor {step_fun.__class__.__name__}: {used_memory_bytes / (1024**3):.3f}GB.")
                     if used_memory_bytes > self.memory_limit_in_bytes:
-                        raise RuntimeError(
+                        raise AnticipatedMemoryError(
                             f"{step_name} ({step_fun.__class__.__name__}) is predicted to consume approximately {used_memory_bytes/(1024**3):.3f} GB. "
                             f"The permitted maximum is {self.memory_limit_in_bytes/(1024**3):.3f} GB!"
                             )
@@ -246,7 +247,7 @@ class PreprocessedWorkflow(BaseWorkflow, ABC):
                     used_memory_bytes = self._anticipate_required_memory_for_transform(X.shape, step_fun)
                     self.logger.info(f"Expected memory usage run pre-processor {step_fun.__class__.__name__}: {used_memory_bytes / (1024**3):.3f}GB.")
                     if used_memory_bytes > self.memory_limit_in_bytes:
-                        raise RuntimeError(
+                        raise AnticipatedMemoryError(
                             f"{step_name} ({step_fun.__class__.__name__}) is predicted to consume approximately {used_memory_bytes/(1024**3):.3f} GB. "
                             f"The permitted maximum is {self.memory_limit_in_bytes/(1024**3):.3f} GB!"
                             )

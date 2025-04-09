@@ -23,6 +23,11 @@ from sklearn.preprocessing import FunctionTransformer, OneHotEncoder
 from sklearn.model_selection import StratifiedShuffleSplit
 
 
+class AnticipatedMemoryError(Exception):
+
+    def __init__(self, msg):
+        super().__init__(msg)
+
 def run_learning_workflow(
     openml_id: int = 3,
     task_type: str = "classification",
@@ -286,7 +291,7 @@ class LearningCurveBuilder:
 
     def set_anchor(self, anchor):
         if anchor < self.X_train.shape[0] and not self.monotonic:
-            
+
             train_idx = np.arange(self.X_train.shape[0])
             # If not monotonic, the training set should be shuffled differently for each anchor
             # so that the training sets of different anchors do not contain eachother
@@ -351,7 +356,7 @@ class LearningCurveBuilder:
 
                         # Decide on how to proceed after this error, depending on whether the error may go away on higher anchors
                         # Also notify in the objective function value that the run has failed (unless we have results on earlier anchors)
-                        if isinstance(exception, (FunctionCallTimeoutError, MemoryError)):
+                        if isinstance(exception, (FunctionCallTimeoutError, MemoryError, AnticipatedMemoryError)):
                             if isinstance(exception, FunctionCallTimeoutError):
                                 self.timer.active_node["cause"] = "timeout"
                                 self.report["build_issues"][anchor] = "timeout"
@@ -359,9 +364,15 @@ class LearningCurveBuilder:
                                         self.objective = "F_function_call_timeout_error"
                             elif isinstance(exception, MemoryError):
                                 self.timer.active_node["cause"] = "memory"
-                                self.report["build_issues"][anchor] = "memory"
+                                self.report["build_issues"][anchor] = "actual memory error"
                                 if self.objective is None:
                                     self.objective = "F_memory_error"
+                            elif isinstance(exception, AnticipatedMemoryError):
+                                self.timer.active_node["cause"] = "anticipated_memory"
+                                self.timer.active_node["traceback"] = traceback_of_error
+                                self.report["build_issues"][anchor] = "anticipated memory overflow"
+                                if self.objective is None:
+                                    self.objective = "F_anticipated_memory_error"
                             self.logger.info("Stopping building process due to this exception, because the same problem is expected for higher anchors.")
                             break
                         else:
