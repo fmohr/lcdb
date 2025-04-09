@@ -462,10 +462,10 @@ def run_experiment(
     # check whether experiment has already run
     for status in [EXPERIMENT_STATUS_RUNNING, EXPERIMENT_STATUS_COMPLETED]:
         if does_status_file_exist(workflow=workflow_class, campaign=campaign, openmlid=openml_id, workflowseed=workflow_seed, testseed=test_seed, valseed=valid_seed, status=status):
-            filename = get_path_for_intermediate_results(workflow=workflow_class, campaign=campaign, openmlid=openml_id, workflowseed=workflow_seed, testseed=test_seed, valseed=valid_seed, status=status)
+            filename = get_path_to_status_file(workflow=workflow_class, campaign=campaign, openmlid=openml_id, workflowseed=workflow_seed, testseed=test_seed, valseed=valid_seed, status=status)
             logger.info(f"We have a status file {filename} for {workflow_class}-{campaign}-{openml_id}-{workflow_seed}-{test_seed}-{valid_seed} so the experiment is being skipped.")
             return
-    filename = get_path_for_intermediate_results(workflow=workflow_class, campaign=campaign, openmlid=openml_id, workflowseed=workflow_seed, testseed=test_seed, valseed=valid_seed, status=EXPERIMENT_STATUS_RUNNING)
+    filename = get_path_to_status_file(workflow=workflow_class, campaign=campaign, openmlid=openml_id, workflowseed=workflow_seed, testseed=test_seed, valseed=valid_seed, status=EXPERIMENT_STATUS_RUNNING)
     logger.info(f"Creating RUNNING status file {filename} for {workflow_class}-{campaign}-{openml_id}-{workflow_seed}-{test_seed}-{valid_seed}.")
     create_status_file(workflow=workflow_class, campaign=campaign, openmlid=openml_id, workflowseed=workflow_seed, testseed=test_seed, valseed=valid_seed, status=EXPERIMENT_STATUS_RUNNING)
     
@@ -546,7 +546,7 @@ def run_experiment(
 
             # Execute the search
             results = search.search(max_evals, timeout=timeout, max_evals_strict=True)
-            filename = get_path_for_intermediate_results(workflow=workflow_class, campaign=campaign, openmlid=openml_id, workflowseed=workflow_seed, testseed=test_seed, valseed=valid_seed, status=EXPERIMENT_STATUS_COMPLETED)
+            filename = get_path_to_status_file(workflow=workflow_class, campaign=campaign, openmlid=openml_id, workflowseed=workflow_seed, testseed=test_seed, valseed=valid_seed, status=EXPERIMENT_STATUS_COMPLETED)
             logger.info(f"Creating COMPLETED status file {filename} for {workflow_class}-{campaign}-{openml_id}-{workflow_seed}-{test_seed}-{valid_seed}.")
             create_status_file(
                 workflow=workflow_class,
