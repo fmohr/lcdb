@@ -20,6 +20,7 @@ from .utils import (
 )
 from .scorer import ClassificationScorer, RegressionScorer
 from sklearn.preprocessing import FunctionTransformer, OneHotEncoder
+from sklearn.model_selection import StratifiedShuffleSplit
 
 
 def run_learning_workflow(
@@ -289,14 +290,22 @@ class LearningCurveBuilder:
         # so that the training sets of different anchors do not contain eachother
         i = self.anchors.index(anchor)
         if not self.monotonic:
-            random_seed_train_shuffle = np.random.RandomState(self.valid_seed).randint(
-                0, 2**32 - 1, size=len(self.anchors)
-            )[i]
-            rs = np.random.RandomState(random_seed_train_shuffle)
-            rs.shuffle(train_idx)
 
-            X_train = self.X_train[train_idx]
-            y_train = self.y_train[train_idx]
+            # get random state
+            random_seed_train_shuffle = np.random.RandomState(self.valid_seed).randint(
+                    0, 2**32 - 1, size=len(self.anchors)
+                )[i]
+            rs = np.random.RandomState(random_seed_train_shuffle)
+
+            # create a stratified split is this is a classification task
+            if self.is_classification:
+                indices = next(StratifiedShuffleSplit(n_splits=1, random_state=rs, train_size=anchor).split(self.X_train, self.y_train))[0]
+                X_train = self.X_train[indices]
+                y_train = self.y_train[indices]
+            else:
+                rs.shuffle(train_idx)
+                X_train = self.X_train[train_idx]
+                y_train = self.y_train[train_idx]
         else:
             X_train, y_train = self.X_train, self.y_train
 
@@ -381,6 +390,10 @@ class LearningCurveBuilder:
         self.logger.info(
             f"Starting with fitting workflow {self.workflow.__class__.__name__} on sample anchor {self.cur_anchor} which is {self.cur_anchor / self.X_train.shape[0] * 100:.2f}% of the dataset."
         )
+        if len(np.unique(self.y_train_at_anchor)) != len(np.unique(self.y_valid)):
+            self.logger.warning(
+                f"Unequal number of labels in train data/validation/test data: {len(np.unique(self.y_train_at_anchor))}/{len(np.unique(self.y_valid))}/{len(np.unique(self.y_test))}"
+            )
 
         if self.timeout_on_fit > 0:
             self.workflow.fit = functools.partial(
