@@ -4,6 +4,9 @@ from parameterized import parameterized
 import unittest
 
 from lcdb.workflow._preprocessing_workflow import PreprocessedWorkflow
+from lcdb.workflow.xgboost import XGBoostWorkflow
+from lcdb.workflow.keras import DenseNNWorkflow
+from lcdb.workflow.sklearn import TreesEnsembleWorkflow
 from lcdb.builder import run_learning_workflow
 from lcdb.builder.utils import import_attr_from_module
 import itertools as it
@@ -29,6 +32,7 @@ DATASETS = [
     6,
 ]
 
+
 WORKFLOWS = [
     "lcdb.workflow.sklearn.GaussianNBWorkflow",
     "lcdb.workflow.sklearn.LDAWorkflow",
@@ -44,12 +48,15 @@ WORKFLOWS = [
     "lcdb.workflow.sklearn.RandomWorkflow",
     "lcdb.workflow.sklearn.DTWorkflow",
     "lcdb.workflow.sklearn.TreesEnsembleWorkflow",
-    "lcdb.workflow.xgboost.XGBoostWorkflow"
+    "lcdb.workflow.xgboost.XGBoostWorkflow",
+    "lcdb.workflow.keras.DenseNNWorkflow"
 ]
 
 VAL_SEEDS = [0]
 TEST_SEEDS = [0]
 WORKFLOW_SEEDS = [0]
+
+MAX_SAMPLE_ANCHOR = 512
 
 
 class TestBuildFunctionalities(unittest.TestCase):
@@ -59,12 +66,19 @@ class TestBuildFunctionalities(unittest.TestCase):
 
         workflow_class = import_attr_from_module(workflow)
 
+        params = {}
         if issubclass(workflow_class, PreprocessedWorkflow) and openmlid in [3, 188]:
-            params = {
-                "pp@cat_encoder": "onehot"
-            }
-        else:
-            params = None
+            params["pp@cat_encoder"] = "onehot"
+            
+        if issubclass(workflow_class, XGBoostWorkflow):
+            params["n_estimators"] = 16
+        
+        if issubclass(workflow_class, TreesEnsembleWorkflow):
+            params["n_estimators"] = 16
+        
+        if issubclass(workflow_class, DenseNNWorkflow):
+            params["epoch_schedule"] = "linear"
+            params["num_epochs"] = 10
 
         logger.info(f"Starting test of workflow {workflow} on dataset {openmlid}")
         try:
@@ -78,7 +92,7 @@ class TestBuildFunctionalities(unittest.TestCase):
                 monotonic=monotonic,
                 raise_errors=True,
                 anchor_schedule="power-2-2-2",
-                epoch_schedule="power-2-2-2"
+                max_sample_anchor=MAX_SAMPLE_ANCHOR
             )
 
             parsed_json = json.loads(out["metadata"]["json"])
@@ -116,17 +130,24 @@ class TestBuildFunctionalities(unittest.TestCase):
             else:
                 raise e
 
-    @parameterized.expand(list(it.product(DATASETS, WORKFLOWS[:2], VAL_SEEDS, TEST_SEEDS, WORKFLOW_SEEDS, [True, False])))
+    @parameterized.expand(list(it.product(DATASETS, WORKFLOWS, VAL_SEEDS, TEST_SEEDS, WORKFLOW_SEEDS, [True, False])))
     def test_ability_to_work_all_types_of_datasets(self, openmlid, workflow, val_seed, test_seed, workflow_seed, monotonic):
 
         workflow_class = import_attr_from_module(workflow)
 
+        params = {}
         if issubclass(workflow_class, PreprocessedWorkflow) and openmlid in [3, 188]:
-            params = {
-                "pp@cat_encoder": "onehot"
-            }
-        else:
-            params = None
+            params["pp@cat_encoder"] = "onehot"
+            
+        if issubclass(workflow_class, XGBoostWorkflow):
+            params["n_estimators"] = 16
+
+        if issubclass(workflow_class, TreesEnsembleWorkflow):
+            params["n_estimators"] = 16
+        
+        if issubclass(workflow_class, DenseNNWorkflow):
+            params["epoch_schedule"] = "linear"
+            params["num_epochs"] = 10
 
         logger.info(f"Starting test of workflow {workflow} on dataset {openmlid}")
         try:
@@ -140,7 +161,7 @@ class TestBuildFunctionalities(unittest.TestCase):
                 monotonic=monotonic,
                 raise_errors=True,
                 anchor_schedule="power-2-2-2",
-                epoch_schedule="power-2-2-2"
+                max_sample_anchor=MAX_SAMPLE_ANCHOR
             )
 
             parsed_json = json.loads(out["metadata"]["json"])

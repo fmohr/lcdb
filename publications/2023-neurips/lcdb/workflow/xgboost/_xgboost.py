@@ -128,8 +128,6 @@ class XGBoostWorkflow(PreprocessedWorkflow):
         configuration_space=PreprocessedWorkflow.config_space(),
     )
 
-    # FIXME: increase the number of iterations to something like 1000-10000
-    # FIXME: trycatch and logging?
     def __init__(
         self,
         timer=None,

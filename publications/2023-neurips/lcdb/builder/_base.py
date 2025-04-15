@@ -45,6 +45,7 @@ def run_learning_workflow(
     raise_exception_on_unsuitable_preprocessor: bool = True,
     anchor_schedule: str = "power",
     epoch_schedule: str = "power",
+    max_sample_anchor: int = None,
     memory_limit_in_bytes: int = 32 * 1024**3,  # 32 GB by default
     timer=None,
     logger=None,
@@ -157,6 +158,7 @@ def run_learning_workflow(
         stratify=stratify,
         raise_errors=raise_errors,
         anchor_schedule=anchor_schedule,
+        max_sample_anchor=max_sample_anchor,
         memory_limit_in_bytes=memory_limit_in_bytes,
         logger=logger
     )
@@ -210,6 +212,7 @@ class LearningCurveBuilder:
         known_categories: bool = True,
         raise_errors: bool = False,
         anchor_schedule: str = "power",
+        max_sample_anchor: int = None,
         memory_limit_in_bytes: int = 32 * 1024**3,  # 32GB by default
         logger=None,
     ):
@@ -256,6 +259,8 @@ class LearningCurveBuilder:
         self.anchors = get_schedule(
             name=anchor_schedule, n=len(self.X_train)
         )
+        if max_sample_anchor is not None:
+            self.anchors = [a for a in self.anchors if a <= max_sample_anchor]
         self.logger.info(f"Using sample-wise schedule {self.anchors} based on anchor schedule definition {anchor_schedule}")
         self.memory_limit_in_bytes = memory_limit_in_bytes
 

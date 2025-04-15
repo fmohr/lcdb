@@ -116,6 +116,7 @@ class IterationCurveCallback(keras.callbacks.Callback):
         self.schedule = get_schedule(
             name=epoch_schedule, n=self.workflow.num_epochs, base=2, power=0.5, delay=0
         )[::-1]
+        print(f"Schedule set to {self.schedule}")
 
         # Safeguard to check timers
         self.train_timer_id = None
@@ -222,7 +223,7 @@ class DenseNNWorkflow(PreprocessedWorkflow):
         optimizer="Adam",
         learning_rate=0.001,
         batch_size=32,
-        num_epochs=100,
+        num_epochs=2048,
         num_epochs_patience=100,
         kernel_regularizer="none",
         bias_regularizer="none",
@@ -243,6 +244,9 @@ class DenseNNWorkflow(PreprocessedWorkflow):
         verbose=2,
         epoch_schedule: str = "full",
         random_state=None,
+        logger=None,
+        raise_exception_on_unsuitable_preprocessor=True,
+        memory_limit_in_bytes=None,
         **kwargs,
     ):
         """Dense Neural Network Workflow implements the class of multi-layer fully connected neural networks.
@@ -278,7 +282,14 @@ class DenseNNWorkflow(PreprocessedWorkflow):
             if not k.startswith("pp@"):
                 raise ValueError(f"Unsupported hyperparameter for DenseNNWorkflow: {k} (with value ({kwargs[k]}).")
 
-        super().__init__(timer, **filter_keys_with_prefix(kwargs, prefix="pp@"))
+        super().__init__(
+            timer=timer,
+            logger=logger,
+            random_state=random_state,
+            raise_exception_on_unsuitable_preprocessor=raise_exception_on_unsuitable_preprocessor,
+            memory_limit_in_bytes=memory_limit_in_bytes,
+            **filter_keys_with_prefix(kwargs, prefix="pp@")
+        )
         self.requires_valid_to_fit = True
         self.requires_test_to_fit = True
 
@@ -326,10 +337,24 @@ class DenseNNWorkflow(PreprocessedWorkflow):
     def config_space(cls):
         return cls._config_space
 
+    @classmethod
+    def builds_iteration_curve(cls):
+        return True
+    
+    @classmethod
+    def is_randomizable(cls):
+        return True
+
     def build_model(self, input_shape, num_classes):
         inputs = out = keras.Input(shape=input_shape)
 
-        print(f"Building model with input layer size {input_shape}")
+        self.logger.info(
+            "Building model with the following config: "
+            f"\n\tDevices: {tf.config.list_physical_devices()}"
+            f"\n\tNumber of GPUs available: {len(tf.config.list_physical_devices('GPU'))}"
+            f"\n\tInput layer size: {input_shape}"
+            f"\n\tMax number of Epochs: {self.num_epochs} with schedule for iteration curve: {self.epoch_schedule}"
+        )
 
         prev = None
 
