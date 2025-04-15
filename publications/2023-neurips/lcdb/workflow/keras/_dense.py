@@ -2,7 +2,7 @@ import keras
 import pandas as pd
 import numpy as np
 import tensorflow as tf
-from tensorflow.keras.utils import Sequence
+from keras.utils import Sequence
 from ConfigSpace import Categorical, ConfigurationSpace, Float, Integer
 from lcdb.builder.scorer import ClassificationScorer
 from lcdb.builder.timer import Timer
@@ -101,6 +101,7 @@ class IterationCurveCallback(keras.callbacks.Callback):
         workflow: BaseWorkflow,
         timer: Timer,
         data: dict,
+        logger,
         epoch_schedule: str = "power",
     ):
         super().__init__()
@@ -108,6 +109,7 @@ class IterationCurveCallback(keras.callbacks.Callback):
         self.workflow = workflow
         self.data = data
         self.epoch = None
+        self.logger = logger
         self.scorer = ClassificationScorer(
             classes_learner=self.workflow.infos["classes_train"],
             classes_overall=self.workflow.infos["classes_overall"],
@@ -116,7 +118,7 @@ class IterationCurveCallback(keras.callbacks.Callback):
         self.schedule = get_schedule(
             name=epoch_schedule, n=self.workflow.num_epochs, base=2, power=0.5, delay=0
         )[::-1]
-        print(f"Schedule set to {self.schedule}")
+        self.logger.info(f"Epoch schedule set to {self.schedule}")
 
         # Safeguard to check timers
         self.train_timer_id = None
@@ -170,7 +172,7 @@ class IterationCurveCallback(keras.callbacks.Callback):
                             y_pred=y_pred,
                             y_pred_proba=y_pred_proba,
                         )
-                        print(scores)
+                        self.logger.info(f"Scores are {scores}")
 
 
 class AugmentDataGenerator(Sequence):
@@ -355,6 +357,8 @@ class DenseNNWorkflow(PreprocessedWorkflow):
             f"\n\tInput layer size: {input_shape}"
             f"\n\tMax number of Epochs: {self.num_epochs} with schedule for iteration curve: {self.epoch_schedule}"
         )
+        if len(tf.config.list_physical_devices('GPU')) == 0:
+            self.logger.warning("No GPU available or used. Training will be slow!")
 
         prev = None
 
@@ -462,6 +466,7 @@ class DenseNNWorkflow(PreprocessedWorkflow):
                 val=dict(X=X_valid, y=y_valid),
                 test=dict(X=X_test, y=y_test),
             ),
+            logger=self.logger,
             epoch_schedule=self.epoch_schedule,
         )
 

@@ -43,7 +43,7 @@ CONFIG_SPACE = ConfigurationSpace(
     },
 )
 
-CONFIG_SPACE.add_condition(
+CONFIG_SPACE.add(
     EqualsCondition(CONFIG_SPACE["max_samples"], CONFIG_SPACE["bootstrap"], True)
 )
 
