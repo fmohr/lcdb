@@ -24,5 +24,5 @@ fi
 
 
 for file in "${result_files[@]}"; do
-  srun lcdb add -c "$campaign_name" -t "$PCLOUD_TOKEN" "$file" || true
+  srun lcdb add -c "$CAMPAIGN_NAME" -t "$PCLOUD_TOKEN" "$file" || true
 done

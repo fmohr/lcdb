@@ -7,9 +7,6 @@
 source ~/.bashrc
 conda activate lcdb
 
-# Load Experiment Configuration
-source "$path_to_snellius/scripts/config.sh"
-
 # Create Configurations
 echo "Creating $LCDB_NUM_CONFIGS configurations for $LCDB_WORKFLOW in $LCDB_INITIAL_CONFIGS"
 lcdb create -w $LCDB_WORKFLOW -n $LCDB_NUM_CONFIGS -o $LCDB_INITIAL_CONFIGS

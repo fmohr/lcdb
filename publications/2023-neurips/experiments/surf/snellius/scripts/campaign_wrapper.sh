@@ -17,42 +17,15 @@ mapping=(
     ["liblinear"]="lcdb.workflow.sklearn.LibLinearWorkflow"  # Ensure this line exists
 )
 
-# Load configuration
-CONFIG_FILE="$path_to_snellius/scripts/config.yaml"
-
-
-if [[ ! -f "$CONFIG_FILE" ]]; then
-    echo "Config file not found: $CONFIG_FILE"
-    exit 1
-fi
-
-# Read the workflow name from config.yaml and remove any extra quotes or spaces
-WORKFLOW_NAME=$(yq -r '.workflow_name' "$CONFIG_FILE")
-
-# Ensure that the workflow name exists in the mapping
-if [[ -n "${mapping[$WORKFLOW_NAME]}" ]]; then
-    export LCDB_WORKFLOW=${mapping[$WORKFLOW_NAME]}
-    export LCDB_OUTPUT_WORKFLOW=$output_path/results/$WORKFLOW_NAME/output/$LCDB_WORKFLOW
-else
-    echo "Invalid workflow name: '$WORKFLOW_NAME'"
-    exit 1
-fi
-
-echo "'$LCDB_WORKFLOW' and '$LCDB_OUTPUT_WORKFLOW'"
-
-# Read memory and core configuration
-export MEM=$(yq -r '.desired_memory_GB' "$CONFIG_FILE")
-val_seeds=($(yq -r '.val_seeds[]' "$CONFIG_FILE"))
-test_seeds=($(yq -r '.test_seeds[]' "$CONFIG_FILE"))
+source "$path_to_snellius/scripts/config.sh"
 
 log_dir="$output_path/logs/$WORKFLOW_NAME-$MEM"
 echo "Log directory: $log_dir"
 mkdir -p "$log_dir"
 exec > >(tee -a "$log_dir/wrapper_campaign.log") 2>&1
 
-export campaign_name="data_probing-$MEM"
 
-echo "Campaign name is '$campaign_name'"
+echo "Campaign name is '$CAMPAIGN_NAME'"
 
 
 source "$path_to_snellius/scripts/config.sh"
@@ -60,15 +33,15 @@ source "$path_to_snellius/scripts/config.sh"
 workflow_seed=$LCDB_WORKFLOW_SEED
 
 
-echo "Processing workflow '$LCDB_WORKFLOW' with output path '$LCDB_OUTPUT_WORKFLOW'"
+echo "Processing workflow '$LCDB_WORKFLOW' with output path '$LCDB_OUTPUT_WORKFLOW'-$LCDB_WORKFLOW_MEMORY_LIMIT_GB'"
 
 result_files=()
 for id in "${LCDB_OPENML_ID_ARRAY[@]}"; do
 
     # Collect all result files for the given dataset id
-    for val_seed in "${val_seeds[@]}"; do
-        for test_seed in "${test_seeds[@]}"; do
-            result_files+=("$LCDB_OUTPUT_WORKFLOW-$MEM/$id/$val_seed-$test_seed-$workflow_seed/results.csv.gz")
+    for val_seed in "${VAL_SEEDS[@]}"; do
+        for test_seed in "${TEST_SEEDS[@]}"; do
+            result_files+=("$LCDB_OUTPUT_WORKFLOW-$LCDB_WORKFLOW_MEMORY_LIMIT_GB/$id/$val_seed-$test_seed-$workflow_seed/results.csv.gz")
         done
     done
 done
@@ -80,7 +53,7 @@ echo "Env path $ENV_PATH"
 
 # Submit the job with the list of result files for this dataset
 sbatch --export=ALL --job-name="campaigns_${WORKFLOW_NAME}" \
-    --output=${output_path}/logs/${WORKFLOW_NAME}-${MEM}/out/campaign.log \
-    --error=${output_path}/logs/${WORKFLOW_NAME}-${MEM}/err/campaign.err \
+    --output=${output_path}/logs/${WORKFLOW_NAME}-${LCDB_WORKFLOW_MEMORY_LIMIT_GB}/out/campaign.log \
+    --error=${output_path}/logs/${WORKFLOW_NAME}-${LCDB_WORKFLOW_MEMORY_LIMIT_GB}/err/campaign.err \
     --chdir=${output_path} \
     scripts/campaign.sh "${result_files[@]}"
