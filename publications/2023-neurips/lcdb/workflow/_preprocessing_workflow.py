@@ -236,9 +236,9 @@ class PreprocessedWorkflow(BaseWorkflow, ABC):
                     # transform the data
                     with self.timer.time(step_name) as node:
                         self.logger.debug(f"Applying fit_transform of {step_name} ({step_fun}) to data of shape {X.shape}")
-                        if X.dtype != object:
-                            assert not np.isnan(X).any(), "there are still nan values in the input"
-                            assert not np.isinf(X).any(), "there are still inf values in the input"
+                        if step_name != "pre_numeric_pp":
+                            assert not np.isnan(X).any(), f"there are still nan values in the input when applying {step_fun} as {step_name}"
+                            assert not np.isinf(X).any(), f"there are still inf values in the input when applying {step_fun} as {step_name}"
                         X = step_fun.fit_transform(X, y=y)
                         node["new_shape"] = {"rows": X.shape[0], "cols": X.shape[1]}
                         self.logger.debug(f"New data shape is {X.shape}")

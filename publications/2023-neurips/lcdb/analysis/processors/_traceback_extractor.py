@@ -32,7 +32,7 @@ class TracebackExtractor:
                     "traceback": traceback_at_anchor,
                     "cli_test_command": base_test_command + f" --anchor-schedule={anchor}"
                 })
-        if isinstance(row["m:traceback"], str):
+        if "m:traceback" in row and isinstance(row["m:traceback"], str):
             errors.append({
                 "message": self.extract_error_message_from_traceback(row["m:traceback"]),
                 "location": f"global",
