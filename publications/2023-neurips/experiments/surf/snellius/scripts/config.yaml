@@ -1,7 +1,7 @@
-workflow_name: xgboost
-campaign_name: probing-100
-desired_memory_GB: 67
-config_num: 20
+workflow_name: liblinear
+campaign_name: probing-test
+desired_memory_GB: 16
+config_num: 10
 workflow_seed: 42
 val_seeds:
   - 0

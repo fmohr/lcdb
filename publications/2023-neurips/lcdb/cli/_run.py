@@ -459,17 +459,6 @@ def run_experiment(
     config_space = WorkflowClass.config_space()
     config_default = config_space.get_default_configuration().get_dictionary()
     
-    # check whether experiment has already run
-    for status in [EXPERIMENT_STATUS_RUNNING, EXPERIMENT_STATUS_COMPLETED]:
-        if does_status_file_exist(workflow=workflow_class, campaign=campaign, openmlid=openml_id, workflowseed=workflow_seed, testseed=test_seed, valseed=valid_seed, status=status):
-            filename = get_path_to_status_file(workflow=workflow_class, campaign=campaign, openmlid=openml_id, workflowseed=workflow_seed, testseed=test_seed, valseed=valid_seed, status=status)
-            logger.info(f"We have a status file {filename} for {workflow_class}-{campaign}-{openml_id}-{workflow_seed}-{test_seed}-{valid_seed} so the experiment is being skipped.")
-            return
-    filename = get_path_to_status_file(workflow=workflow_class, campaign=campaign, openmlid=openml_id, workflowseed=workflow_seed, testseed=test_seed, valseed=valid_seed, status=EXPERIMENT_STATUS_RUNNING)
-    logger.info(f"Creating RUNNING status file {filename} for {workflow_class}-{campaign}-{openml_id}-{workflow_seed}-{test_seed}-{valid_seed}.")
-    create_status_file(workflow=workflow_class, campaign=campaign, openmlid=openml_id, workflowseed=workflow_seed, testseed=test_seed, valseed=valid_seed, status=EXPERIMENT_STATUS_RUNNING)
-    
-
     # Set the search space
     problem = HpProblem(config_space)
 
@@ -531,6 +520,19 @@ def run_experiment(
         method=evaluator,
         method_kwargs=method_kwargs,
     ) as evaluator:
+        # check whether experiment has already run (master only checks)
+        if evaluator.is_master:
+            for status in [EXPERIMENT_STATUS_RUNNING, EXPERIMENT_STATUS_COMPLETED]:
+                if does_status_file_exist(workflow=workflow_class, campaign=campaign, openmlid=openml_id, workflowseed=workflow_seed, testseed=test_seed, valseed=valid_seed, status=status):
+                    filename = get_path_to_status_file(workflow=workflow_class, campaign=campaign, openmlid=openml_id, workflowseed=workflow_seed, testseed=test_seed, valseed=valid_seed, status=status)
+                    logger.info(f"We have a status file {filename} for {workflow_class}-{campaign}-{openml_id}-{workflow_seed}-{test_seed}-{valid_seed} so the experiment is being skipped.")
+                    return
+                
+            filename = get_path_to_status_file(workflow=workflow_class, campaign=campaign, openmlid=openml_id, workflowseed=workflow_seed, testseed=test_seed, valseed=valid_seed, status=EXPERIMENT_STATUS_RUNNING)
+            logger.info(f"Creating RUNNING status file {filename} for {workflow_class}-{campaign}-{openml_id}-{workflow_seed}-{test_seed}-{valid_seed}.")
+            create_status_file(workflow=workflow_class, campaign=campaign, openmlid=openml_id, workflowseed=workflow_seed, testseed=test_seed, valseed=valid_seed, status=EXPERIMENT_STATUS_RUNNING)
+
+        
         # Required for MPI just the root rank will execute the search
         # other ranks will be considered as workers
         if evaluator.is_master:

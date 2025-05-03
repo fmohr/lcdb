@@ -40,8 +40,13 @@ echo "'$LCDB_WORKFLOW' and '$LCDB_OUTPUT_WORKFLOW'"
 export LCDB_NUM_CONFIGS=$(yq '.config_num' "$CONFIG_FILE")
 export LCDB_WORKFLOW_SEED=$(yq '.workflow_seed' "$CONFIG_FILE")
 export DESIRED_MEMORY_GB=$(yq -r '.desired_memory_GB' "$CONFIG_FILE")
-export VAL_SEEDS=($(yq -r '.val_seeds[]' "$CONFIG_FILE"))
-export TEST_SEEDS=($(yq -r '.test_seeds[]' "$CONFIG_FILE"))
+# export VAL_SEEDS=($(yq -r '.val_seeds[]' "$CONFIG_FILE"))
+# export TEST_SEEDS=($(yq -r '.test_seeds[]' "$CONFIG_FILE"))
+# passing this with export as string to the run.sh script
+export VAL_SEEDS="$(yq -r '.val_seeds[]' "$CONFIG_FILE" | xargs)"
+export TEST_SEEDS="$(yq -r '.test_seeds[]' "$CONFIG_FILE" | xargs)"
+
+
 export CAMPAIGN_NAME=$(yq -r '.campaign_name' "$CONFIG_FILE" | tr -d '"') 
 
 # *********Loading Configuration*********
@@ -84,5 +89,5 @@ export LCDB_OPENML_ID_ARRAY=(${values[@]})
 
 
 export LCDB_INITIAL_CONFIGS=$LCDB_OUTPUT_WORKFLOW-$LCDB_WORKFLOW_MEMORY_LIMIT_GB/initial_configs.csv
-export LCDB_OUTPUT_DATASET=$LCDB_OUTPUT_WORKFLOW-$LCDB_WORKFLOW_MEMORY_LIMIT_GB/$LCDB_OPENML_ID
-export LCDB_OUTPUT_RUN=$LCDB_OUTPUT_DATASET/$LCDB_VALID_SEED-$LCDB_TEST_SEED-$LCDB_WORKFLOW_SEED
+# export LCDB_OUTPUT_DATASET=$LCDB_OUTPUT_WORKFLOW-$LCDB_WORKFLOW_MEMORY_LIMIT_GB/$LCDB_OPENML_ID
+# export LCDB_OUTPUT_RUN=$LCDB_OUTPUT_DATASET/$LCDB_VALID_SEED-$LCDB_TEST_SEED-$LCDB_WORKFLOW_SEED
