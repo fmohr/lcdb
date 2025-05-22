@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --partition=genoa
-#SBATCH --time=24:00:00
+#SBATCH --time=48:00:00
 #SBATCH --threads-per-core=1
 
 module load 2024

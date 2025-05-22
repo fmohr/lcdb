@@ -1,6 +1,6 @@
-workflow_name: libsvm
-campaign_name: probing-test
-desired_memory_GB: 16
+workflow_name: liblinear
+campaign_name: probing-1k
+desired_memory_GB: 67
 config_num: 10
 workflow_seed: 42
 val_seeds:
