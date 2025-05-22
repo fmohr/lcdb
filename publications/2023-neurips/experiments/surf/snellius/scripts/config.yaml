@@ -1,4 +1,4 @@
-workflow_name: liblinear
+workflow_name: libsvm
 campaign_name: probing-test
 desired_memory_GB: 16
 config_num: 10
