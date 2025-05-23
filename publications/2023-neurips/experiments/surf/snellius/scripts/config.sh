@@ -48,9 +48,16 @@ export CAMPAIGN_NAME=$(yq -r '.campaign_name' "$CONFIG_FILE" | tr -d '"')
 
 # *********Memory Calculations*********
 # number of nodes
+# genoa
 export NODES=2
 CPUS_PER_TASK=192
 MEMORY_PER_NODE_GB=336
+
+# rome
+# export NODES=2
+# CPUS_PER_TASK=128
+# MEMORY_PER_NODE_GB=224
+
 
 # calculate the number of cores based on the desired memory (in GB)
 TOTAL_MEMORY_GB=$((MEMORY_PER_NODE_GB * NODES))

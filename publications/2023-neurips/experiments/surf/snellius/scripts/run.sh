@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --partition=genoa
+#SBATCH --partition=rome
 #SBATCH --time=48:00:00
 #SBATCH --threads-per-core=1
 
@@ -14,17 +14,23 @@ export timeout=3500
 export NTOTRANKS=$DESIRED_CORES
 #!!! CONFIGURATION - END
 
-echo "Running experiment for OpenML ID: $SLURM_ARRAY_TASK_ID"
+echo "DEBUG: LCDB_OPENML_ARRAY_STRING='$LCDB_OPENML_ARRAY_STRING'"
+
+
 IFS=' ' read -r -a VAL_SEEDS <<< "$VAL_SEEDS"
 IFS=' ' read -r -a TEST_SEEDS <<< "$TEST_SEEDS"
+IFS=',' read -r -a LCDB_OPENML_ID_ARRAY <<< "$LCDB_OPENML_ARRAY_STRING"
+LCDB_OPENML_ID=${LCDB_OPENML_ID_ARRAY[$SLURM_ARRAY_TASK_ID]}
+echo "Running experiment for OpenML ID: $LCDB_OPENML_ID"
 echo "Validation seeds: ${VAL_SEEDS}"
 echo "Test seeds: ${TEST_SEEDS}"
+
+export LCDB_OUTPUT_DATASET=$LCDB_OUTPUT_WORKFLOW-$LCDB_WORKFLOW_MEMORY_LIMIT_GB/$LCDB_OPENML_ID
 
 for LCDB_VALID_SEED in "${VAL_SEEDS[@]}"; do
     for LCDB_TEST_SEED in "${TEST_SEEDS[@]}"; do
         # get the openmlid from the array
-        export LCDB_OPENML_ID=$SLURM_ARRAY_TASK_ID
-        export LCDB_OUTPUT_DATASET=$LCDB_OUTPUT_WORKFLOW-$LCDB_WORKFLOW_MEMORY_LIMIT_GB/$LCDB_OPENML_ID
+        # export LCDB_OPENML_ID=$SLURM_ARRAY_TASK_ID
         export LCDB_OUTPUT_RUN=$LCDB_OUTPUT_DATASET/$LCDB_VALID_SEED-$LCDB_TEST_SEED-$LCDB_WORKFLOW_SEED
 
         mkdir -p $LCDB_OUTPUT_RUN
