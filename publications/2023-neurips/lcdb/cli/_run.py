@@ -380,10 +380,10 @@ def run_experiment(
 
     from deephyper.evaluator import Evaluator, HPOJob
     from deephyper.evaluator.callback import TqdmCallback
+    from deephyper.evaluator.storage import Callback, MemoryStorage
     from deephyper.hpo import CBO, HpProblem
     from deephyper.hpo._problem import convert_to_skopt_space
 
-    from deephyper.evaluator.callback import Callback
     class JsonSanityCheckCallback(Callback):
 
         def on_done(self, job: HPOJob):
@@ -512,6 +512,7 @@ def run_experiment(
         method_kwargs["callbacks"].append(TqdmCallback())
 
 
+    method_kwargs["storage"] = MemoryStorage()
     print("method_kwargs", method_kwargs)
     # print the run function setup
     
