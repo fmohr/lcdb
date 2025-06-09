@@ -57,9 +57,6 @@ class Lookahead(Optimizer):
         # update the actual parameters (inner loop, update of thetas)
         self.optimizer.update_step(gradient, variable, self.optimizer.learning_rate)
 
-        tf.print("VAR after update is")
-        tf.print(variable)
-
         # create condition to check whether this iteration is one in which the outer loop logic should be executed
         local_step = self.iterations + 1
         sync_cond = ops.equal(

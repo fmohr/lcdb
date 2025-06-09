@@ -38,6 +38,7 @@ else:
 ACTIVATIONS = [
     "none",
     "relu",
+    "gelu",
     "sigmoid",
     "softmax",
     "softplus",
