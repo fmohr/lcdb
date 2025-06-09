@@ -34,9 +34,13 @@
     - Description: If skip connections should be used. Turns the network into a residual network.
     - Value: `[True, False]`
 
-- [ ] `multi_branch_choice`
-    - Description: Multibranch network regularization. Only active when `skip_connection` is active.
-    - Value: `['none', 'shake-shake', 'shake-drop']`
+- [X] `shake_shake`
+    - Description: Trains two independent blocks instead of a single one but perturbs them through random fusion and randomly mixed gradients.
+    - Value: `[True, False]`
+
+- [X] `shake_drop`
+    - Description: Alters a block with two random operation: One checks whether the block is discarded completely (only skip signal is used) and one randomly alters the outcome with a random factor. Due to the probability of signal loss, this technique requires skip connections.
+    - Value: `[True, False]`
 
 - [x] `augmentation`
     - Description: If methods that augment examples should be used.
