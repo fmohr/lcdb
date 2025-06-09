@@ -84,8 +84,14 @@ CONFIG_SPACE = ConfigurationSpace(
         "snapshot_ensemble_reset_weights": Categorical(
             "snapshot_ensemble_reset_weights", items=[False, True], default=False
         ),
-        "multi_branch": Categorical(
-            "multi_branch", items=["none", "shake-shake", "shake-drop"], default="none"
+        "shake_shake": Categorical(
+            "shake_shake", items=[False, True], default=False
+        ),
+        "shake_drop": Categorical( # requires skip connection
+            "shake_drop", items=[False, True], default=False
+        ),
+        "shake_drop_drop_proba": Float(
+            "shake_drop_drop_proba", bounds=(0.1, 0.9), default=0.5
         ),
         "data_augmentation": Categorical(
             "data_augmentation", items=["none", "cutout", "mixup", "cutmix"], default="none"
@@ -245,7 +251,9 @@ class DenseNNWorkflow(PreprocessedWorkflow):
         snapshot_ensemble_period_init=20,
         snapshot_ensemble_period_increase=0,
         snapshot_ensemble_reset_weights=False,
-        multi_branch="none",
+        shake_shake=False,
+        shake_drop=False,
+        shake_drop_drop_proba=0.5,
         data_augmentation="none",
         data_augmentation_cutout_patch_ratio: float = 0.1,
         shuffle_each_epoch=True,
@@ -301,7 +309,11 @@ class DenseNNWorkflow(PreprocessedWorkflow):
         self.snapshot_ensemble_reset_weights = snapshot_ensemble_reset_weights
         self.snapshot_callback = None
 
-        self.multi_branch = None if multi_branch == "none" else multi_branch
+        self.shake_shake = shake_shake
+        self.shake_drop = shake_drop
+        if shake_drop and not skip_co:
+            raise ValueError(f"Cannot have shake_drop enabled without skip connections enabled.")
+        self.shake_drop_drop_proba = shake_drop_drop_proba
 
         self.data_augmentation = None if data_augmentation == "none" else data_augmentation
         self.data_augmentation_cutout_patch_ratio = data_augmentation_cutout_patch_ratio
@@ -367,15 +379,21 @@ class DenseNNWorkflow(PreprocessedWorkflow):
         # Model layers
         for layer_i in range(self.num_layers):
             
-            if self.multi_branch is None:
+            # create branch output (either standard, or shake-shaked)
+            if not self.shake_shake:
                 out = _build_block(out)
             else:
-                if self.multi_branch == "shake-shake":
-                    from lcdb.workflow.keras._shake import ShakeShake
-                    out_1 = _build_block(out)
-                    out_2 = _build_block(out)
-                    out = ShakeShake()([out_1, out_2])
+                from lcdb.workflow.keras._shake import ShakeShake
+                out_1 = _build_block(out)
+                out_2 = _build_block(out)
+                out = ShakeShake()([out_1, out_2])
+            
+            # apply shake drop if enabled
+            if self.shake_drop:
+                from lcdb.workflow.keras._shake import ShakeDrop
+                out = ShakeDrop(p_drop=self.shake_drop_drop_proba)(out)
 
+            # add skip connection if enabled
             if self.skip_co and prev is not None:
                 out = out + prev
             prev = out

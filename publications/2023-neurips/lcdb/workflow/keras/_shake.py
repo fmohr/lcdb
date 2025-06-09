@@ -6,7 +6,6 @@ import tensorflow as tf
 
 
 class ShakeShake(Layer):
-    """ Shake-Shake-Image Layer """
 
     def __init__(self):
         super().__init__()
@@ -41,3 +40,42 @@ class ShakeShake(Layer):
                 return 0.5 * (x1 + x2)
 
         return shake_shake_combine(x[0], x[1])
+
+
+class ShakeDrop(Layer):
+    def __init__(self, p_drop):
+        super().__init__()
+        self.p_drop = p_drop  # Drop probability
+
+    def call(self, inputs, training=False):
+
+        def shake_drop(x):
+            if training:
+                batch_size = shape(x)[0]
+
+                # Binary gate: 1 = keep branch, 0 = drop
+                gate = tf.cast(uniform([batch_size, 1], 0, 1) > self.p_drop, tf.float32)
+
+                # Forward and backward mixing
+                alpha = uniform([batch_size, 1], 0, 1)
+                beta = uniform([batch_size, 1], 0, 1)
+
+                @custom_gradient
+                def shake_drop(residual):
+                    
+                    # Expand to match shape if needed
+                    gate_f = alpha * gate
+                    out = gate_f * residual
+
+                    def grad(dy):
+                        gate_b = beta * gate
+                        grad_residual = dy * gate_b
+                        return grad_residual
+
+                    return out, grad
+
+                return shake_drop(x)
+            else:
+                return (1 - self.p_drop) * x
+
+        return shake_drop(inputs)
