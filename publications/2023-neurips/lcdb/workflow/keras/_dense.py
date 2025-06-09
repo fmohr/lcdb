@@ -3,13 +3,13 @@ import pandas as pd
 import numpy as np
 import tensorflow as tf
 from keras.utils import Sequence
+from keras.layers import Activation
 from ConfigSpace import Categorical, ConfigurationSpace, Float, Integer
 from lcdb.builder.scorer import ClassificationScorer
 from lcdb.builder.timer import Timer
 from lcdb.builder.utils import get_schedule, filter_keys_with_prefix
-from .._base_workflow import BaseWorkflow
-from .._preprocessing_workflow import PreprocessedWorkflow
-from ._augmentation import MixUpAugmentation, CutMixAugmentation, CutOutAugmentation
+from lcdb.workflow._base_workflow import BaseWorkflow
+from lcdb.workflow._preprocessing_workflow import PreprocessedWorkflow
 from .utils import (
     ACTIVATIONS,
     INITIALIZERS,
@@ -33,7 +33,7 @@ CONFIG_SPACE = ConfigurationSpace(
         "activation": Categorical("activation", items=ACTIVATIONS, default="relu"),
         "dropout_rate": Float("dropout_rate", bounds=(0.0, 0.9), default=0.1),
         "skip_co": Categorical("skip_co", items=[True, False], default=True),
-        "batch_norm": Categorical("batch_norm", items=[True, False], default=False),
+        "batch_norm": Categorical("batch_norm", items=["off", "before_activation", "after_activation"], default="off"),
         "optimizer": Categorical(
             "optimizer", items=list(OPTIMIZERS.keys()), default="SGD"
         ),
@@ -83,6 +83,9 @@ CONFIG_SPACE = ConfigurationSpace(
         ),
         "snapshot_ensemble_reset_weights": Categorical(
             "snapshot_ensemble_reset_weights", items=[False, True], default=False
+        ),
+        "multi_branch": Categorical(
+            "multi_branch", items=["none", "shake-shake", "shake-drop"], default="none"
         ),
         "data_augmentation": Categorical(
             "data_augmentation", items=["none", "cutout", "mixup", "cutmix"], default="none"
@@ -135,11 +138,13 @@ class IterationCurveCallback(keras.callbacks.Callback):
                 "learning_rate": round(float(convert_to_numpy(self.workflow.learner.optimizer._learning_rate)), 8)
             })
         self.train_timer_id = self.timer.start("epoch_train")
+        self.logger.info(f"Starting epoch {epoch}")
 
-    def on_epoch_end(self, epoch, logs=None):
+    def on_epoch_end(self, epoch, logs=None):        
         super().on_epoch_end(epoch, logs)
         assert self.timer.active_node.id == self.epoch_timer_id
         self.timer.stop()
+        self.logger.info(f"Finished epoch {epoch}")
 
     def on_test_begin(self, logs=None):
         assert self.timer.active_node.id == self.train_timer_id
@@ -172,7 +177,7 @@ class IterationCurveCallback(keras.callbacks.Callback):
                             y_pred=y_pred,
                             y_pred_proba=y_pred_proba,
                         )
-                        self.logger.info(f"Scores are {scores}")
+                        self.logger.info(f"Scores for {label_split} split are {scores}")
 
 
 class AugmentDataGenerator(Sequence):
@@ -221,7 +226,7 @@ class DenseNNWorkflow(PreprocessedWorkflow):
         activation="relu",
         dropout_rate=0.1,
         skip_co=True,
-        batch_norm=False,
+        batch_norm="off",
         optimizer="Adam",
         learning_rate=0.001,
         batch_size=32,
@@ -240,10 +245,10 @@ class DenseNNWorkflow(PreprocessedWorkflow):
         snapshot_ensemble_period_init=20,
         snapshot_ensemble_period_increase=0,
         snapshot_ensemble_reset_weights=False,
+        multi_branch="none",
         data_augmentation="none",
         data_augmentation_cutout_patch_ratio: float = 0.1,
         shuffle_each_epoch=True,
-        verbose=2,
         epoch_schedule: str = "full",
         random_state=None,
         logger=None,
@@ -251,33 +256,6 @@ class DenseNNWorkflow(PreprocessedWorkflow):
         memory_limit_in_bytes=None,
         **kwargs,
     ):
-        """Dense Neural Network Workflow implements the class of multi-layer fully connected neural networks.
-
-        Args:
-            timer (_type_, optional): _description_. Defaults to None.
-            num_layers (int, optional): _description_. Defaults to 5.
-            num_units (int, optional): _description_. Defaults to 32.
-            activation (str, optional): _description_. Defaults to "relu".
-            dropout_rate (float, optional): _description_. Defaults to 0.1.
-            skip_co (bool, optional): _description_. Defaults to True.
-            batch_norm (bool, optional): _description_. Defaults to False.
-            optimizer (str, optional): _description_. Defaults to "Adam".
-            learning_rate (float, optional): _description_. Defaults to 0.001.
-            batch_size (int, optional): _description_. Defaults to 32.
-            num_epochs (int, optional): _description_. Defaults to 200.
-            kernel_regularizer (str, optional): _description_. Defaults to "none".
-            bias_regularizer (str, optional): _description_. Defaults to "none".
-            activity_regularizer (str, optional): _description_. Defaults to "none".
-            regularizer_factor (float, optional): _description_. Defaults to 0.01.
-            kernel_initializer (str, optional): _description_. Defaults to "glorot_uniform".
-            stochastic_weight_averaging (bool, optional):
-            lookahead (bool, optional):
-            shuffle_each_epoch (bool, optional): _description_. Defaults to True.
-            transform_real (str, optional): _description_. Defaults to "none".
-            transform_cat (str, optional): _description_. Defaults to "onehot".
-            verbose (int, optional): _description_. Defaults to 0.
-            epoch_schedule (str, optional): _description_. Defaults to "power".
-        """
 
         # check kwargs
         for k in kwargs.keys():
@@ -323,10 +301,11 @@ class DenseNNWorkflow(PreprocessedWorkflow):
         self.snapshot_ensemble_reset_weights = snapshot_ensemble_reset_weights
         self.snapshot_callback = None
 
+        self.multi_branch = None if multi_branch == "none" else multi_branch
+
         self.data_augmentation = None if data_augmentation == "none" else data_augmentation
         self.data_augmentation_cutout_patch_ratio = data_augmentation_cutout_patch_ratio
 
-        self.verbose = verbose
         self.epoch_schedule = epoch_schedule
 
         # state variables
@@ -348,6 +327,7 @@ class DenseNNWorkflow(PreprocessedWorkflow):
         return True
 
     def build_model(self, input_shape, num_classes):
+
         inputs = out = keras.Input(shape=input_shape)
 
         self.logger.info(
@@ -362,11 +342,10 @@ class DenseNNWorkflow(PreprocessedWorkflow):
 
         prev = None
 
-        # Model layers
-        for layer_i in range(self.num_layers):
-            out = keras.layers.Dense(
+        def _build_block(_out):
+            _out = keras.layers.Dense(
                 self.num_units,
-                activation=self.activation,
+                activation=self.activation if self.batch_norm in ["off", "after_activation"] else None,
                 kernel_initializer=self.kernel_initializer,
                 activity_regularizer=REGULARIZERS[self.activity_regularizer](
                     self.regularizer_factor
@@ -377,10 +356,25 @@ class DenseNNWorkflow(PreprocessedWorkflow):
                 bias_regularizer=REGULARIZERS[self.bias_regularizer](
                     self.regularizer_factor
                 ),
-            )(out)
-            if self.batch_norm:
-                out = keras.layers.BatchNormalization()(out)
-            out = keras.layers.Dropout(self.dropout_rate)(out)
+            )(_out)
+            if self.batch_norm != "off":
+                _out = keras.layers.BatchNormalization()(_out)
+
+                if self.batch_norm == "before_activation":
+                    _out = Activation(self.activation)(_out)
+            return keras.layers.Dropout(self.dropout_rate)(_out)
+
+        # Model layers
+        for layer_i in range(self.num_layers):
+            
+            if self.multi_branch is None:
+                out = _build_block(out)
+            else:
+                if self.multi_branch == "shake-shake":
+                    from lcdb.workflow.keras._shake import ShakeShake
+                    out_1 = _build_block(out)
+                    out_2 = _build_block(out)
+                    out = ShakeShake()([out_1, out_2])
 
             if self.skip_co and prev is not None:
                 out = out + prev
@@ -394,9 +388,7 @@ class DenseNNWorkflow(PreprocessedWorkflow):
             layer_logits
         )
 
-        model = keras.Model(inputs=inputs, outputs=layer_proba)
-
-        return model
+        return keras.Model(inputs=inputs, outputs=layer_proba)
 
     def _encode_label_vector(self, y):
         int_encoded_labels = np.array([
@@ -510,13 +502,16 @@ class DenseNNWorkflow(PreprocessedWorkflow):
         # Prepare data augmenters
         data_augmenters = []
         if self.data_augmentation == "cutout":
+            from lcdb.workflow.keras._augmentation import CutOutAugmentation
             data_augmenters.append(CutOutAugmentation(
                 probability_of_cut=self.data_augmentation_cutout_patch_ratio,
                 random_state=self.random_state
             ))
         elif self.data_augmentation == "mixup":
+            from lcdb.workflow.keras._augmentation import MixUpAugmentation
             data_augmenters.append(MixUpAugmentation(random_state=self.random_state))
         elif self.data_augmentation == "cutmix":
+            from lcdb.workflow.keras._augmentation import CutMixAugmentation
             data_augmenters.append(CutMixAugmentation(random_state=self.random_state))
 
         # data generator for augmentation
@@ -533,7 +528,7 @@ class DenseNNWorkflow(PreprocessedWorkflow):
             shuffle=self.shuffle_each_epoch,
             validation_data=(X_valid[mask_valid], self._encode_label_vector(y_valid[mask_valid])),
             callbacks=callbacks,
-            verbose=self.verbose,
+            verbose=0,
         )
 
     def _predict_after_transform(self, X):
@@ -551,7 +546,7 @@ class DenseNNWorkflow(PreprocessedWorkflow):
         y_pred_proba = []
         for model in models:
             y_pred_proba_model = model.predict(
-                X, batch_size=min(len(X), self.batch_size), verbose=self.verbose
+                X, batch_size=min(len(X), self.batch_size), verbose=0
             )
             y_pred_proba.append(y_pred_proba_model)
 

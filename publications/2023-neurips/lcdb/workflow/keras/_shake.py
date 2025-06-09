@@ -1,35 +1,43 @@
 from keras import backend as K
 from keras.layers import Layer
+from tensorflow.random import uniform
+from tensorflow import custom_gradient, GradientTape, shape
+import tensorflow as tf
 
 
 class ShakeShake(Layer):
     """ Shake-Shake-Image Layer """
 
-    def __init__(self, **kwargs):
-        super(ShakeShake, self).__init__(**kwargs)
+    def __init__(self):
+        super().__init__()
 
-    def build(self, input_shape):
-        super(ShakeShake, self).build(input_shape)
+    def call(self, x, training=False):
 
-    def call(self, x):
+        def shake_shake_combine(x1, x2):
+            if training:
 
-        # unpack x1 and x2
-        assert isinstance(x, list)
-        x1, x2 = x
-        # create alpha and beta
-        batch_size = K.shape(x1)[0]
-        alpha = K.random_uniform((batch_size, 1, 1, 1))
-        beta = K.random_uniform((batch_size, 1, 1, 1))
+                batch_size = shape(x1)[0]
 
-        # shake-shake during training phase
-        def x_shake():
-            return beta * x1 + (1 - beta) * x2 + K.stop_gradient((alpha - beta) * x1 + (beta - alpha) * x2)
-        # even-even during testing phase
+                # Forward mixing coefficient
+                alpha = uniform([batch_size, 1,], 0, 1)
 
-        def x_even():
-            return 0.5 * x1 + 0.5 * x2
-        return K.in_train_phase(x_shake, x_even)
+                # Backward mixing coefficient
+                beta = uniform([batch_size, 1], 0, 1)
 
-    def compute_output_shape(self, input_shape):
-        assert isinstance(input_shape, list)
-        return input_shape[0]
+                @custom_gradient
+                def shake_shake(x1, x2):
+
+                    y = alpha * x1 + (1 - alpha) * x2
+
+                    def grad(dy):
+                        grad_x1 = dy * beta
+                        grad_x2 = dy * (1 - beta)
+                        return grad_x1, grad_x2
+
+                    return y, grad
+
+                return shake_shake(x1, x2)
+            else:
+                return 0.5 * (x1 + x2)
+
+        return shake_shake_combine(x[0], x[1])
