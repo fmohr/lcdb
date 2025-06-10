@@ -49,10 +49,6 @@ class SVMWorkflow(SklearnWorkflow):
     def builds_iteration_curve(cls):
         return False
 
-    @classmethod
-    def is_randomizable(cls):
-        return True
-
     def _fit_model_after_transformation(self, X, y, X_valid, y_valid, X_test, y_test, metadata):
         super()._fit_model_after_transformation(X, y, X_valid, y_valid, X_test, y_test, metadata)
         if type(self.learner) is LinearSVC or type(self.learner) is SVC:

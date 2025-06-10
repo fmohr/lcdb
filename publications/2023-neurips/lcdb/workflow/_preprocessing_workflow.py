@@ -136,6 +136,15 @@ class PreprocessedWorkflow(BaseWorkflow, ABC):
         self.poly_degree = poly_degree
         self.std_with_std = std_with_std
         self.raise_exception_on_unsuitable_preprocessor = raise_exception_on_unsuitable_preprocessor
+    
+    def __init_subclass__(cls):
+        super().__init_subclass__()
+        if 'is_randomizable' in cls.__dict__:
+            raise TypeError("is_randomizable cannot be overridden for sub-workflows of PreprocessedWorkflow, because this is always and necessarily randomizable. ")
+
+    @classmethod
+    def is_randomizable(cls):
+        return True
 
     @classmethod
     def config_space(
@@ -421,11 +430,11 @@ class PreprocessedWorkflow(BaseWorkflow, ABC):
             elif featuremapper_val == "lda":
                 featuremapper = LinearDiscriminantAnalysis()
             elif featuremapper_val == "fastica":
-                featuremapper = FastICA()
+                featuremapper = FastICA(random_state=self.random_state)
             elif featuremapper_val == "ka_rbf":
-                featuremapper = RBFSampler()
+                featuremapper = RBFSampler(random_state=self.random_state)
             elif featuremapper_val == "ka_nystroem":
-                featuremapper = Nystroem()
+                featuremapper = Nystroem(random_state=self.random_state)
             elif featuremapper_val == "agglomerator":
                 # If enable, n_features**2 combinations
                 featuremapper = FeatureAgglomeration()

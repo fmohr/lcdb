@@ -375,3 +375,115 @@ class TestBuildFunctionalities(unittest.TestCase):
             self.assertEqual("metrics", metrics_in_first_anchor_in_final_node["tag"])
             validation_confusion_matrix_in_first_anchor_in_final_node = metrics_in_first_anchor_in_final_node["children"][1]["children"][0]
             self.assertEqual("confusion_matrix", validation_confusion_matrix_in_first_anchor_in_final_node["tag"])
+
+    @parameterized.expand(list(it.product([61], VAL_SEEDS, TEST_SEEDS, WORKFLOW_SEEDS, [True, False])))
+    def test_reproducibility_of_preprocessors(self, openmlid, val_seed, test_seed, workflow_seed, monotonic):
+
+        logger.info(f"Starting reproducibility test of preprocessors on dataset {openmlid}")
+        
+        from lcdb.workflow.sklearn import DTWorkflow
+        from ConfigSpace.hyperparameters import CategoricalHyperparameter
+        workflow_class = DTWorkflow
+
+        for hp_name, hp_obj in workflow_class.config_space().items():
+            if not hp_name.startswith("pp@") or not isinstance(hp_obj, CategoricalHyperparameter):
+                continue
+
+            for choice in hp_obj.choices:
+            
+                params = {
+                    hp_name: choice
+                }
+                if hp_name != "pp@cat_encoder" and openmlid in [3, 188]:
+                    params["pp@cat_encoder"] = "onehot"
+                    
+                matrices_first_run = []
+
+                for run_idx in range(2):
+                    out = run_learning_workflow(
+                        openml_id=openmlid,
+                        workflow_class=workflow_class,
+                        workflow_parameters=params,
+                        valid_seed=val_seed,
+                        test_seed=test_seed,
+                        workflow_seed=workflow_seed,
+                        monotonic=monotonic,
+                        raise_errors=True,
+                        anchor_schedule="first",
+                        max_sample_anchor=MAX_SAMPLE_ANCHOR,
+                        raise_exception_on_unsuitable_preprocessor=False
+                    )
+
+                    parsed_json = json.loads(out["metadata"]["json"])
+                    final_node = parsed_json["children"][-1]
+                    first_anchor_in_final_node = final_node["children"][0]
+                    metrics_in_first_anchor_in_final_node = first_anchor_in_final_node["children"][-1]
+
+                    # check that train, validation, and test confusion matrices are identical
+                    for i in range(3):
+                        matrix = metrics_in_first_anchor_in_final_node["children"][i]["children"][0]["metadata"]["value"]
+                        if run_idx == 0:
+                            matrices_first_run.append(matrix)
+                        else:
+                            self.assertEqual(matrices_first_run[i], matrix, msg=f"Missing reproducibility for {workflow_class=}.")
+
+
+    @parameterized.expand(list(it.product([61], WORKFLOWS, VAL_SEEDS, TEST_SEEDS, WORKFLOW_SEEDS, [True, False])))
+    def test_reproducibility_of_actual_workflows(self, openmlid, workflow, val_seed, test_seed, workflow_seed, monotonic):
+
+        workflow_class = import_attr_from_module(workflow)
+
+        params = {}
+        if issubclass(workflow_class, PreprocessedWorkflow) and openmlid in [3, 188]:
+            params["pp@cat_encoder"] = "onehot"
+            
+        if issubclass(workflow_class, XGBoostWorkflow):
+            params["n_estimators"] = 16
+        
+        if issubclass(workflow_class, TreesEnsembleWorkflow):
+            params["n_estimators"] = 16
+        
+        if issubclass(workflow_class, DenseNNWorkflow):
+            params["epoch_schedule"] = "linear"
+            params["num_layers"] = 2
+            params["num_units"] = 5
+            params["num_epochs"] = 5
+
+        logger.info(f"Starting reproducibility test of workflow {workflow} on dataset {openmlid}")
+        try:
+            
+            matrices_first_run = []
+
+            for run_idx in range(2):
+                out = run_learning_workflow(
+                    openml_id=openmlid,
+                    workflow_class=workflow,
+                    workflow_parameters=params,
+                    valid_seed=val_seed,
+                    test_seed=test_seed,
+                    workflow_seed=workflow_seed,
+                    monotonic=monotonic,
+                    raise_errors=True,
+                    anchor_schedule="first",
+                    max_sample_anchor=MAX_SAMPLE_ANCHOR
+                )
+
+                parsed_json = json.loads(out["metadata"]["json"])
+                final_node = parsed_json["children"][-1]
+                first_anchor_in_final_node = final_node["children"][0]
+                metrics_in_first_anchor_in_final_node = first_anchor_in_final_node["children"][-1]
+
+                # check that train, validation, and test confusion matrices are identical
+                for i in range(3):
+                    matrix = metrics_in_first_anchor_in_final_node["children"][i]["children"][0]["metadata"]["value"]
+                    if run_idx == 0:
+                        matrices_first_run.append(matrix)
+                    else:
+                        self.assertEqual(matrices_first_run[i], matrix, msg=f"Missing reproducibility for {workflow_class=}.")
+            
+        except Exception as e:
+            msg = str(e)
+            if "covariance is ill defined" in msg:
+                pass
+            else:
+                raise e

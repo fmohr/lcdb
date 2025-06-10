@@ -125,7 +125,7 @@ class TreesEnsembleWorkflow(SklearnWorkflow):
 
         # Scoring Schedule for Sub-fidelity
         self.schedule = get_schedule(
-            name=epoch_schedule, n=self.max_n_estimators
+            name=epoch_schedule, max_anchor=self.max_n_estimators
         )
         self.logger.info(f"Initialized tree ensemble with schedule {self.schedule} based on {epoch_schedule}")
 
@@ -135,10 +135,6 @@ class TreesEnsembleWorkflow(SklearnWorkflow):
 
     @classmethod
     def builds_iteration_curve(cls):
-        return True
-
-    @classmethod
-    def is_randomizable(cls):
         return True
 
     def _fit_model_after_transformation(

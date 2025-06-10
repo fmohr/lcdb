@@ -84,10 +84,6 @@ class KNNWorkflow(SklearnWorkflow):
     def builds_iteration_curve(cls):
         return False
 
-    @classmethod
-    def is_randomizable(cls):
-        return False
-
     def _fit_model_after_transformation(self, X, y, X_valid, y_valid, X_test, y_test, metadata):
 
         # instantiate the learner

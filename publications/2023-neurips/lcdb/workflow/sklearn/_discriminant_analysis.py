@@ -42,10 +42,6 @@ class LDAWorkflow(SklearnWorkflow):
     def builds_iteration_curve(cls):
         return False
 
-    @classmethod
-    def is_randomizable(cls):
-        return False
-
 
 CONFIG_SPACE_QDA = ConfigurationSpace(
     name="sklearn.QDAWorkflow",
@@ -80,10 +76,6 @@ class QDAWorkflow(SklearnWorkflow):
 
     @classmethod
     def builds_iteration_curve(cls):
-        return False
-
-    @classmethod
-    def is_randomizable(cls):
         return False
 
     def _fit_model_after_transformation(self, X, y, X_valid, y_valid, X_test, y_test, metadata):

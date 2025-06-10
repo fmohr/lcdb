@@ -257,8 +257,9 @@ class LearningCurveBuilder:
         self.timeout_on_fit = timeout_on_fit
         self.raise_errors = raise_errors
         self.anchors = get_schedule(
-            name=anchor_schedule, n=len(self.X_train)
+            name=anchor_schedule, max_anchor=len(self.X_train)
         )
+        assert isinstance(self.anchors, (list, np.ndarray)), f"Anchors should be list or numpy array but is {type(self.anchors)}: {self.anchors}"
         if max_sample_anchor is not None:
             self.anchors = [a for a in self.anchors if a <= max_sample_anchor]
         self.logger.info(f"Using sample-wise schedule {self.anchors} based on anchor schedule definition {anchor_schedule}")

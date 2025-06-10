@@ -42,10 +42,6 @@ class LRWorkflow(SklearnWorkflow):
     def builds_iteration_curve(cls):
         return False
 
-    @classmethod
-    def is_randomizable(cls):
-        return True
-
 
 CONFIG_SPACE_RIDGE = ConfigurationSpace(
     name="sklearn.RidgeWorkflow",
@@ -82,10 +78,6 @@ class RidgeWorkflow(SklearnWorkflow):
     def builds_iteration_curve(cls):
         return False
 
-    @classmethod
-    def is_randomizable(cls):
-        return True
-
     def _predict_proba_after_transform(self, X):
         return decision_fun_to_proba(self.learner.decision_function(X))
 
@@ -111,7 +103,9 @@ class PAWorkflow(SklearnWorkflow):
         **kwargs
     ):
         super().__init__(
-            learner=PassiveAggressiveClassifier(),
+            learner=PassiveAggressiveClassifier(
+                random_state=kwargs["random_state"] if "random_state" in kwargs else None
+            ),
             **kwargs
         )
 
@@ -121,10 +115,6 @@ class PAWorkflow(SklearnWorkflow):
 
     @classmethod
     def builds_iteration_curve(cls):
-        return False
-
-    @classmethod
-    def is_randomizable(cls):
         return False
 
     def _predict_proba_after_transform(self, X):
@@ -162,10 +152,6 @@ class PerceptronWorkflow(SklearnWorkflow):
 
     @classmethod
     def builds_iteration_curve(cls):
-        return False
-
-    @classmethod
-    def is_randomizable(cls):
         return False
 
     def _predict_proba_after_transform(self, X):

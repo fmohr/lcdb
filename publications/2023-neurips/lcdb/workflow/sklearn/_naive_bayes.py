@@ -38,6 +38,3 @@ class GaussianNBWorkflow(SklearnWorkflow):
     def builds_iteration_curve(cls):
         return False
 
-    @classmethod
-    def is_randomizable(cls):
-        return False
