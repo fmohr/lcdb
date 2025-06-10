@@ -261,10 +261,12 @@ def get_schedule(name, **kwargs):
     elif name == "linear":
         return get_linear_schedule(**kwargs)
     elif name == "first":
-        return get_schedule("power")[0]
+        return get_schedule("power", **kwargs)[:1]
     elif name == "last":
-        return [kwargs["n"]]
+        return [kwargs["max_anchor"]]
     elif name.startswith("power"):
+        if not "max_anchor" in kwargs:
+            raise ValueError(f"power schedule requires keyword `max_anchor`")
         if "-" in name:
             exploded_name = name.split("-")
             if len(exploded_name) != 4:
@@ -283,24 +285,24 @@ def get_schedule(name, **kwargs):
         raise ValueError(f"Unknown schedule: {name}")
 
 
-def get_linear_schedule(n: int, step: 1 = 1, **kwargs):
-    return list(range(1, n + 1, step))
+def get_linear_schedule(max_anchor: int, step: 1 = 1, **kwargs):
+    return sorted(range(1, max_anchor + 1, step))
 
 
-def get_power_schedule(n: int, base=2, power=0.5, delay: int = 7, **kwargs):
-    """Get a schedule of anchors for a given size `n`."""
+def get_power_schedule(max_anchor: int, base=2, power=0.5, delay: int = 7, **kwargs):
+    """Get a power schedule up to anchor `max_anchor`."""
     anchors = []
     k = 1
     while True:
         exponent = (delay + k) * power
         sample_size = int(np.round(base**exponent))
-        if sample_size > n:
+        if sample_size > max_anchor:
             break
         anchors.append(sample_size)
         k += 1
-    if len(anchors) > 0 and anchors[-1] < n:
-        anchors.append(n)
-    return anchors
+    if len(anchors) > 0 and anchors[-1] < max_anchor:
+        anchors.append(max_anchor)
+    return sorted(anchors)
 
 
 def decision_fun_to_proba(decision_fun_vals):

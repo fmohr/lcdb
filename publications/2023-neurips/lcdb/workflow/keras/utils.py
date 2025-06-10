@@ -30,7 +30,7 @@ else:
         "Adadelta": keras.optimizers.Adadelta,
         "Adagrad": keras.optimizers.Adagrad,
         "Adamax": keras.optimizers.Adamax,
-        "Adafactor": keras.optimizers.Adafactor,
+        #"Adafactor": keras.optimizers.Adafactor,  # likely to diverge
         "Nadam": keras.optimizers.Nadam,
         "Ftrl": keras.optimizers.Ftrl,
     }
@@ -45,8 +45,7 @@ ACTIVATIONS = [
     "softsign",
     "tanh",
     "selu",
-    "elu",
-    "exponential",
+    "elu"
 ]
 
 REGULARIZERS = {
@@ -60,8 +59,6 @@ INITIALIZERS = [
     "random_normal",
     "random_uniform",
     "truncated_normal",
-    "zeros",
-    "ones",
     "glorot_normal",
     "glorot_uniform",
     "he_normal",

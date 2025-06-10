@@ -176,7 +176,7 @@ class XGBoostWorkflow(PreprocessedWorkflow):
         self.learner = XGBClassifier(device="cpu", **learner_kwargs)  # enforce CPU usage
 
         self.schedule = get_schedule(
-            name=epoch_schedule, n=self.n_estimators
+            name=epoch_schedule, max_anchor=self.n_estimators
         )
 
         self.encoder = LabelEncoder()
@@ -189,10 +189,6 @@ class XGBoostWorkflow(PreprocessedWorkflow):
 
     @classmethod
     def builds_iteration_curve(cls):
-        return True
-
-    @classmethod
-    def is_randomizable(cls):
         return True
 
     def _fit_model_after_transformation(self, X, y, X_valid, y_valid, X_test, y_test, metadata):

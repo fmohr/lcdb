@@ -30,6 +30,9 @@ class BaseWorkflow(abc.ABC):
             logger.warning(
                 f"Workflow {self.__class__.__name__} is randomizable but no seed was provided!"
             )
+        self.random_state = random_state
+        if not isinstance(self.random_state, np.random.RandomState):
+            self.random_state = np.random.RandomState(self.random_state)
 
         self.infos = {}
 

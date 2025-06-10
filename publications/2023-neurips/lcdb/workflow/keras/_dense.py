@@ -3,6 +3,8 @@ import pandas as pd
 import numpy as np
 import tensorflow as tf
 from keras.utils import Sequence
+
+from tensorflow.keras.initializers import get
 from keras.layers import Activation
 from ConfigSpace import Categorical, ConfigurationSpace, Float, Integer
 from lcdb.builder.scorer import ClassificationScorer
@@ -125,9 +127,10 @@ class IterationCurveCallback(keras.callbacks.Callback):
             timer=self.timer
         )
         self.schedule = get_schedule(
-            name=epoch_schedule, n=self.workflow.num_epochs, base=2, power=0.5, delay=0
-        )[::-1]
+            name=epoch_schedule, max_anchor=self.workflow.num_epochs, base=2, power=0.5, delay=0
+        )
         self.logger.info(f"Epoch schedule set to {self.schedule}")
+        self.schedule = self.schedule[::-1]
 
         # Safeguard to check timers
         self.train_timer_id = None
@@ -187,12 +190,13 @@ class IterationCurveCallback(keras.callbacks.Callback):
 
 
 class AugmentDataGenerator(Sequence):
-    def __init__(self, X, y, batch_size, augmenters, encode_label_vector, shuffle=True):
-        self.X = tf.convert_to_tensor(X)
-        self.y = tf.convert_to_tensor(encode_label_vector(y))
+    def __init__(self, X, y, batch_size, augmenters, encode_label_vector, shuffle=True, random_state=None):
+        self.X = tf.convert_to_tensor(X, dtype=tf.float32)
+        self.y = tf.convert_to_tensor(encode_label_vector(y), dtype=tf.float32)
         self.batch_size = batch_size
         self.augmenters = augmenters
         self.shuffle = shuffle
+        self.random_state = random_state if random_state is not None else np.random.RandomState()
         self.on_epoch_end()
         
     def __len__(self):
@@ -205,13 +209,12 @@ class AugmentDataGenerator(Sequence):
 
         for augmenter in self.augmenters:
             X_batch, y_batch = augmenter.augment(X_batch, y_batch)
-        
         return X_batch, y_batch
     
     def on_epoch_end(self):
         self.indices = np.arange(len(self.X))
         if self.shuffle:
-            np.random.shuffle(self.indices)
+            self.random_state.shuffle(self.indices)
 
 
 
@@ -237,7 +240,7 @@ class DenseNNWorkflow(PreprocessedWorkflow):
         learning_rate=0.001,
         batch_size=32,
         num_epochs=2048,
-        num_epochs_patience=100,
+        num_epochs_patience=20,
         kernel_regularizer="none",
         bias_regularizer="none",
         activity_regularizer="none",
@@ -322,7 +325,6 @@ class DenseNNWorkflow(PreprocessedWorkflow):
 
         # state variables
         self.use_snapshot_models_for_prediction = False  # this variable is modified by the Snapshot callback
-        self.random_state = random_state
 
         keras.backend.clear_session()
 
@@ -334,10 +336,6 @@ class DenseNNWorkflow(PreprocessedWorkflow):
     def builds_iteration_curve(cls):
         return True
     
-    @classmethod
-    def is_randomizable(cls):
-        return True
-
     def build_model(self, input_shape, num_classes):
 
         inputs = out = keras.Input(shape=input_shape)
@@ -354,11 +352,22 @@ class DenseNNWorkflow(PreprocessedWorkflow):
 
         prev = None
 
+        def _get_seeded_kernel_initializer():
+            initializer = get(self.kernel_initializer)
+            kwargs_initializer = {}
+            if self.kernel_initializer not in ["ones"]:
+                kwargs_initializer["seed"] = self.random_state.randint(0, 10**5)
+            return initializer.__class__(**kwargs_initializer)
+
         def _build_block(_out):
+
+            # Get initializer class
+            seeded_initializer = _get_seeded_kernel_initializer()
+
             _out = keras.layers.Dense(
                 self.num_units,
                 activation=self.activation if self.batch_norm in ["off", "after_activation"] else None,
-                kernel_initializer=self.kernel_initializer,
+                kernel_initializer=seeded_initializer,
                 activity_regularizer=REGULARIZERS[self.activity_regularizer](
                     self.regularizer_factor
                 ),
@@ -374,7 +383,8 @@ class DenseNNWorkflow(PreprocessedWorkflow):
 
                 if self.batch_norm == "before_activation":
                     _out = Activation(self.activation)(_out)
-            return keras.layers.Dropout(self.dropout_rate)(_out)
+
+            return keras.layers.Dropout(self.dropout_rate, seed=self.random_state.randint(0, 10**5))(_out)
 
         # Model layers
         for layer_i in range(self.num_layers):
@@ -386,12 +396,15 @@ class DenseNNWorkflow(PreprocessedWorkflow):
                 from lcdb.workflow.keras._shake import ShakeShake
                 out_1 = _build_block(out)
                 out_2 = _build_block(out)
-                out = ShakeShake()([out_1, out_2])
+                out = ShakeShake(seed=self.random_state.randint(0, 10**5))([out_1, out_2])
             
             # apply shake drop if enabled
             if self.shake_drop:
                 from lcdb.workflow.keras._shake import ShakeDrop
-                out = ShakeDrop(p_drop=self.shake_drop_drop_proba)(out)
+                out = ShakeDrop(
+                    seed=self.random_state.randint(0, 10**5),
+                    p_drop=self.shake_drop_drop_proba
+                )(out)
 
             # add skip connection if enabled
             if self.skip_co and prev is not None:
@@ -399,10 +412,16 @@ class DenseNNWorkflow(PreprocessedWorkflow):
             prev = out
 
         # Model output
-        layer_logits = keras.layers.Dense(self.num_units, activation=self.activation)(
+        layer_logits = keras.layers.Dense(
+            self.num_units,
+            kernel_initializer=_get_seeded_kernel_initializer(),
+            activation=self.activation)(
             out
         )
-        layer_proba = keras.layers.Dense(num_classes, activation="softmax")(
+        layer_proba = keras.layers.Dense(
+            num_classes, 
+            kernel_initializer=_get_seeded_kernel_initializer(),
+            activation="softmax")(
             layer_logits
         )
 
@@ -425,27 +444,6 @@ class DenseNNWorkflow(PreprocessedWorkflow):
             for i in y
         ])
         return out
-
-    # def _transform_train_data_prior_to_standard_preprocessing(self, X, y):
-
-    #     # apply data augmentation to the one-hot encoded training data
-    #     y_one_hot = self._encode_label_vector(y)
-    #     data_augmenters = []
-    #     if self.data_augmentation == "cutout":
-    #         data_augmenters.append(CutOutAugmentation(
-    #             probability_of_cut=self.data_augmentation_cutout_patch_ratio,
-    #             random_state=self.random_state
-    #         ))
-    #     elif self.data_augmentation == "mixup":
-    #         data_augmenters.append(MixUpAugmentation(random_state=self.random_state))
-    #     elif self.data_augmentation == "cutmix":
-    #         data_augmenters.append(CutMixAugmentation(random_state=self.random_state))
-
-    #     # apply data augmenter(s). In fact there can only be one currently, but we keep the code generic
-    #     for data_augmenter in data_augmenters:
-    #         X, y_one_hot = data_augmenter.augment(X, y_one_hot)
-
-    #     return X, y_one_hot
 
     def _fit_model_after_transformation(self, X, y, X_valid, y_valid, X_test, y_test, metadata):
         self.metadata = metadata
@@ -532,18 +530,28 @@ class DenseNNWorkflow(PreprocessedWorkflow):
             from lcdb.workflow.keras._augmentation import CutMixAugmentation
             data_augmenters.append(CutMixAugmentation(random_state=self.random_state))
 
+        # create log message for the usage of data augmentation 
+        if self.data_augmentation is not None:
+            self.logger.info(
+                f"Using data augmentation: {self.data_augmentation} with augmenters: {data_augmenters}"
+            )
+        else:
+            self.logger.info("No data augmentation is used.")
+
         # data generator for augmentation
         train_generator = AugmentDataGenerator(
                             X, y, batch_size=self.batch_size, 
                             augmenters=data_augmenters,
                             encode_label_vector=self._encode_label_vector,
-                            shuffle=self.shuffle_each_epoch
+                            shuffle=self.shuffle_each_epoch,
+                            random_state=self.random_state
                         )
+
         # now fit model
         self.learner.fit(
             train_generator,
             epochs=self.num_epochs,
-            shuffle=self.shuffle_each_epoch,
+            shuffle=False, # shuffling is done by the generator to control the random seed
             validation_data=(X_valid[mask_valid], self._encode_label_vector(y_valid[mask_valid])),
             callbacks=callbacks,
             verbose=0,

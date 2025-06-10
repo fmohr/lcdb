@@ -30,10 +30,10 @@ class MajorityWorkflow(BaseWorkflow):
     @classmethod
     def builds_iteration_curve(cls):
         return False
-
+    
     @classmethod
     def is_randomizable(cls):
-        return True
+        return False
 
     def _fit(self, X, y, X_valid, y_valid, X_test, y_test, metadata):
         self.metadata = metadata

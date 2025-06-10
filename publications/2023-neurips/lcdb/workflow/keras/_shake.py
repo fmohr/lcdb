@@ -7,8 +7,9 @@ import tensorflow as tf
 
 class ShakeShake(Layer):
 
-    def __init__(self):
+    def __init__(self, seed):
         super().__init__()
+        self.random_gen = tf.random.Generator.from_seed(seed)
 
     def call(self, x, training=False):
 
@@ -18,10 +19,10 @@ class ShakeShake(Layer):
                 batch_size = shape(x1)[0]
 
                 # Forward mixing coefficient
-                alpha = uniform([batch_size, 1,], 0, 1)
+                alpha = self.random_gen.uniform([batch_size, 1,], 0, 1)
 
                 # Backward mixing coefficient
-                beta = uniform([batch_size, 1], 0, 1)
+                beta = self.random_gen.uniform([batch_size, 1], 0, 1)
 
                 @custom_gradient
                 def shake_shake(x1, x2):
@@ -43,8 +44,9 @@ class ShakeShake(Layer):
 
 
 class ShakeDrop(Layer):
-    def __init__(self, p_drop):
+    def __init__(self, seed, p_drop):
         super().__init__()
+        self.random_gen = tf.random.Generator.from_seed(seed)
         self.p_drop = p_drop  # Drop probability
 
     def call(self, inputs, training=False):
@@ -54,11 +56,11 @@ class ShakeDrop(Layer):
                 batch_size = shape(x)[0]
 
                 # Binary gate: 1 = keep branch, 0 = drop
-                gate = tf.cast(uniform([batch_size, 1], 0, 1) > self.p_drop, tf.float32)
+                gate = tf.cast(self.random_gen.uniform([batch_size, 1], 0, 1) > self.p_drop, tf.float32)
 
                 # Forward and backward mixing
-                alpha = uniform([batch_size, 1], 0, 1)
-                beta = uniform([batch_size, 1], 0, 1)
+                alpha = self.random_gen.uniform([batch_size, 1], 0, 1)
+                beta = self.random_gen.uniform([batch_size, 1], 0, 1)
 
                 @custom_gradient
                 def shake_drop(residual):
