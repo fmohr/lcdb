@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 import tensorflow as tf
 from keras.utils import Sequence
+
 from tensorflow.keras.initializers import get
 from keras.layers import Activation
 from ConfigSpace import Categorical, ConfigurationSpace, Float, Integer
@@ -382,6 +383,7 @@ class DenseNNWorkflow(PreprocessedWorkflow):
 
                 if self.batch_norm == "before_activation":
                     _out = Activation(self.activation)(_out)
+
             return keras.layers.Dropout(self.dropout_rate, seed=self.random_state.randint(0, 10**5))(_out)
 
         # Model layers

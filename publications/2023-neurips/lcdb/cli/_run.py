@@ -379,8 +379,8 @@ def run_experiment(
     import json
 
     from deephyper.evaluator import Evaluator, HPOJob
-    from deephyper.evaluator.callback import TqdmCallback
-    from deephyper.evaluator.storage import Callback, MemoryStorage
+    from deephyper.evaluator.callback import Callback, TqdmCallback
+    from deephyper.evaluator.storage import MemoryStorage
     from deephyper.hpo import CBO, HpProblem
     from deephyper.hpo._problem import convert_to_skopt_space
 
