@@ -31,7 +31,8 @@ CONFIG_SPACE = ConfigurationSpace(
     name="keras._dense",
     space={
         "num_layers": Integer("num_layers", bounds=(1, 20), default=9),
-        "num_units": Integer("num_units", bounds=(1, 4096), log=True, default=512),
+        "num_units_first": Integer("num_units_first", bounds=(1, 4096), log=True, default=512),
+        "num_units_last": Integer("num_units_last", bounds=(1, 4096), log=True, default=512),
         "activation": Categorical("activation", items=ACTIVATIONS, default="relu"),
         "dropout_rate": Float("dropout_rate", bounds=(0.0, 0.9), default=0.1),
         "skip_co": Categorical("skip_co", items=[True, False], default=True),
@@ -40,7 +41,7 @@ CONFIG_SPACE = ConfigurationSpace(
             "optimizer", items=list(OPTIMIZERS.keys()), default="SGD"
         ),
         "learning_rate": Float(
-            "learning_rate", bounds=(1e-5, 10.0), log=True, default=1e-4
+            "learning_rate", bounds=(1e-6, 10.0), log=True, default=1e-4
         ),
         "batch_size": Integer("batch_size", bounds=(1, 512), log=True, default=32),
         "shuffle_each_epoch": Categorical(
@@ -147,13 +148,13 @@ class IterationCurveCallback(keras.callbacks.Callback):
                 "learning_rate": round(float(convert_to_numpy(self.workflow.learner.optimizer._learning_rate)), 8)
             })
         self.train_timer_id = self.timer.start("epoch_train")
-        self.logger.info(f"Starting epoch {epoch}")
+        self.logger.info(f"Starting epoch {epoch + 1}")
 
     def on_epoch_end(self, epoch, logs=None):        
         super().on_epoch_end(epoch, logs)
         assert self.timer.active_node.id == self.epoch_timer_id
         self.timer.stop()
-        self.logger.info(f"Finished epoch {epoch}")
+        self.logger.info(f"Finished epoch {epoch + 1}")
 
     def on_test_begin(self, logs=None):
         assert self.timer.active_node.id == self.train_timer_id
@@ -231,7 +232,8 @@ class DenseNNWorkflow(PreprocessedWorkflow):
         self,
         timer=None,
         num_layers=5,
-        num_units=32,
+        num_units_first=512,
+        num_units_last=512,
         activation="relu",
         dropout_rate=0.1,
         skip_co=True,
@@ -285,7 +287,8 @@ class DenseNNWorkflow(PreprocessedWorkflow):
         self.requires_test_to_fit = True
 
         self.num_layers = num_layers
-        self.num_units = num_units
+        self.num_units_first = num_units_first
+        self.num_units_last = num_units_last
         self.activation = None if activation == "none" else activation
         self.dropout_rate = dropout_rate
         self.skip_co = skip_co
@@ -359,13 +362,13 @@ class DenseNNWorkflow(PreprocessedWorkflow):
                 kwargs_initializer["seed"] = self.random_state.randint(0, 10**5)
             return initializer.__class__(**kwargs_initializer)
 
-        def _build_block(_out):
+        def _build_block(_out, num_units):
 
             # Get initializer class
             seeded_initializer = _get_seeded_kernel_initializer()
 
             _out = keras.layers.Dense(
-                self.num_units,
+                num_units,
                 activation=self.activation if self.batch_norm in ["off", "after_activation"] else None,
                 kernel_initializer=seeded_initializer,
                 activity_regularizer=REGULARIZERS[self.activity_regularizer](
@@ -387,15 +390,17 @@ class DenseNNWorkflow(PreprocessedWorkflow):
             return keras.layers.Dropout(self.dropout_rate, seed=self.random_state.randint(0, 10**5))(_out)
 
         # Model layers
-        for layer_i in range(self.num_layers):
+        num_units_in_layers = [int(n) for n in np.linspace(self.num_units_first, self.num_units_last, self.num_layers)]
+        print(num_units_in_layers)
+        for layer_i, num_units in enumerate(num_units_in_layers):
             
             # create branch output (either standard, or shake-shaked)
             if not self.shake_shake:
-                out = _build_block(out)
+                out = _build_block(out, num_units)
             else:
                 from lcdb.workflow.keras._shake import ShakeShake
-                out_1 = _build_block(out)
-                out_2 = _build_block(out)
+                out_1 = _build_block(out, num_units)
+                out_2 = _build_block(out, num_units)
                 out = ShakeShake(seed=self.random_state.randint(0, 10**5))([out_1, out_2])
             
             # apply shake drop if enabled
@@ -408,12 +413,18 @@ class DenseNNWorkflow(PreprocessedWorkflow):
 
             # add skip connection if enabled
             if self.skip_co and prev is not None:
-                out = out + prev
+                if self.num_units_first == self.num_units_last:
+                    out = out + prev
+                else:
+                    out = out + keras.layers.Dense(
+                        num_units,
+                        kernel_initializer=_get_seeded_kernel_initializer()
+                    )(prev)
             prev = out
 
         # Model output
         layer_logits = keras.layers.Dense(
-            self.num_units,
+            self.num_units_last,
             kernel_initializer=_get_seeded_kernel_initializer(),
             activation=self.activation)(
             out
@@ -502,7 +513,8 @@ class DenseNNWorkflow(PreprocessedWorkflow):
                 optimizer=base_optimizer,
                 reset_weights=self.snapshot_ensemble_reset_weights,
                 period_init=self.snapshot_ensemble_period_init,
-                period_increase=self.snapshot_ensemble_period_increase
+                period_increase=self.snapshot_ensemble_period_increase,
+                logger=self.logger
             )
             callbacks.append(self.snapshot_callback)
 
@@ -548,6 +560,7 @@ class DenseNNWorkflow(PreprocessedWorkflow):
                         )
 
         # now fit model
+        self.logger.info(f"Compiled model is\n{self.learner.summary()}")
         self.learner.fit(
             train_generator,
             epochs=self.num_epochs,
@@ -579,6 +592,7 @@ class DenseNNWorkflow(PreprocessedWorkflow):
         # average probabilities
         y_pred_proba = np.array(y_pred_proba)
         assert not np.any(np.isnan(y_pred_proba)), f"There are NAN values in the NN prediction!\n{y_pred_proba}. Input was:\n{X}"
+        self.logger.debug(f"Creating prediction based on {len(y_pred_proba)} models with shape {y_pred_proba[0].shape} and variance in predictions as: {np.var(y_pred_proba, axis=0)}.")
         return y_pred_proba.mean(axis=0)
 
     def _predict_with_proba_after_transform(self, X, use_snapshot_ensemble=False):

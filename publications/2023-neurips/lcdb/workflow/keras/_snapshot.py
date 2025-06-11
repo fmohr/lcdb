@@ -17,7 +17,8 @@ class Snapshot(Callback):
             period_init=20,
             period_increase=0,
             reset_weights=False,
-            verbose=0
+            verbose=0,
+            logger=None
     ):
 
         super(Snapshot, self).__init__()
@@ -28,6 +29,7 @@ class Snapshot(Callback):
         self.period_increase = period_increase
         self.period = period_init
         self.reset_weights = reset_weights
+        self.logger = logger
 
         self.last_snapshot_after_epoch = -1
 
@@ -70,6 +72,10 @@ class Snapshot(Callback):
         model_copy = clone_model(self.model)
         model_copy.set_weights(self.model.get_weights())
         self.checkpoint_models.append(model_copy)
+        if self.logger is not None:
+            self.logger.info(
+                f"Adding copy of model to checkpoints after epoch {epoch + 1}. Now {len(self.checkpoint_models)} models are stored."
+            )
 
         # Resetting the weights if configured (the LR is implicitly reset at the beginning of the next epoch)
         if self.reset_weights:
