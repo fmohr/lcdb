@@ -45,7 +45,7 @@ CONFIG_SPACE = ConfigurationSpace(
     name="standard_preprocessing",
     space={
         KEY_CAT_ENCODER: Categorical(
-            KEY_CAT_ENCODER, ["onehot", "ordinal"], default="onehot"
+            KEY_CAT_ENCODER, ["none", "onehot", "ordinal"], default="none"
         ),
         KEY_SCALER: Categorical(KEY_SCALER, ["none", "minmax", "std"], default="none"),
         KEY_FEATUREGEN: Categorical(KEY_FEATUREGEN, ["none", "poly"], default="none"),
@@ -289,7 +289,7 @@ class PreprocessedWorkflow(BaseWorkflow, ABC):
 
         # step 2: encoding of categorical attributes
         if has_cat:
-            if KEY_CAT_ENCODER not in kwargs:
+            if KEY_CAT_ENCODER not in kwargs or kwargs[KEY_CAT_ENCODER] == "none":
                 raise ValueError(
                     f"{KEY_CAT_ENCODER} must be specified if the dataset has categorical attributes."
                 )
@@ -308,8 +308,8 @@ class PreprocessedWorkflow(BaseWorkflow, ABC):
                     f"Unknown {KEY_CAT_ENCODER} technique {kwargs['cat_encoder']}"
                 )
             cat_steps.append((KEY_CAT_ENCODER, cat_encoder))
-        elif KEY_CAT_ENCODER in kwargs:
-            msg = f"The value for {KEY_CAT_ENCODER} is set even though the data has no categorical attributes."\
+        elif KEY_CAT_ENCODER in kwargs and kwargs["cat_encoder"] != "none":
+            msg = f"The value for {KEY_CAT_ENCODER} is set (to {cat_encoder}) even though the data has no categorical attributes."\
                   " This may indicate an inefficiency, because different values may tried without having any effect."
             if self.raise_exception_on_unsuitable_preprocessor:
                 msg += "\nYou can avoid that this situation generates an exception"\
