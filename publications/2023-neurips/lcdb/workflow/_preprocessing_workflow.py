@@ -309,7 +309,7 @@ class PreprocessedWorkflow(BaseWorkflow, ABC):
                 )
             cat_steps.append((KEY_CAT_ENCODER, cat_encoder))
         elif KEY_CAT_ENCODER in kwargs and kwargs["cat_encoder"] != "none":
-            msg = f"The value for {KEY_CAT_ENCODER} is set (to {cat_encoder}) even though the data has no categorical attributes."\
+            msg = f"The value for {KEY_CAT_ENCODER} is set (to {kwargs['cat_encoder']}) even though the data has no categorical attributes."\
                   " This may indicate an inefficiency, because different values may tried without having any effect."
             if self.raise_exception_on_unsuitable_preprocessor:
                 msg += "\nYou can avoid that this situation generates an exception"\

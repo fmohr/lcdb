@@ -446,7 +446,8 @@ class TestBuildFunctionalities(unittest.TestCase):
         if issubclass(workflow_class, DenseNNWorkflow):
             params["epoch_schedule"] = "linear"
             params["num_layers"] = 2
-            params["num_units"] = 5
+            params["num_units_first"] = 5
+            params["num_units_last"] = 5
             params["num_epochs"] = 5
 
         logger.info(f"Starting reproducibility test of workflow {workflow} on dataset {openmlid}")
