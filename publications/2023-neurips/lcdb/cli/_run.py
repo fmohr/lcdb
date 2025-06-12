@@ -548,6 +548,8 @@ def run_experiment(
             )
 
             # Execute the search
+            if timeout == -1: 
+                timeout = None
             results = search.search(max_evals, timeout=timeout, max_evals_strict=True)
             filename = get_path_to_status_file(workflow=workflow_class, campaign=campaign, openmlid=openml_id, workflowseed=workflow_seed, testseed=test_seed, valseed=valid_seed, status=EXPERIMENT_STATUS_COMPLETED)
             logger.info(f"Creating COMPLETED status file {filename} for {workflow_class}-{campaign}-{openml_id}-{workflow_seed}-{test_seed}-{valid_seed}.")
