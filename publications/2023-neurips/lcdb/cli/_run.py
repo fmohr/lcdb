@@ -612,7 +612,10 @@ def run_experiment(
             if num_previous_results > 0:
                 max_evals -= num_previous_results
                 assert max_evals > 0
-            logger.info(f"Starting search with {max_evals} evaluations.")
+            if timeout == -1: 
+                logger.info("Disabling timeout")
+                timeout = None
+            logger.info(f"Starting search with {max_evals} evaluations and timeout {timeout}.")
             df_results_new = search.search(max_evals, timeout=timeout, max_evals_strict=True)
             if num_previous_results > 0:
                 df_results = pd.concat([pd.DataFrame(list_of_previous_results), df_results_new])
