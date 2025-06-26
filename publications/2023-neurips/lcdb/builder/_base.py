@@ -4,14 +4,14 @@ import logging
 import json
 
 from lcdb.data import load_task
-from lcdb.builder.utils import import_attr_from_module
 
 import traceback
 import warnings
 
 from tqdm import tqdm
 
-from ..data.split import train_valid_test_split
+from lcdb.data.split import train_valid_test_split
+from lcdb.workflow._util import get_workflow_class
 from .timer import Timer
 from .utils import (
     FunctionCallTimeoutError,
@@ -95,7 +95,7 @@ def run_learning_workflow(
 
     # Create and fit the workflow
     logger.info("Getting workflow class...")
-    WorkflowClass = import_attr_from_module(workflow_class) if isinstance(workflow_class, str) else workflow_class
+    WorkflowClass = get_workflow_class(workflow_class) if isinstance(workflow_class, str) else workflow_class
     logger.info(f"Preparing workflow kwargs ...")
     if workflow_parameters is not None and not isinstance(workflow_parameters, dict):
         raise ValueError(f"workflow_parameters must be None or a dict but is {type(workflow_parameters)}")

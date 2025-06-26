@@ -427,7 +427,8 @@ def run_experiment(
             except Exception as e:
                 logger.exception(e)
 
-    from lcdb.builder.utils import import_attr_from_module, StatusFileManager
+    from lcdb.builder.utils import StatusFileManager
+    from lcdb.workflow._util import get_config_space_of_workflow
 
     if evaluator in ["serial", "thread", "process", "ray"]:
         # Master-Worker Parallelism: only 1 process will run this code
@@ -485,8 +486,7 @@ def run_experiment(
         raise ValueError(f"Unknown evaluator: {evaluator}")
 
     # Load the workflow to get its config space
-    WorkflowClass = import_attr_from_module(workflow_class)
-    config_space = WorkflowClass.config_space()
+    config_space = get_config_space_of_workflow(workflow_class)
     config_default = dict(config_space.get_default_configuration())
     
     # Set the search space

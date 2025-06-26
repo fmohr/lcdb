@@ -3,7 +3,7 @@ import os
 import pathlib
 
 import pandas as pd
-from ..builder.utils import import_attr_from_module
+from lcdb.workflow._util import get_config_space_of_workflow
 
 
 def add_subparser(subparsers):
@@ -56,8 +56,7 @@ def main(
     pathlib.Path(log_dir).mkdir(parents=True, exist_ok=True)
 
     # Load the workflow to get its config space
-    WorkflowClass = import_attr_from_module(workflow_class)
-    config_space = WorkflowClass.config_space()
+    config_space = get_config_space_of_workflow(workflow_class)
 
     if verbose:
         print(config_space)
