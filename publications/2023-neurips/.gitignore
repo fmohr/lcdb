@@ -4,7 +4,6 @@ __pycache__
 *.json
 *.tar
 *.gz
-*.csv
 *.png
 *.yaml
 *.zip
@@ -12,3 +11,5 @@ __pycache__
 # Output I/O files from PBS scheduler
 *.sh.e*
 *.sh.o*
+
+test/test_status_dir

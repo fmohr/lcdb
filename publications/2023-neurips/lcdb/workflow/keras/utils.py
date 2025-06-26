@@ -48,6 +48,16 @@ ACTIVATIONS = [
     "elu"
 ]
 
+LRSCHEDULERS = {
+    "none": None,
+    "ReduceLROnPlateau": keras.callbacks.ReduceLROnPlateau,
+    "ExponentialDecay": keras.optimizers.schedules.ExponentialDecay,
+    "PolynomialDecay": keras.optimizers.schedules.PolynomialDecay,
+    "InverseTimeDecay": keras.optimizers.schedules.InverseTimeDecay,
+    "CosineDecay": keras.optimizers.schedules.CosineDecay,
+    "CosineDecayRestarts": keras.optimizers.schedules.CosineDecayRestarts
+}
+
 REGULARIZERS = {
     "none": lambda x: None,
     "L1": lambda x: keras.regularizers.L1(l1=x),

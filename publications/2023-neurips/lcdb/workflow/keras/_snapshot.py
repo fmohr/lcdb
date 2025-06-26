@@ -81,12 +81,12 @@ class Snapshot(Callback):
         if self.reset_weights:
             self._reset_weights()
 
-    def on_epoch_begin(self, epoch, logs=None):
+    #def on_epoch_begin(self, epoch, logs=None):
 
         # adjust learning rate through cyclic cosine annealing
-        lr = math.pi * (epoch - 1 - self.last_snapshot_after_epoch) / self.period
-        lr = self.base_lr / 2 * (math.cos(lr) + 1)
-        self._set_lr(lr)
+        #lr = math.pi * (epoch - 1 - self.last_snapshot_after_epoch) / self.period
+        #lr = self.base_lr / 2 * (math.cos(lr) + 1)
+        #self._set_lr(lr)
 
     def on_test_begin(self, logs=None):
         self.workflow.use_snapshot_models_for_prediction = True

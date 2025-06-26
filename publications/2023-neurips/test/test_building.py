@@ -224,8 +224,9 @@ class TestBuildFunctionalities(unittest.TestCase):
             "pp@featuregen": "poly",
             "pp@featureselector": "selectp",
             "pp@scaler": "minmax",
-            "pp@kernel_pca_kernel": "linear",
-            "pp@kernel_pca_n_components": 0.25,
+            "pp@kernel_mapper_kernel": "linear",
+            "pp@projection_features": 0.25,
+            "pp@feature_map_size": 100,
             "pp@poly_degree": 2,
             "pp@selectp_percentile": int(100 * portion_retained_in_feature_selection),
             "pp@std_with_std": True

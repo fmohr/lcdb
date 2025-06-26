@@ -6,7 +6,7 @@ from keras.utils import Sequence
 
 from tensorflow.keras.initializers import get
 from keras.layers import Activation
-from ConfigSpace import Categorical, ConfigurationSpace, Float, Integer
+from ConfigSpace import Categorical, ConfigurationSpace, Float, Integer, EqualsCondition, InCondition
 from lcdb.builder.scorer import ClassificationScorer
 from lcdb.builder.timer import Timer
 from lcdb.builder.utils import get_schedule, filter_keys_with_prefix
@@ -16,6 +16,7 @@ from .utils import (
     ACTIVATIONS,
     INITIALIZERS,
     OPTIMIZERS,
+    LRSCHEDULERS,
     REGULARIZERS,
     count_params,
 )
@@ -23,9 +24,9 @@ from .utils import (
 from keras.src.backend import convert_to_numpy
 
 # regularization techniques
-from ._lookahead import Lookahead
-from ._swa import SWA
-from ._snapshot import Snapshot
+from lcdb.workflow.keras._lookahead import Lookahead
+from lcdb.workflow.keras._weight_averaging import WA
+from lcdb.workflow.keras._snapshot import Snapshot
 
 CONFIG_SPACE = ConfigurationSpace(
     name="keras._dense",
@@ -37,12 +38,18 @@ CONFIG_SPACE = ConfigurationSpace(
         "dropout_rate": Float("dropout_rate", bounds=(0.0, 0.9), default=0.1),
         "skip_co": Categorical("skip_co", items=[True, False], default=True),
         "batch_norm": Categorical("batch_norm", items=["off", "before_activation", "after_activation"], default="off"),
-        "optimizer": Categorical(
-            "optimizer", items=list(OPTIMIZERS.keys()), default="SGD"
-        ),
-        "learning_rate": Float(
-            "learning_rate", bounds=(1e-6, 10.0), log=True, default=1e-4
-        ),
+        "optimizer": Categorical("optimizer", items=list(OPTIMIZERS.keys()), default="SGD"),
+        "learning_rate": Float("learning_rate", bounds=(1e-6, 10.0), log=True, default=1e-4),
+        "anti_momentum_rate": Float("anti_momentum_rate", bounds=(1e-4, 0.2), log=True, default=1e-2),
+        "anti_grad_var_rate": Float("anti_grad_var_rate", bounds=(1e-5, 0.2), log=True, default=1e-4),
+        "learning_rate_scheduler": Categorical("learning_rate_scheduler", items=list(LRSCHEDULERS.keys())),
+        "learning_rate_scheduler_decay_steps": Integer("learning_rate_scheduler_decay_steps", bounds=(1, 10**6), default=10**3, log=True),
+        "learning_rate_scheduler_decay_rate": Float("learning_rate_scheduler_decay_rate", bounds=(0.8, 0.99), default=0.9),
+        "learning_rate_scheduler_polynomial_end_learning_rate": Float("learning_rate_scheduler_polynomial_end_learning_rate", bounds=(1e-6, 1e-3), default=1e-5, log=True),
+        "learning_rate_scheduler_polynomial_power": Float("learning_rate_scheduler_polynomial_power", bounds=(0.3, 3), default=1),
+        "learning_rate_scheduler_cosine_alpha": Float("learning_rate_scheduler_cosine_alpha", bounds=(0, 1), default=0.0),
+        "learning_rate_scheduler_cosine_restarts_tmul": Float("learning_rate_scheduler_cosine_restarts_tmul", bounds=(0.1, 3), default=2.0),
+        "learning_rate_scheduler_cosine_restarts_mmul": Float("learning_rate_scheduler_cosine_restarts_mmul", bounds=(0.5, 2), default=1.0),
         "batch_size": Integer("batch_size", bounds=(1, 512), log=True, default=32),
         "shuffle_each_epoch": Categorical(
             "shuffle_each_epoch", items=[True, False], default=True
@@ -62,8 +69,11 @@ CONFIG_SPACE = ConfigurationSpace(
         "kernel_initializer": Categorical(
             "kernel_initializer", INITIALIZERS, default="glorot_uniform"
         ),
-        "stochastic_weight_averaging": Categorical(
-            "stochastic_weight_averaging", items=[True, False], default=False
+        "weight_averaging": Categorical(
+            "weight_averaging", items=[True, False], default=False
+        ),
+        "weight_averaging_cycle_length": Integer(
+            "weight_averaging_cycle_length", bounds=(1, 100), default=5
         ),
         "lookahead": Categorical(
             "lookahead", items=[True, False], default=False
@@ -99,12 +109,41 @@ CONFIG_SPACE = ConfigurationSpace(
         "data_augmentation": Categorical(
             "data_augmentation", items=["none", "cutout", "mixup", "cutmix"], default="none"
         ),
-        # TODO: The following data augmentation parameters should be made conditional and only appear if snapshot_ensembles=True
         "data_augmentation_cutout_patch_ratio": Float(
             "data_augmentation_cutout_patch_ratio", bounds=(0.0, 1.0), default=0.1
         ),
     },
 )
+
+CONFIG_SPACE.add([
+        
+    # enable shake drop only if there are skip connections
+    EqualsCondition(CONFIG_SPACE["shake_drop"], CONFIG_SPACE["skip_co"], True),
+    EqualsCondition(CONFIG_SPACE["shake_drop_drop_proba"], CONFIG_SPACE["shake_drop"], True),
+
+    # optimizers
+    InCondition(CONFIG_SPACE["anti_momentum_rate"], CONFIG_SPACE["optimizer"], ["SGD", "Adam", "AdamW", "Adamax", "Nadam", "RMSprop"]),
+    InCondition(CONFIG_SPACE["anti_grad_var_rate"], CONFIG_SPACE["optimizer"], ["Adam", "AdamW", "Adamax", "Nadam", "RMSprop", "Adadelta"]),
+
+    # learning rate schedulers
+    InCondition(CONFIG_SPACE["learning_rate_scheduler_decay_steps"], CONFIG_SPACE["learning_rate_scheduler"], ["ReduceLROnPlateau", "ExponentialDecay", "PolynomialDecay", "InverseTimeDecay", "CosineDecay", "CosineDecayRestarts"]),
+    InCondition(CONFIG_SPACE["learning_rate_scheduler_decay_rate"], CONFIG_SPACE["learning_rate_scheduler"], ["ReduceLROnPlateau", "ExponentialDecay", "InverseTimeDecay"]),
+    InCondition(CONFIG_SPACE["learning_rate_scheduler_polynomial_end_learning_rate"], CONFIG_SPACE["learning_rate_scheduler"], ["PolynomialDecay"]),
+    InCondition(CONFIG_SPACE["learning_rate_scheduler_cosine_alpha"], CONFIG_SPACE["learning_rate_scheduler"], ["CosineDecay", "CosineDecayRestarts"]),
+    InCondition(CONFIG_SPACE["learning_rate_scheduler_cosine_restarts_tmul"], CONFIG_SPACE["learning_rate_scheduler"], ["CosineDecayRestarts"]),
+    InCondition(CONFIG_SPACE["learning_rate_scheduler_cosine_restarts_mmul"], CONFIG_SPACE["learning_rate_scheduler"], ["CosineDecayRestarts"]),
+
+    # cycle length for weight averaging only if weight averaging is active
+    EqualsCondition(CONFIG_SPACE["weight_averaging_cycle_length"], CONFIG_SPACE["weight_averaging"], True),
+
+    # configure snapshot ensemble increase only if the flag is on
+    EqualsCondition(CONFIG_SPACE["snapshot_ensemble_period_init"], CONFIG_SPACE["snapshot_ensemble"], True),
+    EqualsCondition(CONFIG_SPACE["snapshot_ensemble_period_increase"], CONFIG_SPACE["snapshot_ensemble"], True),
+    EqualsCondition(CONFIG_SPACE["snapshot_ensemble_reset_weights"], CONFIG_SPACE["snapshot_ensemble"], True),
+
+    # configure data augmentation patch ratio only if that augmentation is active
+    EqualsCondition(CONFIG_SPACE["data_augmentation_cutout_patch_ratio"], CONFIG_SPACE["data_augmentation"], "cutout")
+])
 
 
 class IterationCurveCallback(keras.callbacks.Callback):
@@ -130,6 +169,8 @@ class IterationCurveCallback(keras.callbacks.Callback):
         self.schedule = get_schedule(
             name=epoch_schedule, max_anchor=self.workflow.num_epochs, base=2, power=0.5, delay=0
         )
+        if len(self.schedule) == 0:
+            raise ValueError(f"Generated an empty schedule.")
         self.logger.info(f"Epoch schedule set to {self.schedule}")
         self.schedule = self.schedule[::-1]
 
@@ -141,14 +182,15 @@ class IterationCurveCallback(keras.callbacks.Callback):
     def on_epoch_begin(self, epoch, logs=None):
         super().on_epoch_begin(epoch, logs=logs)
         self.epoch = epoch
+        cur_learning_rate = round(float(convert_to_numpy(self.workflow.learner.optimizer.learning_rate)), 8)
         self.epoch_timer_id = self.timer.start(
             "epoch",
             metadata={
                 "epoch_cnt": self.epoch + 1,
-                "learning_rate": round(float(convert_to_numpy(self.workflow.learner.optimizer._learning_rate)), 8)
+                "learning_rate": cur_learning_rate
             })
         self.train_timer_id = self.timer.start("epoch_train")
-        self.logger.info(f"Starting epoch {epoch + 1}")
+        self.logger.info(f"Starting epoch {epoch + 1}. Current learning rate is {cur_learning_rate}")
 
     def on_epoch_end(self, epoch, logs=None):        
         super().on_epoch_end(epoch, logs)
@@ -161,6 +203,8 @@ class IterationCurveCallback(keras.callbacks.Callback):
         self.timer.stop()
 
         # Manage the schedule
+        if not self.schedule:
+            return
         epoch_schedule = self.schedule[-1]
         is_epoch_to_test = (self.epoch + 1) == epoch_schedule
         is_training_continued = not (self.model.stop_training)
@@ -240,6 +284,16 @@ class DenseNNWorkflow(PreprocessedWorkflow):
         batch_norm="off",
         optimizer="Adam",
         learning_rate=0.001,
+        anti_momentum_rate=0.1,
+        anti_grad_var_rate=0.001,
+        learning_rate_scheduler="none",
+        learning_rate_scheduler_decay_steps=10**3,
+        learning_rate_scheduler_decay_rate=0.9,
+        learning_rate_scheduler_polynomial_end_learning_rate=1e-5,
+        learning_rate_scheduler_polynomial_power=1,
+        learning_rate_scheduler_cosine_alpha=0.0,
+        learning_rate_scheduler_cosine_restarts_tmul=2.0,
+        learning_rate_scheduler_cosine_restarts_mmul=1.0,
         batch_size=32,
         num_epochs=2048,
         num_epochs_patience=20,
@@ -248,7 +302,8 @@ class DenseNNWorkflow(PreprocessedWorkflow):
         activity_regularizer="none",
         regularizer_factor=0.01,
         kernel_initializer="glorot_uniform",
-        stochastic_weight_averaging=False,
+        weight_averaging=False,
+        weight_averaging_cycle_length=5,
         lookahead=False,
         lookahead_learning_rate: float = 0.5,
         lookahead_num_steps: int = 5,
@@ -295,6 +350,16 @@ class DenseNNWorkflow(PreprocessedWorkflow):
         self.batch_norm = batch_norm
         self.optimizer = optimizer
         self.learning_rate = learning_rate
+        self.anti_momentum_rate = anti_momentum_rate
+        self.anti_grad_var_rate = anti_grad_var_rate
+        self.learning_rate_scheduler = learning_rate_scheduler
+        self.learning_rate_scheduler_decay_steps = learning_rate_scheduler_decay_steps
+        self.learning_rate_scheduler_decay_rate = learning_rate_scheduler_decay_rate
+        self.learning_rate_scheduler_polynomial_end_learning_rate = learning_rate_scheduler_polynomial_end_learning_rate
+        self.learning_rate_scheduler_polynomial_power = learning_rate_scheduler_polynomial_power
+        self.learning_rate_scheduler_cosine_alpha = learning_rate_scheduler_cosine_alpha
+        self.learning_rate_scheduler_cosine_restarts_tmul = learning_rate_scheduler_cosine_restarts_tmul
+        self.learning_rate_scheduler_cosine_restarts_mmul = learning_rate_scheduler_cosine_restarts_mmul
         self.batch_size = batch_size
         self.num_epochs = num_epochs
         self.num_epochs_patience = num_epochs_patience
@@ -304,7 +369,8 @@ class DenseNNWorkflow(PreprocessedWorkflow):
         self.activity_regularizer = activity_regularizer
         self.regularizer_factor = regularizer_factor
         self.kernel_initializer = kernel_initializer
-        self.stochastic_weight_averaging = stochastic_weight_averaging
+        self.weight_averaging = weight_averaging
+        self.weight_averaging_cycle_length = weight_averaging_cycle_length
         self.lookahead = lookahead
         self.lookahead_learning_rate = lookahead_learning_rate
         self.lookahead_num_steps = lookahead_num_steps
@@ -391,7 +457,6 @@ class DenseNNWorkflow(PreprocessedWorkflow):
 
         # Model layers
         num_units_in_layers = [int(n) for n in np.linspace(self.num_units_first, self.num_units_last, self.num_layers)]
-        print(num_units_in_layers)
         for layer_i, num_units in enumerate(num_units_in_layers):
             
             # create branch output (either standard, or shake-shaked)
@@ -473,8 +538,59 @@ class DenseNNWorkflow(PreprocessedWorkflow):
             ]
             self.timer.root["num_parameters_train"] = params["num_parameters_train"]
 
-        optimizer = OPTIMIZERS[self.optimizer]()
-        optimizer.learning_rate = self.learning_rate
+        # configure learning rate schedule
+        if self.learning_rate_scheduler == "none":
+            learning_rate_scheduler = self.learning_rate
+        else:
+            lrskwargs = {}
+            if self.learning_rate_scheduler == "ReduceLROnPlateau":
+                lrskwargs["factor"] = self.learning_rate_scheduler_decay_rate
+                lrskwargs["patience"] = int(self.learning_rate_scheduler_decay_steps)
+            elif self.learning_rate_scheduler == "ExponentialDecay":
+                lrskwargs["initial_learning_rate"] = self.learning_rate
+                lrskwargs["decay_rate"] = self.learning_rate_scheduler_decay_rate
+                lrskwargs["decay_steps"] = int(self.learning_rate_scheduler_decay_steps)
+            elif self.learning_rate_scheduler == "PolynomialDecay":
+                lrskwargs["initial_learning_rate"] = self.learning_rate
+                lrskwargs["end_learning_rate"] = self.learning_rate_scheduler_polynomial_end_learning_rate
+                lrskwargs["power"] = self.learning_rate_scheduler_polynomial_power
+                lrskwargs["decay_steps"] = int(self.learning_rate_scheduler_decay_steps)
+            elif self.learning_rate_scheduler == "InverseTimeDecay":
+                lrskwargs["initial_learning_rate"] = self.learning_rate
+                lrskwargs["decay_rate"] = self.learning_rate_scheduler_decay_rate
+                lrskwargs["decay_steps"] = int(self.learning_rate_scheduler_decay_steps)
+            elif self.learning_rate_scheduler == "CosineDecay":
+                lrskwargs["initial_learning_rate"] = self.learning_rate
+                lrskwargs["decay_steps"] = int(self.learning_rate_scheduler_decay_steps)
+                lrskwargs["alpha"] = self.learning_rate_scheduler_cosine_alpha
+            elif self.learning_rate_scheduler == "CosineDecayRestarts":
+                lrskwargs["initial_learning_rate"] = self.learning_rate
+                lrskwargs["first_decay_steps"] = int(self.learning_rate_scheduler_decay_steps)
+                lrskwargs["alpha"] = self.learning_rate_scheduler_cosine_alpha
+                lrskwargs["t_mul"] = self.learning_rate_scheduler_cosine_restarts_tmul
+                lrskwargs["m_mul"] = self.learning_rate_scheduler_cosine_restarts_mmul
+            else:
+                raise ValueError(f"Untreated learning rate scheduler: {self.learning_rate_scheduler}")
+
+            learning_rate_scheduler = LRSCHEDULERS[self.learning_rate_scheduler](**lrskwargs)
+            self.logger.info(f"Learning Rate Scheduler {learning_rate_scheduler.__class__.__name__} was initialized with {lrskwargs}")
+
+        # configure optimizer
+        optim_kwargs = {
+            "learning_rate": learning_rate_scheduler if self.learning_rate_scheduler != "ReduceLROnPlateau" else self.learning_rate
+        }
+        if self.optimizer.lower() in ["adam", "adamw", "adamax", "nadam"]:
+            optim_kwargs["beta_1"] = 1 - self.anti_momentum_rate
+            optim_kwargs["beta_2"] = 1 - self.anti_grad_var_rate
+        elif self.optimizer.lower() == "adadelta":
+            optim_kwargs["rho"] = 1 - self.anti_grad_var_rate
+        elif self.optimizer.lower() == "sgd":
+            optim_kwargs["momentum"] = 1 - self.anti_momentum_rate
+        elif self.optimizer.lower() == "rmsprop":
+            optim_kwargs["momentum"] = 1 - self.anti_momentum_rate
+            optim_kwargs["rho"] = 1 - self.anti_grad_var_rate
+        optimizer = OPTIMIZERS[self.optimizer](**optim_kwargs)
+        self.logger.info(f"Optimizer is {optimizer.__class__.__name__} initialized with {optim_kwargs}")
 
         iteration_curve_callback = IterationCurveCallback(
             workflow=self,
@@ -488,13 +604,20 @@ class DenseNNWorkflow(PreprocessedWorkflow):
             logger=self.logger,
             epoch_schedule=self.epoch_schedule,
         )
+        if self.num_epochs not in iteration_curve_callback.schedule:
+            self.logger.warning(
+                f"Last epoch {self.num_epochs} should be in the schedule covered by the IterationCurveCallback but is not. "
+                f"Schedule is {iteration_curve_callback.schedule}"
+            )
 
         # define callbacks
         callbacks = [
             keras.callbacks.TerminateOnNaN(),
-            keras.callbacks.ReduceLROnPlateau(),
             keras.callbacks.EarlyStopping(patience=self.num_epochs_patience),
         ]
+        if self.learning_rate_scheduler == "ReduceLROnPlateau":
+            self.logger.info(f"Adding {learning_rate_scheduler} as callback")
+            callbacks.append(learning_rate_scheduler)
 
         base_optimizer = optimizer
         if self.lookahead:
@@ -504,8 +627,13 @@ class DenseNNWorkflow(PreprocessedWorkflow):
                 la_steps=self.lookahead_num_steps
             )
 
-        if self.stochastic_weight_averaging:
-            callbacks.append(SWA(start_epoch=2, batch_size=self.batch_size))
+        # set up weight average callback
+        if self.weight_averaging:
+            callbacks.append(WA(
+                start_epoch=2,
+                cycle_length=self.weight_averaging_cycle_length,
+                logger=self.logger)
+            )
 
         if self.snapshot_ensemble:
             self.snapshot_callback = Snapshot(
@@ -570,6 +698,17 @@ class DenseNNWorkflow(PreprocessedWorkflow):
             verbose=0,
         )
 
+        # if both weight averaging and batch normalization are active, do a full forward pass over all instances to adjust the batch normalization layers
+        if self.weight_averaging and self.batch_norm:
+            self.logger.info(f"Doing additional forward pass over all batches to adjust batch norm layers for weight reset performed by WA.")
+            num_batches = 0
+            for batch_idx in range(len(train_generator)):
+                x_batch, _ = train_generator[batch_idx]
+                self.learner(x_batch, training=True)
+                num_batches += 1
+                self.logger.debug(f"Finished {num_batches}-th forward pass with batch of shape {x_batch.shape} for batch norm layer adjustment performed by WA.")
+            self.logger.info(f"Finished {num_batches} forward passes for batch norm layer adjustment performed by WA.")
+
     def _predict_after_transform(self, X):
         return self._predict_with_proba_after_transform(X)[0]
 
@@ -591,8 +730,11 @@ class DenseNNWorkflow(PreprocessedWorkflow):
 
         # average probabilities
         y_pred_proba = np.array(y_pred_proba)
-        assert not np.any(np.isnan(y_pred_proba)), f"There are NAN values in the NN prediction!\n{y_pred_proba}. Input was:\n{X}"
-        self.logger.debug(f"Creating prediction based on {len(y_pred_proba)} models with shape {y_pred_proba[0].shape} and variance in predictions as: {np.var(y_pred_proba, axis=0)}.")
+        if np.any(np.isnan(y_pred_proba)):
+            raise RuntimeError(f"There are NAN values in the NN prediction!\n{y_pred_proba}. Input was:\n{X}")
+        self.logger.debug(f"Creating prediction based on {len(y_pred_proba)} models with shape {y_pred_proba[0].shape}.")
+        if self.snapshot_ensemble and len(self.snapshot_callback.checkpoint_models) > 1 and np.sum(np.var(y_pred_proba, axis=0)) == 0:
+            self.logger.warning(f"snapshot ensemble is configured but there is no variance in the outputs. There should be some variance unless all predictions are identical!")
         return y_pred_proba.mean(axis=0)
 
     def _predict_with_proba_after_transform(self, X, use_snapshot_ensemble=False):

@@ -14,6 +14,7 @@ from ConfigSpace import (
     Integer,
     EqualsCondition,
     InCondition,
+    OrConjunction
 )
 from sklearn.cluster import FeatureAgglomeration
 from sklearn.compose import ColumnTransformer
@@ -45,15 +46,17 @@ CONFIG_SPACE = ConfigurationSpace(
     name="standard_preprocessing",
     space={
         KEY_CAT_ENCODER: Categorical(
-            KEY_CAT_ENCODER, ["none", "onehot", "ordinal"], default="none"
+            KEY_CAT_ENCODER, ["none", "onehot", "ordinal"], default="ordinal" # ordinal is not semantically correct in nominal features but standard in deep learning and much faster than one-hot. Trees are agnostic
         ),
         KEY_SCALER: Categorical(KEY_SCALER, ["none", "minmax", "std"], default="none"),
         KEY_FEATUREGEN: Categorical(KEY_FEATUREGEN, ["none", "poly"], default="none"),
+        "poly_degree": Constant("poly_degree", 2),#Integer("poly_degree", bounds=(2, 2), default=2),
         KEY_FEATUREMAPPER: Categorical(
             KEY_FEATUREMAPPER,
             [
                 "none",
-                "kernel_pca",  # we just keep this one as it includes "linear pca"
+                "pca",
+                "kernel_pca",
                 "lda",
                 "fastica",
                 "ka_rbf",
@@ -62,37 +65,85 @@ CONFIG_SPACE = ConfigurationSpace(
             ],
             default="none",
         ),
+        # defines how many features we want to have after the projection; relative number with semantic that depends on the projection technique (ratio of current features except for LDA where it is the ration of the possible features given the number of classes)
+        "projection_features": Float(
+            "projection_features", bounds=(0.01, 1.0), default=0.1 # by default reduce to 10% of the features
+        ),
+
+        # how many features to generate with the sample (RBFSampler or Nystroem Sampler)
+        "feature_map_size": Integer(
+            "feature_map_size", bounds=(1, 1000), default=1.0
+        ),
+        "kernel_mapper_kernel": Categorical(name="kernel_mapper_kernel", items=["cosine", "rbf", "poly", "sigmoid"]),
+        "kernel_mapper_degree": Integer("kernel_mapper_degree", bounds=(2, 5), default=2),
+        "kernel_mapper_coef0": Float("kernel_mapper_coef0", bounds=(0, 10**2), default=0, log=False),
+        "kernel_mapper_gamma": Float("kernel_mapper_gamma", bounds=(10**-6, 10**6), default=1, log=True),
         KEY_FEATURESELECTOR: Categorical(
             KEY_FEATURESELECTOR,
             ["none", "selectp"],
             default="none",
         ),
-        # parameters of possible elements of the preprocessing pipeline
-        "kernel_pca_kernel": Categorical(
-            "kernel_pca_kernel", items=["linear", "rbf"], default="linear"
-        ),
-        "kernel_pca_n_components": Float(
-            "kernel_pca_n_components", bounds=(0.01, 1.0), default=1.0
-        ),
         "selectp_percentile": Integer(
             "selectp_percentile", bounds=(1, 100), default=100
         ),
-        "poly_degree": Constant("poly_degree", 2),#Integer("poly_degree", bounds=(2, 2), default=2),
-        "std_with_std": Categorical("std_with_std", [True, False], default=True),
+        "std_with_std": Categorical("std_with_std", [True, False], default=True)
     },
 )
 
 CONFIG_SPACE.add(
     [
-        EqualsCondition(
-            CONFIG_SPACE["kernel_pca_kernel"],
+        
+        # only enable projection features if there is a feature projection method chosen
+        InCondition(
+            CONFIG_SPACE["projection_features"],
             CONFIG_SPACE[KEY_FEATUREMAPPER],
-            "kernel_pca",
+            ["kernel_pca", "lda", "fastica", "agglomerator"],
         ),
-        EqualsCondition(
-            CONFIG_SPACE["kernel_pca_n_components"],
+        
+        # enable polynomial features only if there is no kernel feature mapper
+        InCondition(
+            CONFIG_SPACE[KEY_FEATUREGEN],
             CONFIG_SPACE[KEY_FEATUREMAPPER],
-            "kernel_pca",
+            ["none", "lda", "fastica", "agglomerator"],
+        ),
+
+        # only select kernel if we have a kernel method
+        InCondition(
+            CONFIG_SPACE["kernel_mapper_kernel"],
+            CONFIG_SPACE[KEY_FEATUREMAPPER],
+            ["kernel_pca", "ka_nystroem"]
+        ),
+
+        # only select degree and coef0 if we have a polynomial kernel
+        InCondition(
+            CONFIG_SPACE["kernel_mapper_degree"],
+            CONFIG_SPACE["kernel_mapper_kernel"],
+            ["poly", "sigmoid"]
+        ),
+        InCondition(
+            CONFIG_SPACE["kernel_mapper_coef0"],
+            CONFIG_SPACE["kernel_mapper_kernel"],
+            ["poly","sigmoid"]
+        ),
+
+        # Gamma is set if we have a kernel based method (RBFSampler does not receive a kernel so requires its own enabling to make sure that we get values for this)
+        OrConjunction(
+            InCondition(
+                CONFIG_SPACE["kernel_mapper_gamma"],
+                CONFIG_SPACE["kernel_mapper_kernel"],
+                ["poly","sigmoid", "rbf"]
+            ),
+            EqualsCondition(
+                CONFIG_SPACE["kernel_mapper_gamma"],
+                CONFIG_SPACE[KEY_FEATUREMAPPER],
+                ["ka_rbf"]
+            )
+        ),
+
+        InCondition(
+            CONFIG_SPACE["feature_map_size"],
+            CONFIG_SPACE[KEY_FEATUREMAPPER],
+            ["ka_rbf", "ka_nystroem"],
         ),
         EqualsCondition(
             CONFIG_SPACE["selectp_percentile"],
@@ -116,8 +167,12 @@ class PreprocessedWorkflow(BaseWorkflow, ABC):
         logger=None,
         random_state=None,
         memory_limit_in_bytes=None,
-        kernel_pca_kernel="linear",
-        kernel_pca_n_components=1.0,
+        kernel_mapper_kernel="rbf",
+        kernel_mapper_degree=2,
+        kernel_mapper_coef0=0,
+        kernel_mapper_gamma=1.0,
+        projection_features=1.0,
+        feature_map_size=1000,
         selectp_percentile=100,
         poly_degree=2,
         std_with_std=True,
@@ -130,10 +185,14 @@ class PreprocessedWorkflow(BaseWorkflow, ABC):
         self.pp_kws = kwargs
         self.pp_pipeline = None
 
-        self.kernel_pca_kernel = kernel_pca_kernel
-        self.kernel_pca_n_components = kernel_pca_n_components
+        self.kernel_mapper_kernel = kernel_mapper_kernel
+        self.kernel_mapper_poly_degree = 3 if np.isnan(kernel_mapper_degree) else int(kernel_mapper_degree)
+        self.kernel_mapper_coef0 = 1.0 if np.isnan(kernel_mapper_coef0) else kernel_mapper_coef0
+        self.kernel_mapper_gamma = None if np.isnan(kernel_mapper_gamma) else kernel_mapper_gamma
+        self.projection_features = projection_features
+        self.feature_map_size = None if np.isnan(feature_map_size) else int(feature_map_size)
         self.selectp_percentile = selectp_percentile
-        self.poly_degree = poly_degree
+        self.poly_degree = None if np.isnan(poly_degree) else int(poly_degree)
         self.std_with_std = std_with_std
         self.raise_exception_on_unsuitable_preprocessor = raise_exception_on_unsuitable_preprocessor
     
@@ -290,9 +349,13 @@ class PreprocessedWorkflow(BaseWorkflow, ABC):
         # step 2: encoding of categorical attributes
         if has_cat:
             if KEY_CAT_ENCODER not in kwargs or kwargs[KEY_CAT_ENCODER] == "none":
-                raise ValueError(
-                    f"{KEY_CAT_ENCODER} must be specified if the dataset has categorical attributes."
-                )
+                msg = f"The value for {KEY_CAT_ENCODER} is set to none even though the data has categorical attributes."
+                if self.raise_exception_on_unsuitable_preprocessor:
+                    raise ValueError(msg)
+                else:
+                    msg += " Switching to ordinal encoding."
+                    self.logger.warning(msg)
+                    kwargs[KEY_CAT_ENCODER] = "ordinal"
 
             # Categorical features
             if kwargs[KEY_CAT_ENCODER] == "onehot":
@@ -350,9 +413,15 @@ class PreprocessedWorkflow(BaseWorkflow, ABC):
                 # as we want to keep a minimum of 1 feature, we need to ensure that
                 # percentile >= int(100 / X.shape[1]) + 1) which is the percentile corresponding to 1 feature
                 percentile = max(self.selectp_percentile, int(100 / num_features_after_categorical_encoding) + 1)
-                featureselector = SelectPercentile(percentile=percentile)
                 num_fractional_features_after_feature_selector = num_features_after_categorical_encoding * percentile / 100
                 num_features_after_feature_selector = int(np.round(num_fractional_features_after_feature_selector))  # enforce round up at exactly x.5
+                if num_features_after_feature_selector == 1 and KEY_FEATUREMAPPER in kwargs and kwargs[KEY_FEATUREMAPPER] != "none":
+                    percentile_new = max(1, int(100 * 2.01 / num_features_after_categorical_encoding))
+                    self.logger.warning(f"Modifying percentile slightly from {percentile} to {percentile_new} so that at least two features survive because otherwise there would be only one, and there is a feature mapper active.")
+                    percentile = percentile_new
+                    num_fractional_features_after_feature_selector = num_features_after_categorical_encoding * percentile / 100
+                    num_features_after_feature_selector = int(np.round(num_fractional_features_after_feature_selector))  # enforce round up at exactly x.5
+                featureselector = SelectPercentile(percentile=percentile)
                 self.logger.debug(f"Feature selector would use percentile {percentile} and reduce number of features to {num_fractional_features_after_feature_selector}")
             elif fs_val == "none":
                 featureselector = None
@@ -410,40 +479,72 @@ class PreprocessedWorkflow(BaseWorkflow, ABC):
         # step 5: featuremapper
         if KEY_FEATUREMAPPER in kwargs:
             featuremapper_val = kwargs[KEY_FEATUREMAPPER]
-            if featuremapper_val == "kernel_pca":
-                # kernel_pca_n_components is a float in [0, 1] that represents the ratio of components we keep.
-                # the problem is:
-                #   - if the number is close to 0, then we are eliminating all the features (motivating to move to the absolute number of components).
-                #   - if we create a mapping to absolute values, we do not know exactly how many features will be left (motivating a relative number of components).
-                # solution: we pre-compute the shape of the data after previous pre-processing steps and then employ the mapping to integer level.
-                if self.kernel_pca_kernel == "linear":
-                    n_components = min(X.shape[0], max(1, int(self.kernel_pca_n_components * num_features_after_feature_generation)))
-                    featuremapper = PCA(n_components=n_components)
-                else:
-                    n_components = max(1, int(self.kernel_pca_n_components * num_features_after_feature_generation))
-                    featuremapper = KernelPCA(
-                        kernel=self.kernel_pca_kernel,
-                        n_components=n_components
+            if featuremapper_val != "none":
+                if featuremapper_val in ["pca", "kernel_pca", "fastica", "agglomerator"]:
+                    
+                    n_components = max(1, int(self.projection_features * num_features_after_feature_generation))
+                    # the number of features to reduce to is a float in [0, 1] that represents the ratio of components we keep.
+                        # the problem is:
+                        #   - if the number is close to 0, then we are eliminating all the features (motivating to move to the absolute number of components).
+                        #   - if we create a mapping to absolute values, we do not know exactly how many features will be left (motivating a relative number of components).
+                        # solution: we pre-compute the shape of the data after previous pre-processing steps and then employ the mapping to integer level.
+
+                    if featuremapper_val == "pca":
+                        n_components = min(X.shape[0], n_components)
+                        featuremapper = PCA(
+                            n_components=n_components,
+                            random_state=self.random_state
+                        )
+
+                    if featuremapper_val == "kernel_pca":
+                        n_components = min(X.shape[0], n_components)
+                        featuremapper = KernelPCA(
+                            kernel=self.kernel_mapper_kernel,
+                            degree=self.kernel_mapper_poly_degree, # automatically ignored if kernel is not polynomial
+                            coef0=self.kernel_mapper_coef0,
+                            gamma=self.kernel_mapper_gamma,
+                            n_components=n_components,
+                            random_state=self.random_state
+                        )
+                    elif featuremapper_val == "fastica":
+                        n_components = min(X.shape[0], n_components)
+                        featuremapper = FastICA(random_state=self.random_state)
+                    elif featuremapper_val == "agglomerator":
+                        # If enable, n_features**2 combinations
+                        featuremapper = FeatureAgglomeration(n_clusters=n_components)
+                
+                elif featuremapper_val == "lda":
+                    # in LDA we will use the number as the ratio of *classes*
+                    num_possible_features = min(len(self.infos["classes_train_orig"]) - 1, num_features_after_feature_generation)
+                    n_components = max(1, int(self.projection_features * num_possible_features))
+                    featuremapper = LinearDiscriminantAnalysis(n_components=n_components)
+                elif featuremapper_val == "ka_rbf":
+                    n_components = int(self.feature_map_size)
+                    featuremapper = RBFSampler(
+                        gamma=self.kernel_mapper_gamma,
+                        n_components=n_components,
+                        random_state=self.random_state
                     )
+                elif featuremapper_val == "ka_nystroem":
+                    n_components = int(self.feature_map_size)
+                    featuremapper = Nystroem(
+                        kernel=self.kernel_mapper_kernel,
+                        degree=self.kernel_mapper_poly_degree, # automatically ignored if kernel is not polynomial
+                        coef0=self.kernel_mapper_coef0,
+                        gamma=self.kernel_mapper_gamma,
+                        n_components=n_components,
+                        random_state=self.random_state
+                    )
+                else:
+                    raise ValueError(
+                        f"Unknown {KEY_FEATUREMAPPER} technique {featuremapper_val}"
+                    )
+                
+                # inform about change in the number of columns
                 if n_components != num_features_after_feature_generation:
-                    self.logger.info(f"Feature mapper will change number of features from {num_features_after_feature_generation} to {n_components}")
-            elif featuremapper_val == "lda":
-                featuremapper = LinearDiscriminantAnalysis()
-            elif featuremapper_val == "fastica":
-                featuremapper = FastICA(random_state=self.random_state)
-            elif featuremapper_val == "ka_rbf":
-                featuremapper = RBFSampler(random_state=self.random_state)
-            elif featuremapper_val == "ka_nystroem":
-                featuremapper = Nystroem(random_state=self.random_state)
-            elif featuremapper_val == "agglomerator":
-                # If enable, n_features**2 combinations
-                featuremapper = FeatureAgglomeration()
-            elif featuremapper_val == "none":
-                featuremapper = None
+                    self.logger.info(f"Feature mapper {featuremapper.__class__.__name__} will change number of features from {num_features_after_feature_generation} to {n_components}")
             else:
-                raise ValueError(
-                    f"Unknown {KEY_FEATUREMAPPER} technique {featuremapper_val}"
-                )
+                featuremapper = None
             if featuremapper is not None:
                 steps.append((KEY_FEATUREMAPPER, featuremapper))
             treated_kws.append(KEY_FEATUREMAPPER)

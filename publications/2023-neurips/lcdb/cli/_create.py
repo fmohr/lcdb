@@ -67,44 +67,41 @@ def main(
         raise ValueError(f"num_configs must be at least as high as the sum of num_configs_with_default_preprocessor and num_configs_with_default_learner")
 
     # Convert the config space to a skopt space
-    skopt_space = convert_to_skopt_space(config_space, surrogate_model="RF")
+    #skopt_space = convert_to_skopt_space(config_space, surrogate_model="RF")
 
     # Sample the configurations
     # TODO: LHS should be done here
-    configs = skopt_space.rvs(n_samples=num_configs if exclude_default_config else num_configs - 1, random_state=seed)
+    config_space.seed(seed)
+    configs = [dict(c) for c in config_space.sample_configuration(size=num_configs if exclude_default_config else num_configs - 1)]
+    for config in configs:
 
-    # create the default configuration
-    default_config_raw = config_space.get_default_configuration()
-    default_config = []
-    for i, k in enumerate(skopt_space.dimension_names):
-        # Check if hyperparameter k is active
-        # If it is not active we attribute the "lower bound value" of the space
-        # To avoid duplication of the same "entity" in the list of configurations
-        if k in dict(default_config_raw):
-            val = default_config_raw[k]
-        else:
-            val = skopt_space.dimensions[i].bounds[0]
-        default_config.append(val)
-    
-    # overwrite some of the configs with default learer values
-    if num_configs_with_default_learner > 0:
+        # make sure that the value for feature gen is always set
+        if not "pp@featuregen" in config:
+            config["pp@featuregen"] = "none"
+    if verbose:
+        for config in configs:
+            print(config)
 
-        default_learner_params = {i: v for i, (k, v) in enumerate(zip(skopt_space.dimension_names, default_config)) if not k.startswith("pp@")}
-        for c in configs[:num_configs_with_default_learner]:
-            for i, v in default_learner_params.items():
-                c[i] = v
+    # get default config as basis to modify other configs
+    config_default = config_space.get_default_configuration()
 
-    # overwrite some of the configs with default learer values
-    if num_configs_with_default_preprocessor > 0:
-
-        default_pp_params = {i: v for i, (k, v) in enumerate(zip(skopt_space.dimension_names, default_config)) if k.startswith("pp@")}
-        for c in configs[num_configs_with_default_learner:num_configs_with_default_learner + num_configs_with_default_preprocessor]:
-            for i, v in default_pp_params.items():
-                c[i] = v
-
-
+    # Add the default configuration if it is not excluded
     if not exclude_default_config:
-        configs.insert(0, default_config)  # at the beginning
+        configs.insert(0, config_default)  # at the beginning
+
+    # overwrite some of the configs with default learner values
+    cols_no_pp = [c for c in config_space.keys() if "pp@" not in c]
+    if num_configs_with_default_learner > 0:
+        default_learner_params = {hp: config_space[hp].default_value for hp in cols_no_pp}
+        for c in configs[:num_configs_with_default_learner]:
+            c.update(default_learner_params)
+
+    # overwrite some of the configs with default pre-processor values
+    cols_pp = [c for c in config_space.keys() if "pp@" in c]
+    if num_configs_with_default_preprocessor > 0:
+        default_preprocessor_params = {hp: config_space[hp].default_value for hp in cols_pp}
+        for c in configs[num_configs_with_default_learner:num_configs_with_default_learner + num_configs_with_default_preprocessor]:
+            c.update(default_preprocessor_params)
 
     # modify output file
     if campaign is not None:
@@ -114,7 +111,10 @@ def main(
         pathlib.Path(output_folder).mkdir(parents=True, exist_ok=True)
         output_file = f"{output_folder}/configs.csv"
 
-    pd.DataFrame(configs, columns=skopt_space.dimension_names).to_csv(
+    
+    pd.DataFrame(configs,columns=cols_pp + cols_no_pp).astype(
+        {c: "Int64" for c in ["pp@selectp_percentile", "pp@poly_degree", "pp@feature_map_size"]}
+    ).to_csv(
         output_file, index=False
     )
     if verbose:

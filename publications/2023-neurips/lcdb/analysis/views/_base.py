@@ -53,7 +53,7 @@ class JsonBasedLCDBView(ABC):
         else:
             self.df = pd.read_csv(csv)
             for key, processor in self.processors.items():
-                self.df[key] = self.df[key].apply(lambda s: json.loads(s))
+                self.df[key] = self.df.apply(processor, axis=1)
             self.df = self.filter_results(self.df)
     
     def save_data(self, filename):
