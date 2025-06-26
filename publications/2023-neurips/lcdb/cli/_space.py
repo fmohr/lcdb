@@ -1,5 +1,4 @@
 """Command line to create a list of hyperparameter configurations to be evaluated later."""
-from ..builder.utils import import_attr_from_module
 
 
 def add_subparser(subparsers):
@@ -24,7 +23,8 @@ def main(
     """Entry point for the command line interface."""
 
     # Load the workflow to get its config space
-    WorkflowClass = import_attr_from_module(workflow_class)
-    config_space = WorkflowClass.config_space()
+    from lcdb.workflow._util import get_config_space_of_workflow
+    
+    config_space = get_config_space_of_workflow(workflow_class)
 
     print(config_space)

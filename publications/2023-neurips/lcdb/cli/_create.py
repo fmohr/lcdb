@@ -3,7 +3,7 @@ import os
 import pathlib
 
 import pandas as pd
-from ..builder.utils import import_attr_from_module
+from lcdb.workflow._util import get_config_space_of_workflow
 
 
 def add_subparser(subparsers):
@@ -19,6 +19,9 @@ def add_subparser(subparsers):
 
     subparser.add_argument("-w", "--workflow-class", type=str, required=True)
     subparser.add_argument("-n", "--num-configs", type=int, required=True)
+    subparser.add_argument("-ndp", "--num-configs-with-default-preprocessor", type=int, required=False, default=0)
+    subparser.add_argument("-ndl", "--num-configs-with-default-learner", type=int, required=False, default=0)
+    subparser.add_argument("-ed", "--exclude-default-config", action="store_true", required=False, default=False)
     subparser.add_argument(
         "-c", "--campaign", type=str, required=False, default=None
     )
@@ -36,6 +39,9 @@ def add_subparser(subparsers):
 def main(
     workflow_class,
     num_configs,
+    num_configs_with_default_preprocessor,
+    num_configs_with_default_learner,
+    exclude_default_config,
     output_file,
     seed=0,
     verbose=False,
@@ -50,11 +56,14 @@ def main(
     pathlib.Path(log_dir).mkdir(parents=True, exist_ok=True)
 
     # Load the workflow to get its config space
-    WorkflowClass = import_attr_from_module(workflow_class)
-    config_space = WorkflowClass.config_space()
+    config_space = get_config_space_of_workflow(workflow_class)
 
     if verbose:
         print(config_space)
+
+    num_fully_random_configs = num_configs - num_configs_with_default_preprocessor - num_configs_with_default_learner
+    if num_fully_random_configs < 0:
+        raise ValueError(f"num_configs must be at least as high as the sum of num_configs_with_default_preprocessor and num_configs_with_default_learner")
 
     # Convert the config space to a skopt space
     #skopt_space = convert_to_skopt_space(config_space, surrogate_model="RF")
@@ -62,7 +71,7 @@ def main(
     # Sample the configurations
     # TODO: LHS should be done here
     config_space.seed(seed)
-    configs = [dict(c) for c in config_space.sample_configuration(size=num_configs - 1,)]
+    configs = [dict(c) for c in config_space.sample_configuration(size=num_configs if exclude_default_config else num_configs - 1)]
     for config in configs:
 
         # make sure that the value for feature gen is always set
@@ -72,19 +81,26 @@ def main(
         for config in configs:
             print(config)
 
-    # Add the default configuration
+    # get default config as basis to modify other configs
     config_default = config_space.get_default_configuration()
-    #x = []
-    #for i, k in enumerate(skopt_space.dimension_names):
-    #    # Check if hyperparameter k is active
-    #    # If it is not active we attribute the "lower bound value" of the space
-    #    # To avoid duplication of the same "entity" in the list of configurations
-    #    if k in dict(config_default):
-    #        val = config_default[k]
-    #    else:
-    #        val = skopt_space.dimensions[i].bounds[0]
-    #    x.append(val)
-    configs.insert(0, config_default)  # at the beginning
+
+    # Add the default configuration if it is not excluded
+    if not exclude_default_config:
+        configs.insert(0, config_default)  # at the beginning
+
+    # overwrite some of the configs with default learner values
+    cols_no_pp = [c for c in config_space.keys() if "pp@" not in c]
+    if num_configs_with_default_learner > 0:
+        default_learner_params = {hp: config_space[hp].default_value for hp in cols_no_pp}
+        for c in configs[:num_configs_with_default_learner]:
+            c.update(default_learner_params)
+
+    # overwrite some of the configs with default pre-processor values
+    cols_pp = [c for c in config_space.keys() if "pp@" in c]
+    if num_configs_with_default_preprocessor > 0:
+        default_preprocessor_params = {hp: config_space[hp].default_value for hp in cols_pp}
+        for c in configs[num_configs_with_default_learner:num_configs_with_default_learner + num_configs_with_default_preprocessor]:
+            c.update(default_preprocessor_params)
 
     # modify output file
     if campaign is not None:
@@ -94,9 +110,8 @@ def main(
         pathlib.Path(output_folder).mkdir(parents=True, exist_ok=True)
         output_file = f"{output_folder}/configs.csv"
 
-    cols_pp = [c for c in config_space.keys() if "pp@" in c]
-    cols_no_pp = [c for c in config_space.keys() if "pp@" not in c]
-    pd.DataFrame(configs)[cols_pp + cols_no_pp].astype(
+    
+    pd.DataFrame(configs,columns=cols_pp + cols_no_pp).astype(
         {c: "Int64" for c in ["pp@selectp_percentile", "pp@poly_degree", "pp@feature_map_size"]}
     ).to_csv(
         output_file, index=False
