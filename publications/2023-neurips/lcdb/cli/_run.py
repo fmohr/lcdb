@@ -116,6 +116,14 @@ def add_subparser(subparsers):
         help="Directory where to store the outputs/logs.",
     )
     subparser.add_argument(
+        "-sd",
+        "--status-dir",
+        type=str,
+        default="./exp-checkpoints",
+        required=False,
+        help="Directory where status files are managed.",
+    )
+    subparser.add_argument(
         "--max-evals",
         type=int,
         default=100,
@@ -143,6 +151,13 @@ def add_subparser(subparsers):
         required=False,
         default=None,
         help="Path to a CSV file containing initial configurations.",
+    )
+    subparser.add_argument(
+        "--parameters",
+        type=str,
+        default=None,
+        required=False,
+        help="JSON-parsable string with a dictionary that overwrites parameters specified in the configurations with constant values."
     )
     subparser.add_argument(
         "-v",
@@ -201,12 +216,16 @@ def get_path_for_intermediate_results(campaign, workflow_class, openml_id, workf
     import pathlib
     return pathlib.Path(f"{checkpoint_dir}/{campaign}/config-results/{workflow_class}/{openml_id}/{workflow_seed}-{test_seed}-{valid_seed}")
 
+async def run_learning_workflow_from_deephyper_coroutine(job, **kwargs):
+    return run_learning_workflow_from_deephyper(job, **kwargs)
+
 def run_learning_workflow_from_deephyper(
         job,
         campaign: str = "",
         openml_id: int = 3,
         task_type: str = "classification",
         workflow_class: str = "lcdb.workflow.sklearn.LibLinearWorkflow",
+        enforced_workflow_parameters: dict = {},
         monotonic: bool = True,
         valid_seed: int = 42,
         test_seed: int = 42,
@@ -285,13 +304,21 @@ def run_learning_workflow_from_deephyper(
         log_interval,
     )
 
+    # add explicitly set parameters to the config (possibly overwriting configs specified in the config file)
+    workfow_parameters = job.parameters.copy() # operate this on a copy so that deephyper isn't aware of the injected parameter values
+    if enforced_workflow_parameters is not None:
+        if type(enforced_workflow_parameters) != dict:
+            raise ValueError(f"enforced_workflow_parameters should be a dict but is of type {type(enforced_workflow_parameters)}")
+        workfow_parameters.update(enforced_workflow_parameters)
+
     # compute the learning curve
     t_start = time()
+    
     results = run_function(
         openml_id=openml_id,
         task_type=task_type,
         workflow_class=workflow_class,
-        workflow_parameters=job.parameters,
+        workflow_parameters=workfow_parameters,
         monotonic=monotonic,
         valid_seed=valid_seed,
         test_seed=test_seed,
@@ -347,10 +374,12 @@ def run_experiment(
     valid_prop,
     test_prop,
     timeout_on_fit,
+    status_dir,
     log_dir,
     max_evals,
     timeout,
     initial_configs,
+    parameters,
     verbose,
     logger,
     evaluator,
@@ -375,6 +404,7 @@ def run_experiment(
 
     import pathlib
 
+    import numpy as np
     import pandas as pd
     import json
 
@@ -397,7 +427,7 @@ def run_experiment(
             except Exception as e:
                 logger.exception(e)
 
-    from lcdb.builder.utils import import_attr_from_module, get_path_to_status_file, does_status_file_exist, create_status_file, EXPERIMENT_STATUS_RUNNING, EXPERIMENT_STATUS_COMPLETED
+    from lcdb.builder.utils import import_attr_from_module, StatusFileManager
 
     if evaluator in ["serial", "thread", "process", "ray"]:
         # Master-Worker Parallelism: only 1 process will run this code
@@ -457,7 +487,7 @@ def run_experiment(
     # Load the workflow to get its config space
     WorkflowClass = import_attr_from_module(workflow_class)
     config_space = WorkflowClass.config_space()
-    config_default = config_space.get_default_configuration().get_dictionary()
+    config_default = dict(config_space.get_default_configuration())
     
     # Set the search space
     problem = HpProblem(config_space)
@@ -472,7 +502,13 @@ def run_experiment(
         ip_df = pd.read_csv(initial_configs)
         ip_df = ip_df[problem.hyperparameter_names]
         for _, row in ip_df.iterrows():
-            initial_points.append(row.to_dict())
+            config = row.to_dict()
+
+            # replace nan values by default values, since deephyper cannot properly handle missing values
+            for k, v in config.items():
+                if type(v) == float and np.isnan(v):
+                    config[k] = config_space[k].default_value # set nan values to default, should be ignored anyway
+            initial_points.append(config)
     else:
         # Add the default configuration
         # Convert the config space to a skopt space
@@ -492,6 +528,7 @@ def run_experiment(
         "openml_id": openml_id,
         "task_type": task_type,
         "workflow_class": workflow_class,
+        "enforced_workflow_parameters": parameters,
         "monotonic": monotonic,
         "valid_seed": valid_seed,
         "test_seed": test_seed,
@@ -515,50 +552,87 @@ def run_experiment(
     method_kwargs["storage"] = MemoryStorage()
     print("method_kwargs", method_kwargs)
     # print the run function setup
+
+    # create status file manager
+    status_file_manager = StatusFileManager(working_directory=status_dir)
+    print(status_dir)
     
     with Evaluator.create(
-        run_learning_workflow_from_deephyper,
+        run_learning_workflow_from_deephyper if evaluator != "serial" else run_learning_workflow_from_deephyper_coroutine,
         method=evaluator,
         method_kwargs=method_kwargs,
     ) as evaluator:
+        
         # check whether experiment has already run (master only checks)
         if evaluator.is_master:
-            for status in [EXPERIMENT_STATUS_RUNNING, EXPERIMENT_STATUS_COMPLETED]:
-                if does_status_file_exist(workflow=workflow_class, campaign=campaign, openmlid=openml_id, workflowseed=workflow_seed, testseed=test_seed, valseed=valid_seed, status=status):
-                    filename = get_path_to_status_file(workflow=workflow_class, campaign=campaign, openmlid=openml_id, workflowseed=workflow_seed, testseed=test_seed, valseed=valid_seed, status=status)
+            for status in [StatusFileManager.EXPERIMENT_STATUS_RUNNING, StatusFileManager.EXPERIMENT_STATUS_COMPLETED]:
+                if status_file_manager.does_status_file_exist(workflow=workflow_class, campaign=campaign, openmlid=openml_id, workflowseed=workflow_seed, testseed=test_seed, valseed=valid_seed, status=status):
+                    filename = status_file_manager.get_path_to_status_file(workflow=workflow_class, campaign=campaign, openmlid=openml_id, workflowseed=workflow_seed, testseed=test_seed, valseed=valid_seed, status=status)
                     logger.info(f"We have a status file {filename} for {workflow_class}-{campaign}-{openml_id}-{workflow_seed}-{test_seed}-{valid_seed} so the experiment is being skipped.")
                     return
                 
-            filename = get_path_to_status_file(workflow=workflow_class, campaign=campaign, openmlid=openml_id, workflowseed=workflow_seed, testseed=test_seed, valseed=valid_seed, status=EXPERIMENT_STATUS_RUNNING)
+            filename = status_file_manager.get_path_to_status_file(workflow=workflow_class, campaign=campaign, openmlid=openml_id, workflowseed=workflow_seed, testseed=test_seed, valseed=valid_seed, status=StatusFileManager.EXPERIMENT_STATUS_RUNNING)
             logger.info(f"Creating RUNNING status file {filename} for {workflow_class}-{campaign}-{openml_id}-{workflow_seed}-{test_seed}-{valid_seed}.")
-            create_status_file(workflow=workflow_class, campaign=campaign, openmlid=openml_id, workflowseed=workflow_seed, testseed=test_seed, valseed=valid_seed, status=EXPERIMENT_STATUS_RUNNING)
+            status_file_manager.create_status_file(workflow=workflow_class, campaign=campaign, openmlid=openml_id, workflowseed=workflow_seed, testseed=test_seed, valseed=valid_seed, status=StatusFileManager.EXPERIMENT_STATUS_RUNNING)
 
+        # check whether we already have results in a results file
+        list_of_previous_results = []
+        num_previous_results = 0
+        logger.info(f"Scanning folder {log_dir} folder already existing result files.")
+        covered_indices = []
+        for file in os.listdir(log_dir):
+            if file.startswith("results") and file.endswith(".csv"):
+                logger.debug(f"Reading results from {file}")
+                df_results_in_file = pd.read_csv(f"{log_dir}/{file}")
+                for i, row in df_results_in_file.iterrows():
+                    config = {k[2:]: v for k, v in row.items() if k.startswith("p:")}
+                    for idx, requested_config in enumerate(initial_points):
+                        if config == requested_config and idx not in covered_indices:
+                            covered_indices.append(idx)
+                            list_of_previous_results.append(row)
+                            num_previous_results += 1
+
+        logger.info(f"Previous results found in {len(list_of_previous_results)} result files. Removing the {num_previous_results} configs with indices {covered_indices} from the todo list.")
         
         # Required for MPI just the root rank will execute the search
         # other ranks will be considered as workers
         if evaluator.is_master:
+
             # Set the search algorithm
             search = CBO(
                 problem,
                 evaluator,
                 log_dir=log_dir,
-                initial_points=initial_points,
+                initial_points=[config for i, config in enumerate(initial_points) if i not in covered_indices],
                 surrogate_model="DUMMY",
-                verbose=verbose,
+                verbose=verbose
             )
 
-            # Execute the search
-            results = search.search(max_evals, timeout=timeout, max_evals_strict=True)
-            filename = get_path_to_status_file(workflow=workflow_class, campaign=campaign, openmlid=openml_id, workflowseed=workflow_seed, testseed=test_seed, valseed=valid_seed, status=EXPERIMENT_STATUS_COMPLETED)
+            # Execute the search (this will also generate/replace the results.csv)
+            if num_previous_results > 0:
+                max_evals -= num_previous_results
+                assert max_evals > 0
+            logger.info(f"Starting search with {max_evals} evaluations.")
+            df_results_new = search.search(max_evals, timeout=timeout, max_evals_strict=True)
+            if num_previous_results > 0:
+                df_results = pd.concat([pd.DataFrame(list_of_previous_results), df_results_new])
+            else:
+                df_results = df_results_new
+            out_file = f"{log_dir}/results.csv"
+            logger.info(f"Writing {len(df_results)} results to {out_file}")
+            df_results.to_csv(out_file, index=False)
+
+            # now check whether we need to merge
+            filename = status_file_manager.get_path_to_status_file(workflow=workflow_class, campaign=campaign, openmlid=openml_id, workflowseed=workflow_seed, testseed=test_seed, valseed=valid_seed, status=StatusFileManager.EXPERIMENT_STATUS_COMPLETED)
             logger.info(f"Creating COMPLETED status file {filename} for {workflow_class}-{campaign}-{openml_id}-{workflow_seed}-{test_seed}-{valid_seed}.")
-            create_status_file(
+            status_file_manager.create_status_file(
                 workflow=workflow_class,
                 campaign=campaign,
                 openmlid=openml_id,
                 workflowseed=workflow_seed,
                 testseed=test_seed,
                 valseed=valid_seed,
-                status=EXPERIMENT_STATUS_COMPLETED
+                status=StatusFileManager.EXPERIMENT_STATUS_COMPLETED
                 )
 
             # remove checkpoint results if those exist
@@ -607,5 +681,9 @@ def main(**kwargs):
 
     # there is no point in making the logger configurable at the CLI, the log level maybe
     kwargs["logger"] = logger
+
+    if "parameters" in kwargs and kwargs["parameters"] is not None:
+        import json
+        kwargs["parameters"] = json.loads(kwargs["parameters"])
 
     run_experiment(**kwargs)

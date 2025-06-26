@@ -219,8 +219,7 @@ class PCloudRepository(Repository):
         ).search(self.content)
 
     def get_datasets(self, workflow, campaign):
-        return sorted([
-            int(i) for i in jmespath.compile(
+        qry_result = jmespath.compile(
                 f"""
                 metadata
                 .contents[? name == 'data'] | [0]
@@ -228,8 +227,10 @@ class PCloudRepository(Repository):
                 .contents | [? name == '{campaign}'] | [0]
                 .contents | [*].name
                 """
-            ).search(self.content)]
-        )
+            ).search(self.content)
+        if qry_result is None:
+            return []
+        return sorted([int(i) for i in qry_result])
 
     def get_result_files_of_workflow_and_dataset_in_campaign(
             self,

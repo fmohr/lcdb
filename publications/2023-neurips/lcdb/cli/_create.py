@@ -57,25 +57,34 @@ def main(
         print(config_space)
 
     # Convert the config space to a skopt space
-    skopt_space = convert_to_skopt_space(config_space, surrogate_model="RF")
+    #skopt_space = convert_to_skopt_space(config_space, surrogate_model="RF")
 
     # Sample the configurations
     # TODO: LHS should be done here
-    configs = skopt_space.rvs(n_samples=num_configs - 1, random_state=seed)
+    config_space.seed(seed)
+    configs = [dict(c) for c in config_space.sample_configuration(size=num_configs - 1,)]
+    for config in configs:
+
+        # make sure that the value for feature gen is always set
+        if not "pp@featuregen" in config:
+            config["pp@featuregen"] = "none"
+    if verbose:
+        for config in configs:
+            print(config)
 
     # Add the default configuration
     config_default = config_space.get_default_configuration()
-    x = []
-    for i, k in enumerate(skopt_space.dimension_names):
-        # Check if hyperparameter k is active
-        # If it is not active we attribute the "lower bound value" of the space
-        # To avoid duplication of the same "entity" in the list of configurations
-        if k in dict(config_default):
-            val = config_default[k]
-        else:
-            val = skopt_space.dimensions[i].bounds[0]
-        x.append(val)
-    configs.insert(0, x)  # at the beginning
+    #x = []
+    #for i, k in enumerate(skopt_space.dimension_names):
+    #    # Check if hyperparameter k is active
+    #    # If it is not active we attribute the "lower bound value" of the space
+    #    # To avoid duplication of the same "entity" in the list of configurations
+    #    if k in dict(config_default):
+    #        val = config_default[k]
+    #    else:
+    #        val = skopt_space.dimensions[i].bounds[0]
+    #    x.append(val)
+    configs.insert(0, config_default)  # at the beginning
 
     # modify output file
     if campaign is not None:
@@ -85,7 +94,11 @@ def main(
         pathlib.Path(output_folder).mkdir(parents=True, exist_ok=True)
         output_file = f"{output_folder}/configs.csv"
 
-    pd.DataFrame(configs, columns=skopt_space.dimension_names).to_csv(
+    cols_pp = [c for c in config_space.keys() if "pp@" in c]
+    cols_no_pp = [c for c in config_space.keys() if "pp@" not in c]
+    pd.DataFrame(configs)[cols_pp + cols_no_pp].astype(
+        {c: "Int64" for c in ["pp@selectp_percentile", "pp@poly_degree", "pp@feature_map_size"]}
+    ).to_csv(
         output_file, index=False
     )
     if verbose:

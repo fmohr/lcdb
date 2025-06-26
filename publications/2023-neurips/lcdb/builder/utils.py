@@ -16,13 +16,6 @@ from scipy.special import softmax
 
 import traceback
 
-EXPERIMENT_STATUS_SUBMITTED = "submitted"  # has been given to the scheduler
-EXPERIMENT_STATUS_STARTED = "started"   # has been invoked by the scheduler
-EXPERIMENT_STATUS_RUNNING = "running"   # execution has been started at Python level
-EXPERIMENT_STATUS_COMPLETED= "completed"    # the results of all hyperparameter configurations are in
-
-VALID_STATI = [EXPERIMENT_STATUS_SUBMITTED,EXPERIMENT_STATUS_STARTED, EXPERIMENT_STATUS_RUNNING, EXPERIMENT_STATUS_COMPLETED]
-
 def standardize_run_function_output(
     output: Union[str, float, tuple, list, dict],
 ) -> dict:
@@ -344,17 +337,33 @@ def estimate_memory_consumption_for_dataset(shape, dtype=np.float64, unit="B"):
         raise ValueError(f"Unit must be 'B', 'KB', 'MB' or 'GB' but is {unit}")
     return memory_bytes
 
-def get_path_to_status_file(workflow, openmlid, campaign, workflowseed, testseed, valseed, status):
-    if status not in VALID_STATI:
-        raise ValueError(f"status must be in {VALID_STATI} but is {status}")
-    return pathlib.Path(f"exp-checkpoints/{campaign}/{workflow}-{openmlid}-{workflowseed}-{testseed}-{valseed}.{status}")
 
-def does_status_file_exist(workflow, openmlid, campaign, workflowseed, testseed, valseed, status):
-    return get_path_to_status_file(workflow, openmlid, campaign, workflowseed, testseed, valseed, status).exists()
+class StatusFileManager:
 
-def create_status_file(workflow, openmlid, campaign, workflowseed, testseed, valseed, status):
-    path = get_path_to_status_file(workflow, openmlid, campaign, workflowseed, testseed, valseed, status)
-    path.parent.mkdir(exist_ok=True, parents=True)
-    if does_status_file_exist(workflow, openmlid, campaign, workflowseed, testseed, valseed, status):
-        raise ValueError(f"status file already exists for {workflow=}, {openmlid=}, {campaign=}, {workflowseed=}, {testseed=}, {valseed=}, {status=}")
-    path.touch()
+    EXPERIMENT_STATUS_SUBMITTED = "submitted"  # has been given to the scheduler
+    EXPERIMENT_STATUS_STARTED = "started"   # has been invoked by the scheduler
+    EXPERIMENT_STATUS_RUNNING = "running"   # execution has been started at Python level
+    EXPERIMENT_STATUS_COMPLETED= "completed"    # the results of all hyperparameter configurations are in
+
+    VALID_STATI = [EXPERIMENT_STATUS_SUBMITTED,EXPERIMENT_STATUS_STARTED, EXPERIMENT_STATUS_RUNNING, EXPERIMENT_STATUS_COMPLETED]
+
+    def __init__(self, working_directory="./exp-checkpoints"):
+        self.working_directory = working_directory
+    
+    def get_path_to_status_file(self, workflow, openmlid, campaign, workflowseed, testseed, valseed, status):
+        if status not in StatusFileManager.VALID_STATI:
+            raise ValueError(f"status must be in {StatusFileManager.VALID_STATI} but is {status}")
+        return pathlib.Path(f"{self.working_directory}/{campaign}/{workflow}-{openmlid}-{workflowseed}-{testseed}-{valseed}.{status}")
+
+    def does_status_file_exist(self, workflow, openmlid, campaign, workflowseed, testseed, valseed, status):
+        return self.get_path_to_status_file(workflow, openmlid, campaign, workflowseed, testseed, valseed, status).exists()
+
+    def create_status_file(self, workflow, openmlid, campaign, workflowseed, testseed, valseed, status):
+        path = self.get_path_to_status_file(workflow, openmlid, campaign, workflowseed, testseed, valseed, status)
+        path.parent.mkdir(exist_ok=True, parents=True)
+        if self.does_status_file_exist(workflow, openmlid, campaign, workflowseed, testseed, valseed, status):
+            raise ValueError(f"status file already exists for {workflow=}, {openmlid=}, {campaign=}, {workflowseed=}, {testseed=}, {valseed=}, {status=}")
+        path.touch()
+
+    def remove_status_file(self, workflow, openmlid, campaign, workflowseed, testseed, valseed, status):
+        pathlib.Path(self.get_path_to_status_file(workflow=workflow, openmlid=openmlid, campaign=campaign, workflowseed=workflowseed, testseed=testseed, valseed=valseed, status=status)).unlink(missing_ok=True)
