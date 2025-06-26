@@ -24,6 +24,8 @@ class TracebackExtractor:
         """
         base_test_command = get_cli_test_command(row)
         errors = []
+
+        # if there are build issues, add them
         if isinstance(row["m:build_issues"], str):
             for anchor, traceback_at_anchor in json.loads(row["m:build_issues"]).items():
                 errors.append({
@@ -32,11 +34,13 @@ class TracebackExtractor:
                     "traceback": traceback_at_anchor,
                     "cli_test_command": base_test_command + f" --anchor-schedule={anchor}"
                 })
+        
+        # if there is a general traceback, also add it
         if "m:traceback" in row and isinstance(row["m:traceback"], str):
             errors.append({
                 "message": self.extract_error_message_from_traceback(row["m:traceback"]),
                 "location": f"global",
-                "traceback": traceback_at_anchor,
+                "traceback": row["m:traceback"],
                 "cli_test_command": base_test_command
             })
         return errors if errors else None
