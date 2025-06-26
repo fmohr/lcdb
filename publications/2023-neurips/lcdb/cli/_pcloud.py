@@ -1,5 +1,4 @@
 import os
-from dotenv import set_key, load_dotenv
 from lcdb.db import PCloudRepository
 import os
 
@@ -29,6 +28,10 @@ def add_subparser(subparsers):
     subparser.set_defaults(func=function_to_call)
 
 def main(**kwargs):
+  
+  # lazy import so this is only required if one really uses the functionality
+  from dotenv import set_key, load_dotenv
+
   dotenv_path = kwargs.pop("env_path")
   load_dotenv(dotenv_path)
   # Load the environment variables
