@@ -65,13 +65,7 @@ class KNNWorkflow(SklearnWorkflow):
             timer=timer,
             **kwargs
         )
-
-        if random_state is not None and logger is not None:
-            logger.warning(
-                f"A random state ({random_state}) has been given to the KNN workflow."
-                "  But this workflow is not randomizable. The random seed will be ignored."
-            )
-
+        
         self.learner_kwargs = dict(
             n_neighbors=n_neighbors, weights=weights, p=p, metric=metric
         )

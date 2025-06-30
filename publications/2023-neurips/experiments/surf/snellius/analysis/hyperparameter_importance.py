@@ -12,6 +12,9 @@ import os
 import pandas as pd
 import seaborn as sns
 
+import lcdb.workflow
+import lcdb.workflow._util
+
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -73,8 +76,7 @@ def run(args):
     anchor_size_column = "anchor_sizes"
     learning_curve_column = "learning_curve_data"
 
-    WorkflowClass = lcdb.builder.utils.import_attr_from_module(args.workflow_name)
-    config_space = WorkflowClass.config_space()
+    config_space = lcdb.workflow._util.get_config_space_of_workflow(args.workflow_name)
     workflow_hyperparameter_mapping = {"p:" + name: name for name in config_space.keys()}
     id_results = dict()
 

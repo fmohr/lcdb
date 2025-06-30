@@ -63,8 +63,6 @@ class TestDenseNetwork(unittest.TestCase):
     @parameterized.expand([(p.copy(), ) for p in single_change_parametrizations_of_workflow])
     def test_functionality_and_reproducibility(self, params):
 
-        logger.info(f"Starting test for configuration {json.dumps(params)}")
-
         params["epoch_schedule"] = "linear"
         params["num_epochs"] = 3
         if "pp@cat_encoder" not in params:
@@ -73,7 +71,7 @@ class TestDenseNetwork(unittest.TestCase):
         openml_id = 3
         anchor_schedule = "first"
         logger.info(
-            f"Starting test of params {params} on dataset. To reproduce results, use\n\t"
+            f"Starting test of params {json.dumps(params)} on dataset {openml_id}. To reproduce results, use\n\t"
             f"lcdb test -i {openml_id} -w lcdb.workflow.keras.DenseNNWorkflow --anchor-schedule={anchor_schedule} --parameters='" + json.dumps(params) + "'"
         )
 
@@ -81,28 +79,35 @@ class TestDenseNetwork(unittest.TestCase):
 
         # run the workflow twice to check for reproducibility
         for run_idx in range(2):
-            out = run_learning_workflow(
-                openml_id=openml_id,
-                workflow_class=DenseNNWorkflow,
-                workflow_parameters=params,
-                valid_seed=0,
-                test_seed=0,
-                workflow_seed=0,
-                monotonic=False,
-                raise_errors=True,
-                anchor_schedule=anchor_schedule
-            )
 
-            # get final node in output
-            parsed_json = json.loads(out["metadata"]["json"])
-            final_node = parsed_json["children"][-1]
-            first_anchor_in_final_node = final_node["children"][0]
-            metrics_in_first_anchor_in_final_node = first_anchor_in_final_node["children"][-1]
+            try:
+                out = run_learning_workflow(
+                    openml_id=openml_id,
+                    workflow_class=DenseNNWorkflow,
+                    workflow_parameters=params,
+                    valid_seed=0,
+                    test_seed=0,
+                    workflow_seed=0,
+                    monotonic=False,
+                    raise_errors=True,
+                    anchor_schedule=anchor_schedule
+                )
+                self.assertNotEqual("none", params["pp@cat_encoder"])
 
-            # check that train, validation, and test confusion matrices are identical
-            for i in range(3):
-                matrix = metrics_in_first_anchor_in_final_node["children"][i]["children"][0]["metadata"]["value"]
-                if run_idx == 0:
-                    matrices_first_run.append(matrix)
-                else:
-                    self.assertEqual(matrices_first_run[i], matrix, msg=f"Missing reproducibility for parametrization {params}.")
+                # get final node in output
+                parsed_json = json.loads(out["metadata"]["json"])
+                final_node = parsed_json["children"][-1]
+                first_anchor_in_final_node = final_node["children"][0]
+                metrics_in_first_anchor_in_final_node = first_anchor_in_final_node["children"][-1]
+
+                # check that train, validation, and test confusion matrices are identical
+                for i in range(3):
+                    matrix = metrics_in_first_anchor_in_final_node["children"][i]["children"][0]["metadata"]["value"]
+                    if run_idx == 0:
+                        matrices_first_run.append(matrix)
+                    else:
+                        self.assertEqual(matrices_first_run[i], matrix, msg=f"Missing reproducibility for parametrization {params}.")
+        
+            except ValueError as e:
+                self.assertTrue("The value for cat_encoder is set to none even though the data has categorical attributes" in str(e))
+                self.assertEqual("none", params["pp@cat_encoder"])

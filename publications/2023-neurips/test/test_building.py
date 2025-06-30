@@ -8,7 +8,7 @@ from lcdb.workflow.xgboost import XGBoostWorkflow
 from lcdb.workflow.keras import DenseNNWorkflow
 from lcdb.workflow.sklearn import TreesEnsembleWorkflow
 from lcdb.builder import run_learning_workflow
-from lcdb.builder.utils import import_attr_from_module
+from lcdb.workflow._util import get_workflow_class, get_config_space_of_workflow
 import itertools as it
 import json
 
@@ -65,7 +65,7 @@ class TestBuildFunctionalities(unittest.TestCase):
     @parameterized.expand(list(it.product([61], WORKFLOWS, VAL_SEEDS, TEST_SEEDS, WORKFLOW_SEEDS, [True, False])))
     def test_workflow_base_functionality_and_integrity(self, openmlid, workflow, val_seed, test_seed, workflow_seed, monotonic):
 
-        workflow_class = import_attr_from_module(workflow)
+        workflow_class = get_workflow_class(workflow)
 
         params = {}
         if issubclass(workflow_class, PreprocessedWorkflow) and openmlid in [3, 188]:
@@ -134,7 +134,7 @@ class TestBuildFunctionalities(unittest.TestCase):
     @parameterized.expand(list(it.product(DATASETS, WORKFLOWS, VAL_SEEDS, TEST_SEEDS, WORKFLOW_SEEDS, [True, False])))
     def test_ability_to_work_all_types_of_datasets(self, openmlid, workflow, val_seed, test_seed, workflow_seed, monotonic):
 
-        workflow_class = import_attr_from_module(workflow)
+        workflow_class = get_workflow_class(workflow)
 
         params = {}
         if issubclass(workflow_class, PreprocessedWorkflow) and openmlid in [3, 188]:
@@ -210,10 +210,7 @@ class TestBuildFunctionalities(unittest.TestCase):
             workflow,
             max_num_cols_expected_after_first_step):
 
-        from lcdb.builder.utils import import_attr_from_module
-
-        WorkflowClass = import_attr_from_module(workflow)
-        config_space = WorkflowClass.config_space()
+        config_space = get_config_space_of_workflow(workflow)
         config = dict(config_space.get_default_configuration())
 
         portion_retained_in_feature_selection = 0.3
@@ -224,8 +221,9 @@ class TestBuildFunctionalities(unittest.TestCase):
             "pp@featuregen": "poly",
             "pp@featureselector": "selectp",
             "pp@scaler": "minmax",
-            "pp@kernel_pca_kernel": "linear",
-            "pp@kernel_pca_n_components": 0.25,
+            "pp@kernel_mapper_kernel": "linear",
+            "pp@projection_features": 0.25,
+            "pp@feature_map_size": 100,
             "pp@poly_degree": 2,
             "pp@selectp_percentile": int(100 * portion_retained_in_feature_selection),
             "pp@std_with_std": True
@@ -341,7 +339,7 @@ class TestBuildFunctionalities(unittest.TestCase):
     def test_correct_behavior_on_degenerated_anchors(self, openmlid, workflow, val_seed, test_seed, workflow_seed, anchor):
 
         for monotonic in [False, True]:
-            workflow_class = import_attr_from_module(workflow)
+            workflow_class = get_workflow_class(workflow)
 
             if issubclass(workflow_class, PreprocessedWorkflow) and openmlid in [3, 188]:
                 params = {
@@ -431,7 +429,7 @@ class TestBuildFunctionalities(unittest.TestCase):
     @parameterized.expand(list(it.product([61], WORKFLOWS, VAL_SEEDS, TEST_SEEDS, WORKFLOW_SEEDS, [True, False])))
     def test_reproducibility_of_actual_workflows(self, openmlid, workflow, val_seed, test_seed, workflow_seed, monotonic):
 
-        workflow_class = import_attr_from_module(workflow)
+        workflow_class = get_workflow_class(workflow)
 
         params = {}
         if issubclass(workflow_class, PreprocessedWorkflow) and openmlid in [3, 188]:
