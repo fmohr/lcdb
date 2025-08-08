@@ -151,7 +151,7 @@ class LearningCurveGroup:
                 self.add_curve(curve)
 
     def add_curve(self, curve):
-        print(f"Adding curve of shape {type(curve)} with anchors {curve.anchors_size}/{curve.anchors_iteration}")
+        # print(f"Adding curve of shape {type(curve)} with anchors {curve.anchors_size}/{curve.anchors_iteration}")
 
         # check workflow compatibility
         if self.workflow is not None and self.workflow != curve.workflow:

@@ -1,0 +1,6 @@
+lcdb.workflow.sklearn.KNNWorkflow
+lcdb.workflow.sklearn.LibLinearWorkflow
+lcdb.workflow.sklearn.LibSVMWorkflow
+lcdb.workflow.sklearn.TreesEnsembleWorkflow
+lcdb.workflow.xgboost.XGBoostWorkflow
+
