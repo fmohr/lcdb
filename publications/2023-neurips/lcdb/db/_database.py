@@ -116,6 +116,22 @@ class LCDB:
         if not self.loaded:
             self._load()
         return self._repositories
+    
+    @property
+    def datasets(self):
+        datasets = set()
+        for repository in self.repositories.values():
+            if repository.exists():
+                datasets.update(repository.get_datasets(workflow=None, campaign=None))
+        return sorted(datasets)
+    
+    @property
+    def workflows(self):
+        workflows = set()
+        for repository in self.repositories.values():
+            if repository.exists():
+                workflows.update(repository.get_workflows())
+        return sorted(workflows)
 
     def query(
             self,
@@ -205,7 +221,7 @@ class LCDB:
                     logger.warning("Received empty result dataframe.")
                     continue
                 else:
-                    workflow_class = df[df["has_result"]]["m:workflow"].values[0]
+                    workflow_class = df["m:workflow"].values[0]
                     dfs_per_workflow[workflow_class] = df if workflow_class not in dfs_per_workflow else pd.concat([dfs_per_workflow[workflow_class], df])
                     logger.debug(f"Added results from dataframe with {len(df)} entries. New length of dataframe for {workflow_class=} is {len(dfs_per_workflow[workflow_class])}")
             logger.info(f"Preparing results based on {cnt} seen dataframes for {len(dfs_per_workflow)} different workflows.")
