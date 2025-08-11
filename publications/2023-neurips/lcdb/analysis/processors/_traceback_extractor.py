@@ -26,7 +26,7 @@ class TracebackExtractor:
         errors = []
 
         # if there are build issues, add them
-        if isinstance(row["m:build_issues"], str):
+        if "m:build_issues" in row and isinstance(row["m:build_issues"], str):
             for anchor, traceback_at_anchor in json.loads(row["m:build_issues"]).items():
                 errors.append({
                     "message": self.extract_error_message_from_traceback(traceback_at_anchor),

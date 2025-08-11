@@ -62,7 +62,11 @@ class PCloudRepository(Repository):
         download_link = "https://" + response["hosts"][0] + response["path"]
 
         # download file
+        t_start = time.time()
+        logging.info(f"Starting download of {download_link}")
         response = requests.get(download_link)
+        t_end_dl = time.time()
+        logging.info(f"Download finished after {int(1000 * (t_end_dl - t_start))} miliseconds")
         if response.status_code == 200:
 
             t_start = time.time()
@@ -219,15 +223,21 @@ class PCloudRepository(Repository):
         ).search(self.content)
 
     def get_datasets(self, workflow, campaign):
-        qry_result = jmespath.compile(
-                f"""
+        qry = f"""
                 metadata
                 .contents[? name == 'data'] | [0]
-                .contents | [? name == '{workflow}'] | [0]
-                .contents | [? name == '{campaign}'] | [0]
-                .contents | [*].name
-                """
-            ).search(self.content)
+            """
+        if workflow is not None:
+            qry += f".contents | [? name == '{workflow}'] | [0]"
+        else:
+            qry += ".contents | [*] | [0]"
+        
+        if campaign is not None:
+            qry += f".contents | [? name == '{campaign}'] | [0]"
+        else:
+            qry += ".contents | [*] | [0]"
+        qry += ".contents | [*].name"
+        qry_result = jmespath.compile(qry).search(self.content)
         if qry_result is None:
             return []
         return sorted([int(i) for i in qry_result])
@@ -403,6 +413,7 @@ class PCloudRepository(Repository):
                         if s is not None and isinstance(s, str)
                         else (None if type(s) == float and np.isnan(s) else s)
                     )
+                    df["m:workflow"] = file_desc['workflow']
                     df["has_result"] = [isinstance(e, dict) and e.get("tag") == "run" for e in df["m:json"]]
                 except Exception as e:
                     is_parsing_error = isinstance(e, JSONDecodeError)
