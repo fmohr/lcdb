@@ -105,6 +105,20 @@ def add_subparser(subparsers):
         help="Timeout in seconds for the fit method. Defaults to -1 for unlimited time.",
     )
     subparser.add_argument(
+        "--timeout-on-predict",
+        type=int,
+        default=-1,
+        required=False,
+        help="Timeout in seconds for the predict method. Defaults to -1 for unlimited time.",
+    )
+    subparser.add_argument(
+        "--timeout-on-metrics",
+        type=int,
+        default=-1,
+        required=False,
+        help="Timeout in seconds for the metric computation method. Defaults to -1 for unlimited time.",
+    )
+    subparser.add_argument(
         "--parameters",
         type=str,
         default=None,
@@ -168,6 +182,8 @@ def main(
     valid_prop,
     test_prop,
     timeout_on_fit,
+    timeout_on_predict,
+    timeout_on_metrics,
     parameters,
     workflow_memory_limit,
     log_level,
@@ -234,6 +250,8 @@ def main(
         valid_prop=valid_prop,
         test_prop=test_prop,
         timeout_on_fit=timeout_on_fit,
+        timeout_on_predict=timeout_on_predict,
+        timeout_on_metrics=timeout_on_metrics,
         anchor_schedule=anchor_schedule,
         epoch_schedule=epoch_schedule,
         memory_limit_in_bytes=workflow_memory_limit * 1024**2,

@@ -16,6 +16,7 @@ class JsonBasedLCDBView(ABC):
     def load_data(
         self,
         csv=None,
+        df=None,
         repositories=None,
         campaigns=None,
         workflows=None,
@@ -26,7 +27,7 @@ class JsonBasedLCDBView(ABC):
         show_progress=False
     ):
         
-        if csv is None:
+        if csv is None and df is None:
             """
                 Retrieves rows that this view is interested in
             """
@@ -51,10 +52,13 @@ class JsonBasedLCDBView(ABC):
                         dfs.append(df)
             self.df = pd.concat(dfs, axis=0) if len(dfs) > 1 else dfs[0] if dfs else None
         else:
-            self.df = pd.read_csv(csv)
-            for key, processor in self.processors.items():
-                self.df[key] = self.df.apply(processor, axis=1)
-            self.df = self.filter_results(self.df)
+            if df is not None:
+                self.df = df
+            else:
+                self.df = pd.read_csv(csv)
+                for key, processor in self.processors.items():
+                    self.df[key] = self.df.apply(processor, axis=1)
+                self.df = self.filter_results(self.df)
     
     def save_data(self, filename):
         df_c = self.df.copy()

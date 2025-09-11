@@ -18,12 +18,14 @@ def train_valid_test_split(
     valid_seed,
     test_prop=0.1,
     valid_prop=0.1,
+    max_validation_fold_size=10**4,
+    max_test_fold_size=10**4,
     stratify=True,
 ):
     X_learn, X_test, y_learn, y_test = sklearn.model_selection.train_test_split(
         X,
         y,
-        test_size=test_prop,
+        test_size=min(max_test_fold_size, int(X.shape[0] * test_prop)),
         random_state=test_seed,
         stratify=y if stratify else None,
         shuffle=True,
@@ -31,7 +33,7 @@ def train_valid_test_split(
     X_train, X_valid, y_train, y_valid = sklearn.model_selection.train_test_split(
         X_learn,
         y_learn,
-        train_size=int(X.shape[0] * (1 - test_prop - valid_prop)),
+        test_size=min(max_validation_fold_size, int(X.shape[0] * test_prop + valid_prop)),
         random_state=valid_seed,
         stratify=y_learn if stratify else None,
         shuffle=True,  # TODO: check

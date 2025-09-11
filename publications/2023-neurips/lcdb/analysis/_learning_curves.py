@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+import json
 
 
 class LearningCurve:
@@ -121,7 +122,34 @@ class LearningCurve:
                 workflow_seeds=self.workflow_seeds,
                 anchors_size=anchors_size
             )
-
+        
+    def to_dict(self):
+        return {
+            "workflow": self.workflow,
+            "hp_config": self.hp_config,
+            "openmlid": self.openmlid,
+            "values": self.values,
+            "metrics": self.metrics,
+            "fold_names": self.fold_names,
+            "test_seeds": self.test_seeds,
+            "val_seeds": self.val_seeds,
+            "workflow_seeds": self.workflow_seeds,
+            "anchors_size": self.anchors_size
+        }
+    
+    def to_json(self):
+        d = self.to_dict()
+        d["values"] = d["values"].tolist()
+        return json.dumps(d)
+    
+    @classmethod
+    def from_dict(cls, d):
+        d = d.copy()
+        return cls(**d)
+    
+    @classmethod
+    def from_json(cls, d):
+        return cls.from_dict(json.loads(d))
 
 class LearningCurveGroup:
 

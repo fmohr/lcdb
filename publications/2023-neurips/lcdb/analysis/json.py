@@ -143,10 +143,61 @@ class QueryPreprocessorResults(JMESExpressionQuery):
         )
 
 
-class QueryFittimes(JMESExpressionQuery):
+class QueryFitTimes(JMESExpressionQuery):
     def __init__(self):
         super().__init__(
             f"children[? tag == 'build_curves'] | [0]"  
-            f".children[? tag == 'anchor'] | [*]"  
-            f".children[? tag == 'fit'] | [*][0]" 
+            f".children[? tag == 'anchor'] | [*]"
+            f".children[? tag == 'fit'] | [*][0]"
+            f".[tag, timestamp_start, timestamp_stop]"
+        )
+
+class QueryTransformTimes(JMESExpressionQuery):
+    def __init__(self):
+        super().__init__(
+            f"children[? tag == 'build_curves'] | [0]"  
+            f".children[? tag == 'anchor'] | [*]"
+            f".children[? tag == 'fit'] | [*][0]"
+            f".children | [*][*]"
+            f".[tag, timestamp_start, timestamp_stop]"
+        )
+
+class QueryPredictTimes(JMESExpressionQuery):
+    def __init__(self):
+        super().__init__(
+            f"children[? tag == 'build_curves'] | [0]"  
+            f".children[? tag == 'anchor'] | [*]"
+            f".children[? tag == 'get_predictions'] | [*][0]"
+            f".[tag, timestamp_start, timestamp_stop]"
+        )
+
+class QueryPredictTimesFoldWise(JMESExpressionQuery):
+    def __init__(self):
+        super().__init__(
+            f"children[? tag == 'build_curves'] | [0]"  
+            f".children[? tag == 'anchor'] | [*]"
+            f".children[? tag == 'get_predictions'] | [*][0]"
+            f".children | [*][*]"
+            f".[tag, timestamp_start, timestamp_stop]"
+        )
+
+
+class QueryMetricTimes(JMESExpressionQuery):
+    def __init__(self):
+        super().__init__(
+            f"children[? tag == 'build_curves'] | [0]"  
+            f".children[? tag == 'anchor'] | [*]"
+            f".children[? tag == 'metrics'] | [*][0]"
+            f".[tag, timestamp_start, timestamp_stop]"
+        )
+
+class QueryMetricTimesFoldWise(JMESExpressionQuery):
+    def __init__(self, metric):
+        super().__init__(
+            f"children[? tag == 'build_curves'] | [0]"  
+            f".children[? tag == 'anchor'] | [*]"
+            f".children[? tag == 'metrics'] | [*][0]"
+            f".children | [*][*]"
+            f".children[? tag == '{metric}'] | [*][*][0]"
+            f".[tag, timestamp_start, timestamp_stop]"
         )

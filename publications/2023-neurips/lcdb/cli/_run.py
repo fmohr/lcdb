@@ -108,6 +108,20 @@ def add_subparser(subparsers):
         help="Timeout in seconds for the fit method. Defaults to -1 for unlimited time.",
     )
     subparser.add_argument(
+        "--timeout-on-predict",
+        type=int,
+        default=60,
+        required=False,
+        help="Timeout in seconds for the predict method. Defaults to -1 for unlimited time.",
+    )
+    subparser.add_argument(
+        "--timeout-on-metrics",
+        type=int,
+        default=60,
+        required=False,
+        help="Timeout in seconds for the metric computation method. Defaults to -1 for unlimited time.",
+    )
+    subparser.add_argument(
         "-d",
         "--log-dir",
         type=str,
@@ -233,6 +247,8 @@ def run_learning_workflow_from_deephyper(
         valid_prop: float = 0.1,
         test_prop: float = 0.1,
         timeout_on_fit=-1,
+        timeout_on_predict=-1,
+        timeout_on_metrics=-1,
         known_categories: bool = True,
         raise_errors: bool = False,
         raise_exception_on_unsuitable_preprocessor: bool = True,
@@ -326,6 +342,8 @@ def run_learning_workflow_from_deephyper(
         valid_prop=valid_prop,
         test_prop=test_prop,
         timeout_on_fit=timeout_on_fit,
+        timeout_on_predict=timeout_on_predict,
+        timeout_on_metrics=timeout_on_metrics,
         known_categories=known_categories,
         raise_errors=raise_errors,
         raise_exception_on_unsuitable_preprocessor=raise_exception_on_unsuitable_preprocessor,

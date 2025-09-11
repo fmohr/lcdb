@@ -40,6 +40,8 @@ def run_learning_workflow(
     valid_prop: float = 0.1,
     test_prop: float = 0.1,
     timeout_on_fit=-1,
+    timeout_on_predict=-1,
+    timeout_on_metrics=-1,
     known_categories: bool = True,
     raise_errors: bool = False,
     raise_exception_on_unsuitable_preprocessor: bool = True,
@@ -154,6 +156,8 @@ def run_learning_workflow(
         test_prop=test_prop,
         valid_prop=valid_prop,
         timeout_on_fit=timeout_on_fit,
+        timeout_on_predict=timeout_on_predict,
+        timeout_on_metrics=timeout_on_metrics,
         known_categories=known_categories,
         stratify=stratify,
         raise_errors=raise_errors,
@@ -209,6 +213,8 @@ class LearningCurveBuilder:
         stratify=True,
         monotonic=False,
         timeout_on_fit=-1,
+        timeout_on_predict=-1,
+        timeout_on_metrics=-1,
         known_categories: bool = True,
         raise_errors: bool = False,
         anchor_schedule: str = "power",
@@ -255,6 +261,8 @@ class LearningCurveBuilder:
         self.test_seed = test_seed
         self.monotonic = monotonic
         self.timeout_on_fit = timeout_on_fit
+        self.timeout_on_predict = timeout_on_predict
+        self.timeout_on_metrics = timeout_on_metrics
         self.raise_errors = raise_errors
         self.anchors = get_schedule(
             name=anchor_schedule, max_anchor=len(self.X_train)
@@ -423,6 +431,7 @@ class LearningCurveBuilder:
                 f"Unequal number of labels in train data/validation/test data: {len(np.unique(self.y_train_at_anchor))}/{len(np.unique(self.y_valid))}/{len(np.unique(self.y_test))}"
             )
 
+        # apply timeout PER anchor (timeout is not the overall timeout for building the curve but just on each anchor you cannot use more than this amount of time)
         if self.timeout_on_fit > 0:
             self.workflow.fit = functools.partial(
                 terminate_on_timeout, self.timeout_on_fit, self.workflow.fit
@@ -445,12 +454,28 @@ class LearningCurveBuilder:
         )
 
     def compute_metrics_for_workflow(self):
-        self.logger.info("Starting computation for predictions and scoring functions...")
-        predictions, labels = self.get_predictions()
+        self.logger.info(
+            f"Starting computation for predictions and scoring functions. "
+            f"Timeout for predictions is {self.timeout_on_predict}, timeout for metrics is {self.timeout_on_metrics}..."
+        )
+        if self.timeout_on_predict > 0:
+            get_predictions_t = functools.partial(
+                terminate_on_timeout, self.timeout_on_predict, self.get_predictions
+            )
+        else:
+            get_predictions_t = self.get_predictions
+        predictions, labels = get_predictions_t()
         self.labels_as_used_by_workflow = labels
-        out = self.score_predictions(**predictions)
+        if self.timeout_on_metrics > 0:
+            score_predictions = functools.partial(
+                terminate_on_timeout, self.timeout_on_metrics, self.score_predictions
+            )
+        else:
+            score_predictions = self.score_predictions
+        out = score_predictions(**predictions)
         self.logger.info("Finished computation for predictions and scoring functions...")
         return out
+        
 
     def get_predictions(self):
         self.logger.info(f"Starting prediction computation.")
@@ -458,7 +483,6 @@ class LearningCurveBuilder:
         labels = (
             self.workflow.infos["classes_overall"] if self.is_classification else None
         )
-
         with (self.timer.time("get_predictions")):
             for X_split, label_split in [
                 (self.X_train_at_anchor, "train"),
