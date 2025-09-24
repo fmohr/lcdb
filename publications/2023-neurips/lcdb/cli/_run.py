@@ -630,8 +630,8 @@ def run_experiment(
 
             # Set the search algorithm
             search = CBO(
-                problem,
-                evaluator,
+                problem=problem,
+                evaluator=evaluator,
                 log_dir=log_dir,
                 initial_points=[config for i, config in enumerate(initial_points) if i not in covered_indices],
                 surrogate_model="DUMMY",
@@ -646,7 +646,7 @@ def run_experiment(
                 logger.info("Disabling timeout")
                 timeout = None
             logger.info(f"Starting search with {max_evals} evaluations and timeout {timeout}.")
-            df_results_new = search.search(max_evals, timeout=timeout, max_evals_strict=True)
+            df_results_new = search.search(max_evals=max_evals, timeout=timeout, max_evals_strict=True)
             if num_previous_results > 0:
                 df_results = pd.concat([pd.DataFrame(list_of_previous_results), df_results_new])
             else:
