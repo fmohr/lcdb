@@ -15,8 +15,8 @@ class MajorityWorkflow(BaseWorkflow):
     # Static Attribute
     _config_space = CONFIG_SPACE
 
-    def __init__(self, timer=None, **kwargs):
-        super().__init__(timer, **kwargs)
+    def __init__(self, timer=None, n_jobs=None, **kwargs):
+        super().__init__(timer=timer, **kwargs)
 
         self.learner = DummyClassifier(
             strategy="prior",

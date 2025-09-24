@@ -155,6 +155,12 @@ def add_subparser(subparsers):
         " If 'power', you can also specify 'power-<base>-<power>-<delay>' to be more specific. Default is 2-0.5-7",
     )
     subparser.add_argument(
+        "--ncpus",
+        default=1,
+        type=int,
+        help="Number of CPUs available to fit the workflow.",
+    )
+    subparser.add_argument(
         "--suppress-json-output",
         action="store_true",
         default=False,
@@ -190,7 +196,8 @@ def main(
     anchor_schedule,
     epoch_schedule,
     no_exception_on_unsuitable_preprocessor,
-    suppress_json_output
+    suppress_json_output,
+    ncpus,
 ):
 
     # define stream handler
@@ -256,7 +263,8 @@ def main(
         epoch_schedule=epoch_schedule,
         memory_limit_in_bytes=workflow_memory_limit * 1024**2,
         logger=logger,
-        raise_exception_on_unsuitable_preprocessor=not no_exception_on_unsuitable_preprocessor
+        raise_exception_on_unsuitable_preprocessor=not no_exception_on_unsuitable_preprocessor,
+        n_jobs=ncpus
     )
 
     # adding these results is important to avoid that the field is missing if the config is killed

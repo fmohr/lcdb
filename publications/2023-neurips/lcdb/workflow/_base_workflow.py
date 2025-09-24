@@ -13,7 +13,7 @@ NP_ARRAY = np.ndarray
 
 class BaseWorkflow(abc.ABC):
 
-    def __init__(self, timer=None, logger=None, random_state=None, memory_limit_in_bytes=None) -> None:
+    def __init__(self, n_jobs=1, timer=None, logger=None, random_state=None, memory_limit_in_bytes=None) -> None:
         super().__init__()
         if timer is None:
             self.timer = Timer()
@@ -24,6 +24,11 @@ class BaseWorkflow(abc.ABC):
         
         # set memory limit
         self.memory_limit_in_bytes = memory_limit_in_bytes
+        self.n_jobs = n_jobs
+        if not self.is_parallelizable() and n_jobs > 1:
+            logger.warning(
+                f"Workflow {self.__class__.__name__} is not parallelizable but n_jobs was set to {n_jobs}!"
+            )
 
         # generate warning if the randomness is not seeded
         if self.__class__.is_randomizable() and random_state is None and logger is not None:
@@ -124,6 +129,10 @@ class BaseWorkflow(abc.ABC):
     @abc.abstractmethod
     def is_randomizable(cls):
         pass
+
+    @classmethod
+    def is_parallelizable(cls):
+        return False
 
     @abc.abstractmethod
     def _fit(self, X, y, metadata, *args, **kwargs) -> "BaseWorkflow":

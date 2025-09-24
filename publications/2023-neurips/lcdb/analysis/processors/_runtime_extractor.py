@@ -85,7 +85,7 @@ class RuntimeExtractor:
             }
 
             # compute actual learn time (fit - transformation)
-            if "transform"
+            #if "transform"
             runtimes["summary"]["learn"] = np.round(runtimes["summary"]["fit"] - (runtimes["summary"]["transform_train"] + runtimes["summary"]["transform_valid"] + runtimes["summary"]["transform_test"]), 6)
 
             # return dictionary with runtimes

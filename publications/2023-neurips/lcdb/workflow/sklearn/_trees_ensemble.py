@@ -101,6 +101,7 @@ class TreesEnsembleWorkflow(SklearnWorkflow):
                 ccp_alpha=ccp_alpha,
                 max_samples=max_samples,
                 random_state=kwargs["random_state"] if "random_state" in kwargs else None,
+                n_jobs=kwargs["n_jobs"] if "n_jobs" in kwargs else 1,
             )
         elif splitter == "random":
             learner = ExtraTreesClassifier(
@@ -116,6 +117,7 @@ class TreesEnsembleWorkflow(SklearnWorkflow):
                 ccp_alpha=ccp_alpha,
                 max_samples=max_samples,
                 random_state=kwargs["random_state"] if "random_state" in kwargs else None,
+                n_jobs=kwargs["n_jobs"] if "n_jobs" in kwargs else 1
             )
         else:
             raise ValueError(
@@ -145,7 +147,7 @@ class TreesEnsembleWorkflow(SklearnWorkflow):
         t_inner = time.time()  # record inner time to manage time consumption inside this function
 
         # first train full bagging ensemble. This is because training them iteratively is highly inefficient in sklearn
-        self.logger.info(f"Training {self.max_n_estimators} trees.")
+        self.logger.info(f"Training {self.max_n_estimators} trees using {self.n_jobs} CPU(s) in parallel.")
         try:
             ts_train_start = time.time()
             self.learner.set_params(n_estimators=self.max_n_estimators)
@@ -157,8 +159,9 @@ class TreesEnsembleWorkflow(SklearnWorkflow):
             self.logger.exception(e)
             raise
         total_training_time = ts_train_stop - ts_train_start
-        avg_fit_time_per_learner = total_training_time / self.learner.n_estimators
-        self.logger.info(f"Trained {self.max_n_estimators} trees in {total_training_time}s.")
+        total_training_time_sequential = total_training_time * self.n_jobs
+        avg_fit_time_per_learner = total_training_time_sequential / self.learner.n_estimators
+        self.logger.info(f"Trained {self.max_n_estimators} trees in {total_training_time}s ({total_training_time_sequential}s when unserialized).")
 
         # compute metrics
         data = dict(
@@ -190,7 +193,10 @@ class TreesEnsembleWorkflow(SklearnWorkflow):
         )
 
         # now compute metrics for partial forest sizes (and simulate the time for training)
-        self.logger.info("Computing iteration-wise curve of forest (including out-of-bag fold)")
+        self.logger.info(
+            "Computing iteration-wise curve of forest "
+            + ("(including OOB fold)" if self.learner.bootstrap else "(without OOB fold since bootstrapping is disabled)")
+        )
         y_pred_proba_forest_per_fold = {k: None for k in data.keys()}
         y_pred_proba_forest_oob = np.zeros((n_samples, len(np.unique(y))))
         oob_counters = np.zeros(y_pred_proba_forest_oob.shape)

@@ -206,7 +206,12 @@ def add_subparser(subparsers):
         type=str,
         help="The type of schedule for anchors (over learning iterations of the workflow). Value in ['linear', 'last', 'power'].",
     )
-
+    subparser.add_argument(
+        "--ncpus",
+        default=1,
+        type=int,
+        help="Number of CPUs available to fit the workflow.",
+    )
     subparser.add_argument(
         "--no-exception-on-unsuitable-preprocessor",
         action="store_true",
@@ -256,6 +261,7 @@ def run_learning_workflow_from_deephyper(
         epoch_schedule: str = "power",
         memory_limit_in_bytes: int = 32 * (1024**3),  # 32 GB by default
         logger=None,
+        n_jobs=1,
 ):
     """This function trains the workflow on a dataset and returns performance metrics.
 
@@ -349,7 +355,8 @@ def run_learning_workflow_from_deephyper(
         raise_exception_on_unsuitable_preprocessor=raise_exception_on_unsuitable_preprocessor,
         anchor_schedule=anchor_schedule,
         epoch_schedule=epoch_schedule,
-        memory_limit_in_bytes=memory_limit_in_bytes
+        memory_limit_in_bytes=memory_limit_in_bytes,
+        n_jobs=n_jobs
     )
     t_end = time()
 
@@ -392,6 +399,8 @@ def run_experiment(
     valid_prop,
     test_prop,
     timeout_on_fit,
+    timeout_on_predict,
+    timeout_on_metrics,
     status_dir,
     log_dir,
     max_evals,
@@ -405,6 +414,7 @@ def run_experiment(
     anchor_schedule,
     epoch_schedule,
     workflow_memory_limit,
+    ncpus,
     no_exception_on_unsuitable_preprocessor
 ):
 
@@ -554,18 +564,20 @@ def run_experiment(
         "valid_prop": valid_prop,
         "test_prop": test_prop,
         "timeout_on_fit": timeout_on_fit,
+        "timeout_on_predict": timeout_on_predict,
+        "timeout_on_metrics": timeout_on_metrics,
         "anchor_schedule": anchor_schedule,
         "epoch_schedule": epoch_schedule,
         "logger": logger,
         "memory_limit_in_bytes": workflow_memory_limit * 1024**2,
+        "n_jobs": ncpus,
         "raise_exception_on_unsuitable_preprocessor": not no_exception_on_unsuitable_preprocessor
     }
 
     method_kwargs["run_function_kwargs"] = run_function_kwargs
-    method_kwargs["callbacks"] = [JsonSanityCheckCallback()]
+    method_kwargs["callbacks"] =[JsonSanityCheckCallback()]
     if verbose:
         method_kwargs["callbacks"].append(TqdmCallback())
-
 
     method_kwargs["storage"] = MemoryStorage()
     print("method_kwargs", method_kwargs)

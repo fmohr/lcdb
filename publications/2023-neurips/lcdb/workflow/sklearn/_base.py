@@ -28,6 +28,7 @@ class SklearnWorkflow(PreprocessedWorkflow):
         timer=None,
         logger=None,
         random_state=None,
+        n_jobs=1,
         raise_exception_on_unsuitable_preprocessor=True,
         memory_limit_in_bytes=None,
         **kwargs,
@@ -40,6 +41,7 @@ class SklearnWorkflow(PreprocessedWorkflow):
             )
         super().__init__(
             timer=timer,
+            n_jobs=n_jobs,
             logger=logger,
             random_state=random_state,
             raise_exception_on_unsuitable_preprocessor=raise_exception_on_unsuitable_preprocessor,

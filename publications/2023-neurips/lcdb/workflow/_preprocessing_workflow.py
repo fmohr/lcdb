@@ -166,6 +166,7 @@ class PreprocessedWorkflow(BaseWorkflow, ABC):
         timer=None,
         logger=None,
         random_state=None,
+        n_jobs=1,
         memory_limit_in_bytes=None,
         kernel_mapper_kernel="rbf",
         kernel_mapper_degree=2,
@@ -179,7 +180,13 @@ class PreprocessedWorkflow(BaseWorkflow, ABC):
         raise_exception_on_unsuitable_preprocessor=True,
         **kwargs,
     ):
-        super().__init__(timer=timer, logger=logger, random_state=random_state, memory_limit_in_bytes=memory_limit_in_bytes)
+        super().__init__(
+            timer=timer,
+            logger=logger,
+            random_state=random_state,
+            memory_limit_in_bytes=memory_limit_in_bytes,
+            n_jobs=n_jobs
+        )
 
         # extract preprocessing hyperparameters
         self.pp_kws = kwargs

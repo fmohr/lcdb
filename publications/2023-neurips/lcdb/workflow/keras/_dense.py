@@ -322,6 +322,7 @@ class DenseNNWorkflow(PreprocessedWorkflow):
         logger=None,
         raise_exception_on_unsuitable_preprocessor=True,
         memory_limit_in_bytes=None,
+        n_jobs=None, # this will be ignored since this workflow is not parallelizable
         **kwargs,
     ):
 

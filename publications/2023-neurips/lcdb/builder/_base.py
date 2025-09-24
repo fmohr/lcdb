@@ -49,6 +49,7 @@ def run_learning_workflow(
     epoch_schedule: str = "power",
     max_sample_anchor: int = None,
     memory_limit_in_bytes: int = 32 * 1024**3,  # 32 GB by default
+    n_jobs: int = 1,
     timer=None,
     logger=None,
 ):
@@ -77,8 +78,10 @@ def run_learning_workflow(
     if logger is None:
         logger = logging.getLogger("LCDB")
     logger.info(
-        f"Running workflow {workflow_class} with parameters: {json.dumps(workflow_parameters)}. "
-        f"Memory limit is {memory_limit_in_bytes // 1024**2}MB"
+        f"Starting curve construction for workflow {workflow_class}."
+        f"\n\tParameters: {json.dumps(workflow_parameters)}"
+        f"\n\tMemory limit: {memory_limit_in_bytes // 1024**2}MB"
+        f"\n\tNumber of CPUs for training: {n_jobs}"
     )
 
     if timer is None:
@@ -119,6 +122,7 @@ def run_learning_workflow(
 
     workflow_kwargs["logger"] = logger
     workflow_kwargs["memory_limit_in_bytes"] = memory_limit_in_bytes
+    workflow_kwargs["n_jobs"] = n_jobs
 
     logger.info("Preparing factory ...")
     def workflow_factory():

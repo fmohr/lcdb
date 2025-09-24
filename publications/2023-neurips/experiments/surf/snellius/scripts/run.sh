@@ -57,7 +57,7 @@ for LCDB_VALID_SEED in "${VAL_SEEDS[@]}"; do
             # -N --nodes: number of nodes
             # therefore the number of tasks/node is n/N
             srun -n ${NTOTRANKS} -N ${SLURM_JOB_NUM_NODES:-1} \
-                    --cpus-per-task 1 \
+                    --cpus-per-task $CPUS_PER_CONFIG\
                     --threads-per-core 1 \
                     --exclusive \
                     --output=${output_path}/logs/${WORKFLOW_NAME}-${LCDB_WORKFLOW_MEMORY_LIMIT_GB}/out/openml_id-${LCDB_OPENML_ID}_workflow-${LCDB_WORKFLOW_SEED}_val-${LCDB_VALID_SEED}_test-${LCDB_TEST_SEED}.log \
@@ -71,14 +71,17 @@ for LCDB_VALID_SEED in "${VAL_SEEDS[@]}"; do
                     --timeout $timeout \
                     --initial-configs $LCDB_INITIAL_CONFIGS \
                     --timeout-on-fit 300 \
+                    --timeout-on-predict 60 \
+                    --timeout-on-metrics 60 \
                     --workflow-seed $LCDB_WORKFLOW_SEED \
                     --workflow-memory-limit $LCDB_WORKFLOW_MEMORY_LIMIT \
+                    --ncpus $CPUS_PER_CONFIG \
                     --valid-seed $LCDB_VALID_SEED \
                     --no-exception-on-unsuitable-preprocessor \
                     --test-seed $LCDB_TEST_SEED \
-                    --log-level debug \
+                    --log-level info \
                     --evaluator mpicomm \
-                    --epoch-schedule=power-2-0.25-0 
+                    --epoch-schedule=power-2-0.25-0
                 
             gzip --best results.csv 
         fi

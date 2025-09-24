@@ -66,6 +66,15 @@ DESIRED_CORES=$((TOTAL_MEMORY_GB / DESIRED_MEMORY_GB))
 
 # check that the number of cores does not exceed the available cores (CPUS_PER_TASK)
 export DESIRED_CORES=$((DESIRED_CORES > CPUS_PER_TASK ? CPUS_PER_TASK : DESIRED_CORES))
+export CPUS_PER_TASK
+CPUS_PER_CONFIG=$((CPUS_PER_TASK / DESIRED_CORES))
+if (( CPUS_PER_CONFIG < 1 )); then
+    CPUS_PER_CONFIG=1
+fi
+if (( CPUS_PER_CONFIG > 16 )); then
+    CPUS_PER_CONFIG=16
+fi
+export CPUS_PER_CONFIG
 
 # Memory per core based on the desired memory and number of cores
 MEMORY_PER_CORE_GB=$((TOTAL_MEMORY_GB / DESIRED_CORES))
