@@ -13,8 +13,9 @@ mapping=(
     ["randomforest"]="lcdb.workflow.sklearn.RandomForestWorkflow"
     ["knn"]="lcdb.workflow.sklearn.KNNWorkflow"
     ["xgboost"]="lcdb.workflow.xgboost.XGBoostWorkflow"
+    ["liblinear"]="lcdb.workflow.sklearn.LibLinearWorkflow"
+    ["densenn"]="lcdb.workflow.keras.DenseNNWorkflow"
     ["treesensemble"]="lcdb.workflow.sklearn.TreesEnsembleWorkflow"
-    ["liblinear"]="lcdb.workflow.sklearn.LibLinearWorkflow"  # Ensure this line exists
 )
 
 source "$path_to_snellius/scripts/config.sh"
@@ -53,7 +54,7 @@ echo "Env path $ENV_PATH"
 
 # Submit the job with the list of result files for this dataset
 sbatch --export=ALL --job-name="campaigns_${WORKFLOW_NAME}" \
-    --output=${output_path}/logs/${WORKFLOW_NAME}-${LCDB_WORKFLOW_MEMORY_LIMIT_GB}/out/campaign.log \
-    --error=${output_path}/logs/${WORKFLOW_NAME}-${LCDB_WORKFLOW_MEMORY_LIMIT_GB}/err/campaign.err \
+    --output=${output_path}/logs-campaign/${WORKFLOW_NAME}-${LCDB_WORKFLOW_MEMORY_LIMIT_GB}/out/campaign.log \
+    --error=${output_path}/logs-campaign/${WORKFLOW_NAME}-${LCDB_WORKFLOW_MEMORY_LIMIT_GB}/err/campaign.err \
     --chdir=${output_path} \
     scripts/campaign.sh "${result_files[@]}"

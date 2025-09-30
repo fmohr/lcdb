@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --partition=genoa
-#SBATCH --time=48:00:00
+#SBATCH --time=2:00:00
 #SBATCH --threads-per-core=1
 
 source ~/.bashrc

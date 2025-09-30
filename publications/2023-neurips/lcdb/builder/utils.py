@@ -16,6 +16,11 @@ from scipy.special import softmax
 
 import traceback
 
+class AnticipatedMemoryError(Exception):
+
+    def __init__(self, msg):
+        super().__init__(msg)
+
 def standardize_run_function_output(
     output: Union[str, float, tuple, list, dict],
 ) -> dict:

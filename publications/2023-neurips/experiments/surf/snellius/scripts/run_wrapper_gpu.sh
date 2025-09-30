@@ -1,12 +1,12 @@
 #!/bin/bash
 # set -xe
 source ~/.bashrc
-conda activate lcdb
+conda activate lcdbgpu
 
 export SIMPLE_GPU_MODE=true  # Set to false to use normal gpu_mig mode
 
 export PARTITION_CREATE="rome"
-export PARTITION_RUN="genoa"  # or "genoa" if you want CPU jobs "gpu_mig"
+export PARTITION_RUN="gpu_mig"  # or "genoa" if you want CPU jobs "gpu_mig"
 
 export path_to_snellius=$(pwd)
 export output_path="/gpfs/nvme1/0/prjs1064/LCDB2"
@@ -144,8 +144,10 @@ for BIN in "${UNIQUE_BINS[@]}"; do
     echo "Submitted create.sh (bin ${BIN} GB) with Job ID: $create_job_id"
 
     # ---------- RUN ----------
-    script="$path_to_snellius/scripts/run.sh"
+    script="$path_to_snellius/scripts/run_gpu.sh"
     jobname="${CAMPAIGN_NAME}-run-wf_${WORKFLOW_NAME}-bin_${BIN_TAG}"
+
+    echo $LCDB_WORKFLOW_MEMORY_LIMIT
 
     if [ "$PARTITION_RUN" == "gpu_mig" ]; then
         if [ "$SIMPLE_GPU_MODE" == "true" ]; then
@@ -158,7 +160,7 @@ for BIN in "${UNIQUE_BINS[@]}"; do
                 --ntasks=1 \
                 --cpus-per-task=$CPUS_PER_TASK \
                 --gpus-per-task=$GPUS_PER_TASK \
-                --mem=60G \
+                # --mem-per-gpu=60G \
                 --dependency=afterok:$create_job_id \
                 --job-name="${jobname}_simple" \
                 --array=0-$(($TOTAL_IDS - 1)) \

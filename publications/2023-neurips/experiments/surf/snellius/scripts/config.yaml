@@ -1,7 +1,7 @@
-workflow_name: xgboost
-campaign_name: probing-1k
-desired_memory_GB: 74
-config_num: 1000
+workflow_name: densenn
+campaign_name: pre-config-100-new
+desired_memory_GB: 67
+config_num: 100
 workflow_seed: 42
 val_seeds:
   - 0
