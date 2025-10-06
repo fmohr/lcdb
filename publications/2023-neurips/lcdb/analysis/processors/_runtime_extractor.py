@@ -13,6 +13,8 @@ from lcdb.analysis.json import (
 from lcdb.analysis.score import balanced_accuracy_from_confusion_matrix
 from lcdb.analysis._learning_curves import LearningCurve
 
+import time
+
 
 class RuntimeExtractor:
 
@@ -34,6 +36,7 @@ class RuntimeExtractor:
 
         # determine anchors and whether this is an iteration curve
         try:
+            t_start = time.time()
             anchors = QueryAnchorValues()(lc_dict)
             runtimes = {
                 a: {}
@@ -85,10 +88,10 @@ class RuntimeExtractor:
             }
 
             # compute actual learn time (fit - transformation)
-            #if "transform"
-            runtimes["summary"]["learn"] = np.round(runtimes["summary"]["fit"] - (runtimes["summary"]["transform_train"] + runtimes["summary"]["transform_valid"] + runtimes["summary"]["transform_test"]), 6)
+            runtimes["summary"]["learn"] = np.round(runtimes["summary"].get("fit", 0) - (runtimes["summary"].get("transform_train", 0) + runtimes["summary"].get("transform_valid", 0) + runtimes["summary"].get("transform_test", 0)), 6)
 
             # return dictionary with runtimes
+            print("Runtime extraction took", np.round(time.time() - t_start, 2), "s")
             return runtimes
             
 

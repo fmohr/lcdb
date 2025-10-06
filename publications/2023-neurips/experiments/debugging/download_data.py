@@ -1,5 +1,6 @@
+import logging
 from lcdb.db import LCDB
-from lcdb.analysis import LearningCurveExtractor
+from lcdb.analysis import LearningCurveExtractor, RuntimeExtractor
 import re
 import json
 
@@ -8,6 +9,8 @@ from pathlib import Path
 from tqdm import tqdm
 
 import pandas as pd
+
+logging.basicConfig(level=logging.INFO)
 
 OUTPUT_DIR = "./experiments/debugging/data"
 
@@ -87,9 +90,10 @@ for workflow_class in [
             test_seeds=[0],
             return_generator=True,
             processors={
-                "learning_curve": LearningCurveExtractor(metrics=["error_rate"]),
-                "payload": compute_payload,
-                "anticipated_memory": extract_anticipated_memory,
+                #"learning_curve": LearningCurveExtractor(metrics=["error_rate"]),
+                #"payload": compute_payload,
+                "runtimes": RuntimeExtractor(),
+                #"anticipated_memory": extract_anticipated_memory,
             },
             show_progress=True
         )
@@ -99,6 +103,10 @@ for workflow_class in [
         for chunk_df in tqdm(gen):
             dfs.append(chunk_df)
         df = pd.concat(dfs)
+
+        # serialize learning curves
+        #df["learning_curve"] = df["learning_curve"].apply(lambda lc: lc.to_json() if lc is not None else None)
+        df["runtimes"] = df["runtimes"].apply(lambda c: json.dumps(c) if c is not None else None)
 
         # save to CSV
         df.to_csv(file, index=False)
