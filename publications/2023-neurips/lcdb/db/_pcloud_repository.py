@@ -12,6 +12,7 @@ import pandas as pd
 import numpy as np
 
 from lcdb.db._repository import Repository
+from lcdb.builder.utils import convert_deephyper_result_row_to_dict
 
 
 import requests
@@ -414,8 +415,9 @@ class PCloudRepository(Repository):
                         df["m:workflow"] = file_desc['workflow']
                         df["has_result"] = [isinstance(e, dict) and e.get("tag") == "run" for e in df["m:json"]]
                     df["m:json"] = [j if type(j) == str else None for j in df["m:json"]]
-                    total_entries += len(df)
-                    yield df.to_dict(orient="records")
+                    rows = [convert_deephyper_result_row_to_dict(row) for _, row in df.iterrows()]
+                    total_entries += len(rows)
+                    yield rows
                         
                 except Exception as e:
                     is_parsing_error = isinstance(e, JSONDecodeError)

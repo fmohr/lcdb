@@ -325,33 +325,34 @@ def estimate_memory_consumption_for_dataset(shape, dtype=np.float64, unit="B"):
         raise ValueError(f"Unit must be 'B', 'KB', 'MB' or 'GB' but is {unit}")
     return memory_bytes
 
-def deephyper_results_to_jsonl(path_to_deephyper_results_csv: str, path_to_output_jsonl):
+def convert_deephyper_result_row_to_dict(row):
+    config = {}
+    remaining_fields = {}
+    for field, value in row.items():
+
+        # store nans as null
+        if type(value) == float and np.isnan(value):
+            value = None
+
+        if field.startswith('p:'):
+            config[field[2:]] = value
+        elif field == "m:json":
+            remaining_fields["results"] = value
+        elif field.startswith('m:'):
+            remaining_fields[field[2:]] = value
+        elif field not in ["job_id", "job_status", "objective"]:
+            remaining_fields[field] = value
+    row_to_write = {"config": config}
+    row_to_write.update(remaining_fields)
+    return row_to_write
+
+def deephyper_results_to_jsonl(path_to_deephyper_results_csv, path_to_output_jsonl):
 
     df = pd.read_csv(path_to_deephyper_results_csv)
 
     with jsonlines.open(path_to_output_jsonl, mode='w') as writer:
         for _, row in df.iterrows():
-            config = {}
-            remaining_fields = {}
-            for field, value in row.items():
-
-                # store nans as null
-                if type(value) == float and np.isnan(value):
-                    value = None
-
-                if field.startswith('p:'):
-                    config[field[2:]] = value
-                elif field == "m:json":
-                    remaining_fields["results"] = value
-                elif field.startswith('m:'):
-                    remaining_fields[field[2:]] = value
-                elif field not in ["job_id", "job_status", "objective"]:
-                    remaining_fields[field] = value
-            row_to_write = {"config": config}
-            row_to_write.update(remaining_fields)
-            del row_to_write["results"]
-            del row_to_write["config"]
-            writer.write(row_to_write)
+            writer.write(convert_deephyper_result_row_to_dict(row))
 
 
 class StatusFileManager:

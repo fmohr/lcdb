@@ -2,11 +2,7 @@ import json
 
 
 def get_cli_test_command(entry):
-    try:
-        openmlid = int(entry['m:openmlid'])
-    except:
-        openmlid = None
-
+    openmlid = int(entry['openmlid'])
     return (
         f"lcdb test"
         f" -i {openmlid}"

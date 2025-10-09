@@ -10,6 +10,8 @@ from lcdb.analysis.json import (
 from lcdb.analysis.score import balanced_accuracy_from_confusion_matrix
 from lcdb.analysis._learning_curves import LearningCurve
 
+DETAIL_KEY = "results"
+
 
 class LearningCurveExtractor:
 
@@ -51,10 +53,10 @@ class LearningCurveExtractor:
         """
             Computes the sample-wise learning curve for a specific metric for a set of configurations, possibly across workflows and datasets.
         """
-        if not row["has_result"]:
-            return None
+        if DETAIL_KEY not in row or row[DETAIL_KEY] is None or len(row[DETAIL_KEY]) == 0:
+            return {"learning_curve": None}
 
-        lc_dict = row["m:json"]
+        lc_dict = row[DETAIL_KEY]
 
         # determine anchors and whether this is an iteration curve
         try:
@@ -115,20 +117,20 @@ class LearningCurveExtractor:
                         values[i1, i2, 0, 0, 0] = sample_wise_curve
 
             lc_params = {
-                "workflow": row["m:workflow"],
-                "hp_config": {k: v for k, v in row.items() if k.startswith("p:")},
-                "openmlid": row["m:openmlid"],
+                "workflow": row["workflow"],
+                "hp_config": row["config"],
+                "openmlid": row["openmlid"],
                 "values": values,
                 "metrics": self.metrics,
                 "fold_names": self.folds,
-                "test_seeds": [row["m:test_seed"]],
-                "val_seeds": [row["m:valid_seed"]],
-                "workflow_seeds": [row["m:workflow_seed"]],
+                "test_seeds": [row["test_seed"]],
+                "val_seeds": [row["valid_seed"]],
+                "workflow_seeds": [row["workflow_seed"]],
                 "anchors_size": anchors_size,
             }
             if is_iteration_curve:
                 lc_params["anchors_iteration"] = anchors_iteration
-            return LearningCurve(**lc_params)
+            return {"learning_curve": LearningCurve(**lc_params)}
 
         except KeyboardInterrupt:
             raise

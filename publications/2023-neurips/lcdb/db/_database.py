@@ -12,6 +12,8 @@ import logging
 
 logger = logging.getLogger("lcdb")
 
+DETAIL_KEY = "results"
+
 
 class LCDB:
     """Used to represent the LCDB database.
@@ -143,7 +145,8 @@ class LCDB:
             workflow_seeds=None,
             test_seeds=None,
             validation_seeds=None,
-            parse_detail_json=True
+            parse_detail_json=True,
+            processors=None
     ):
         """
         Gets a dictionary or generator of result dataframes. In the case of a dictionary, there is one dataframe per workflow; these are not unified since different workflows have different hyperparameters. In the case of a generator, each returned dataframe is for a single workflow, but it may (and typically will) occur that several dataframes for the same workflow are returned (but with values for different datasets or different seeds). In other words, it can always be assumed that the workflows of the returned dataframes (either by a generator or contained in the dictionary) have a homogenous worklfow attribute.
@@ -186,6 +189,11 @@ class LCDB:
         if workflows is not None and isinstance(workflows, str):
             workflows = [workflows]
 
+        # check that processors come in a list
+        if processors is not None:
+            if type(processors) != list:
+                raise ValueError(f"processors must be None or list but are {type(processors)}")
+
         result_generators = []
         for repository in repositories:
             if repository.exists():
@@ -205,8 +213,13 @@ class LCDB:
                 for res in gen:
                     if parse_detail_json:
                         for row in res:
-                            if row["m:json"] is not None:
-                                row["m:json"] = json.loads(row["m:json"])
+                            if row[DETAIL_KEY] is not None:
+                                row[DETAIL_KEY] = json.loads(row[DETAIL_KEY])
+                    if processors is not None:
+                        for row in res:
+                            for processor in processors:
+                                row.update(processor(row))
+                        
                     yield res
 
         return CountAwareGenerator(sum([len(g) for g in result_generators]), generator())
