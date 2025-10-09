@@ -62,6 +62,11 @@ MAX_SAMPLE_ANCHOR = 512
 
 class TestBuildFunctionalities(unittest.TestCase):
 
+    def test_version(self):
+        from lcdb import LCDB
+        version = LCDB().get_version()
+        self.assertIsNotNone(version)
+
     @parameterized.expand(list(it.product([61], WORKFLOWS, VAL_SEEDS, TEST_SEEDS, WORKFLOW_SEEDS, [True, False])))
     def test_workflow_base_functionality_and_integrity(self, openmlid, workflow, val_seed, test_seed, workflow_seed, monotonic):
 

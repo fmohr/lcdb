@@ -1,5 +1,4 @@
 import importlib
-from time import time
 
 def get_workflow_class(workflow_class_as_str: str):
     """Import an attribute from a module given its path.

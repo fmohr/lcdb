@@ -11,7 +11,6 @@ import warnings
 from tqdm import tqdm
 
 from lcdb.data.split import train_valid_test_split
-from lcdb.workflow._util import get_workflow_class
 from .timer import Timer
 from .utils import (
     FunctionCallTimeoutError,
@@ -100,6 +99,7 @@ def run_learning_workflow(
 
     # Create and fit the workflow
     logger.info("Getting workflow class...")
+    from lcdb.workflow._util import get_workflow_class # lazy import to avoid cyclic dependencies
     WorkflowClass = get_workflow_class(workflow_class) if isinstance(workflow_class, str) else workflow_class
     logger.info(f"Preparing workflow kwargs ...")
     if workflow_parameters is not None and not isinstance(workflow_parameters, dict):
