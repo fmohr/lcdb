@@ -5,9 +5,6 @@ from lcdb.analysis.views._util import get_cli_test_command
 
 
 class TracebackExtractor:
-
-    def __init__(self):
-        self.rows = []
     
     def extract_error_message_from_traceback(self, traceback_str):
 
@@ -43,7 +40,7 @@ class TracebackExtractor:
                 "traceback": row["m:traceback"],
                 "cli_test_command": base_test_command
             })
-        return errors if errors else None
+        return {"traceback_summary": errors if errors else None}
 
 
 if __name__ == "__main__":

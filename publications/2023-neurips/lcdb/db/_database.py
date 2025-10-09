@@ -12,6 +12,8 @@ import logging
 
 logger = logging.getLogger("lcdb")
 
+DETAIL_KEY = "results"
+
 
 class LCDB:
     """Used to represent the LCDB database.
@@ -97,10 +99,10 @@ class LCDB:
     def get_version(cls):
 
         # first get path to lcdb package
-        path = pathlib.Path(__file__)
+        path = pathlib.Path(__file__).parent.parent
         import subprocess
 
-        # check whether this folder is tracked with gut
+        # check whether this folder is tracked with git
         try:
             output = subprocess.check_output(
                 ["git", "log", "-n", "1", "--pretty=format:%H", "--", str(path)],
@@ -109,7 +111,8 @@ class LCDB:
             return output.decode().strip()
 
         except subprocess.CalledProcessError:
-            return None
+            from lcdb import __version__
+            return __version__
 
     @property
     def repositories(self):
@@ -142,9 +145,8 @@ class LCDB:
             workflow_seeds=None,
             test_seeds=None,
             validation_seeds=None,
-            return_generator=True,
-            processors=None,
-            show_progress=False
+            parse_detail_json=True,
+            processors=None
     ):
         """
         Gets a dictionary or generator of result dataframes. In the case of a dictionary, there is one dataframe per workflow; these are not unified since different workflows have different hyperparameters. In the case of a generator, each returned dataframe is for a single workflow, but it may (and typically will) occur that several dataframes for the same workflow are returned (but with values for different datasets or different seeds). In other words, it can always be assumed that the workflows of the returned dataframes (either by a generator or contained in the dictionary) have a homogenous worklfow attribute.
@@ -187,6 +189,11 @@ class LCDB:
         if workflows is not None and isinstance(workflows, str):
             workflows = [workflows]
 
+        # check that processors come in a list
+        if processors is not None:
+            if type(processors) != list:
+                raise ValueError(f"processors must be None or list but are {type(processors)}")
+
         result_generators = []
         for repository in repositories:
             if repository.exists():
@@ -197,38 +204,25 @@ class LCDB:
                         openmlids=openmlids,
                         workflow_seeds=workflow_seeds,
                         test_seeds=test_seeds,
-                        validation_seeds=validation_seeds,
-                        processors=processors
+                        validation_seeds=validation_seeds
                     )
                 )
 
         def generator():
             for gen in result_generators:
                 for res in gen:
+                    if parse_detail_json:
+                        for row in res:
+                            if row[DETAIL_KEY] is not None:
+                                row[DETAIL_KEY] = json.loads(row[DETAIL_KEY])
+                    if processors is not None:
+                        for row in res:
+                            for processor in processors:
+                                row.update(processor(row))
+                        
                     yield res
 
-        gen = CountAwareGenerator(sum([len(g) for g in result_generators]), generator())
-
-        if return_generator:
-            return gen
-        else:
-            logger.info("Creating dataframe from stream.")
-            dfs_per_workflow = {}
-            cnt = 0
-            for df in tqdm(gen, disable=not show_progress):
-                cnt += 1
-                if df is None:
-                    logger.warning("Received empty result dataframe.")
-                    continue
-                else:
-                    workflow_class = df["m:workflow"].values[0]
-                    dfs_per_workflow[workflow_class] = df if workflow_class not in dfs_per_workflow else pd.concat([dfs_per_workflow[workflow_class], df])
-                    logger.debug(f"Added results from dataframe with {len(df)} entries. New length of dataframe for {workflow_class=} is {len(dfs_per_workflow[workflow_class])}")
-            logger.info(f"Preparing results based on {cnt} seen dataframes for {len(dfs_per_workflow)} different workflows.")
-            if workflows is not None and len(workflows) == 1:
-                return dfs_per_workflow[workflows[0]] if workflows[0] in dfs_per_workflow else None
-            else:
-                return dfs_per_workflow
+        return CountAwareGenerator(sum([len(g) for g in result_generators]), generator())
 
     def statistics(
             self,

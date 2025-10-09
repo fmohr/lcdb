@@ -8,19 +8,38 @@ import numpy as np
 class Debugger(JsonBasedLCDBView):
 
     def __init__(self):
-        super().__init__({
-            "traceback_summary": TracebackExtractor()
-        })
+        super().__init__([
+            TracebackExtractor(),
+            lambda row: {"payload": len(str(row["m:json"]) if "m:json" in row and row["m:json"] is not None else "")}
+        ])
     
-    def filter_results(self, df):
-        return df[df["traceback_summary"].notna()]
+    def filter_result(self, row):
+
+        # keep rows with a traceback
+        if row.get("traceback_summary", None) is not None:
+            return True
+        
+        # keep rows with a failure in the objective field
+        if row.get("objective", "F") == "F":
+            return True
+        
+        # keep rows without a JSON result
+        mjson = row.get("m:json", None)
+        if mjson is None:
+            return True
+
+        # if nothing strange was found, don't keep the row
+        return False
     
     def get_error_messages(self, openmlid=None):
         msgs = set()
-        df = self.df if openmlid is None else self.df[self.df["m:openmlid"] == openmlid]
-        for s in df["traceback_summary"]:
-            for error in s:
-                msgs.add(error["message"])
+        for row in self.rows:
+            if openmlid is not None and row.get("m:openmlid", None) != openmlid:
+                continue
+            s = row["traceback_summary"]
+            if s is not None:
+                for error in s:
+                    msgs.add(error["message"])
         return msgs
     
     #def get_occurrences_of_error_message(self, msg):

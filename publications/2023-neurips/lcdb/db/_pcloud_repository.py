@@ -12,6 +12,7 @@ import pandas as pd
 import numpy as np
 
 from lcdb.db._repository import Repository
+from lcdb.builder.utils import convert_deephyper_result_row_to_dict
 
 
 import requests
@@ -370,7 +371,6 @@ class PCloudRepository(Repository):
             workflow_seeds=None,
             test_seeds=None,
             validation_seeds=None,
-            processors=None,
             raise_errors=False,
             report_errors=True
     ):
@@ -384,9 +384,6 @@ class PCloudRepository(Repository):
         :param validation_seeds: iterable of dataset validation split seeds (integers) for which results are desired (None for all available)
         :return:
         """
-
-        if processors is not None and not isinstance(processors, dict):
-            raise ValueError(f"processors must be None or a dictionary with Callables as values.")
 
         # get all result files
         result_files = self.get_result_files(
@@ -408,13 +405,20 @@ class PCloudRepository(Repository):
  
                 try:
                     df = self.read_result_file(file_desc["fileid"])
-                    df["m:json"] = df["m:json"].apply(
-                        lambda s: json.loads(s)
-                        if s is not None and isinstance(s, str)
-                        else (None if type(s) == float and np.isnan(s) else s)
-                    )
-                    df["m:workflow"] = file_desc['workflow']
-                    df["has_result"] = [isinstance(e, dict) and e.get("tag") == "run" for e in df["m:json"]]
+                    
+                    if False:
+                        df["m:json"] = df["m:json"].apply(
+                            lambda s: json.loads(s)
+                            if s is not None and isinstance(s, str)
+                            else (None if type(s) == float and np.isnan(s) else s)
+                        )
+                        df["m:workflow"] = file_desc['workflow']
+                        df["has_result"] = [isinstance(e, dict) and e.get("tag") == "run" for e in df["m:json"]]
+                    df["m:json"] = [j if type(j) == str else None for j in df["m:json"]]
+                    rows = [convert_deephyper_result_row_to_dict(row) for _, row in df.iterrows()]
+                    total_entries += len(rows)
+                    yield rows
+                        
                 except Exception as e:
                     is_parsing_error = isinstance(e, JSONDecodeError)
                     if is_parsing_error:
@@ -435,13 +439,5 @@ class PCloudRepository(Repository):
                     elif report_errors:
                         print(error_msg)
                     df = None
-
-                if processors is not None:
-                    for name, fun in processors.items():
-                        df[name] = df.apply(fun, axis=1)  # apply the function to all rows in the dataframe
-                    df.drop(columns="m:json", inplace=True)
-
-                total_entries += len(df) if df is not None else 0
-                yield df
 
         return CountAwareGenerator(len(result_files), gen=gen_fun())

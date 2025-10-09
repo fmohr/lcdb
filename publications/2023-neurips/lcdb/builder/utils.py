@@ -1,4 +1,4 @@
-import importlib
+import jsonlines
 import pathlib
 import logging
 import multiprocessing
@@ -10,6 +10,7 @@ from concurrent.futures import BrokenExecutor, CancelledError, ProcessPoolExecut
 from numbers import Number
 from typing import Union
 
+import pandas as pd
 import numpy as np
 import psutil
 from scipy.special import softmax
@@ -324,6 +325,35 @@ def estimate_memory_consumption_for_dataset(shape, dtype=np.float64, unit="B"):
         raise ValueError(f"Unit must be 'B', 'KB', 'MB' or 'GB' but is {unit}")
     return memory_bytes
 
+def convert_deephyper_result_row_to_dict(row):
+    config = {}
+    remaining_fields = {}
+    for field, value in row.items():
+
+        # store nans as null
+        if type(value) == float and np.isnan(value):
+            value = None
+
+        if field.startswith('p:'):
+            config[field[2:]] = value
+        elif field == "m:json":
+            remaining_fields["results"] = value
+        elif field.startswith('m:'):
+            remaining_fields[field[2:]] = value
+        elif field not in ["job_id", "job_status", "objective"]:
+            remaining_fields[field] = value
+    row_to_write = {"config": config}
+    row_to_write.update(remaining_fields)
+    return row_to_write
+
+def deephyper_results_to_jsonl(path_to_deephyper_results_csv, path_to_output_jsonl):
+
+    df = pd.read_csv(path_to_deephyper_results_csv)
+
+    with jsonlines.open(path_to_output_jsonl, mode='w') as writer:
+        for _, row in df.iterrows():
+            writer.write(convert_deephyper_result_row_to_dict(row))
+
 
 class StatusFileManager:
 
@@ -354,3 +384,5 @@ class StatusFileManager:
 
     def remove_status_file(self, workflow, openmlid, campaign, workflowseed, testseed, valseed, status):
         pathlib.Path(self.get_path_to_status_file(workflow=workflow, openmlid=openmlid, campaign=campaign, workflowseed=workflowseed, testseed=testseed, valseed=valseed, status=status)).unlink(missing_ok=True)
+
+        

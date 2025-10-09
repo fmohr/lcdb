@@ -256,6 +256,11 @@ class PreprocessedWorkflow(BaseWorkflow, ABC):
         if isinstance(pre_processor, KernelPCA):
             return estimate_memory_consumption_for_dataset((input_shape[0], input_shape[0]))  # n_samples²
         
+        # in the LDA we use SVD, which requires adds the computation of a min(n, d) square matrix
+        if isinstance(pre_processor, LinearDiscriminantAnalysis):
+            s = min(input_shape[0], input_shape[1])
+            return estimate_memory_consumption_for_dataset((s, s))
+        
         # if no transformation is known, anticipate that the shape will not be changed
         return estimate_memory_consumption_for_dataset(input_shape)
     

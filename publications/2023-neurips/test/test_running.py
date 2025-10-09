@@ -11,7 +11,7 @@ from lcdb.cli._cli import create_parser
 import itertools as it
 import json
 
-from lcdb.builder.utils import StatusFileManager
+from lcdb.builder.utils import StatusFileManager, deephyper_results_to_jsonl
 
 ch = logging.StreamHandler()
 ch.setLevel(logging.DEBUG)
@@ -25,7 +25,8 @@ logger.setLevel(logging.DEBUG)
 
 DATASETS = [
     61,
-    188
+    188,
+    1596
 ]
 
 
@@ -50,7 +51,7 @@ class TestRunFunctionalities(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.folder = Path(__file__).parent
-        cls.num_evals_in_first = 20
+        cls.num_evals_in_first = 4
         cls.test_status_dir = Path(f"{cls.folder}/test_status_dir")
         if cls.test_status_dir.exists():
             shutil.rmtree(cls.test_status_dir)
@@ -99,28 +100,23 @@ class TestRunFunctionalities(unittest.TestCase):
         kwargs.pop("func")
         func(**kwargs)
 
-        # check whether results have arrived without error
-        df_results = pd.read_csv(f"{test_status_dir_for_case}/results.csv")
-        self.assertEqual(__class__.num_evals_in_first, len(df_results))
+        # rewrite results
+        deephyper_results_to_jsonl(f"{test_status_dir_for_case}/results.csv", f"{test_status_dir_for_case}/results.jsonl")
 
         # check that there are no errors
         debugger = Debugger()
-        debugger.load_data(csv=f"{test_status_dir_for_case}/results.csv")
+        debugger.load_data(jsonl=f"{test_status_dir_for_case}/results.jsonl")
+        self.assertEqual(__class__.num_evals_in_first, debugger.num_rows)
 
         # remove some of the error files if they are expected
-        masks = []
-        if "LibSVM" in workflow and len(debugger.df) > 0:
-            for e in debugger.df["traceback_summary"]:
-                masks.append(not any(["The dual coefficients or intercepts are not finite." in s["message"] for s in e]))
-        if "keras" in workflow and len(debugger.df) > 0:
-            for e in debugger.df["traceback_summary"]:
-                masks.append(not any(["There are NAN values in the NN prediction" in s["message"] for s in e]))
-        if masks:
-            debugger.df = debugger.df[masks]
+        if "LibSVM" in workflow and debugger.num_rows > 0:
+            debugger.reduce(lambda r: any(["The dual coefficients or intercepts are not finite." in s["message"] for s in r["traceback_summary"]]) if r["traceback_summary"] is not None else True)
+        if "keras" in workflow and debugger.num_rows > 0:
+            debugger.reduce(lambda r: any(["There are NAN values in the NN prediction." in s["message"] for s in r["traceback_summary"]]) if r["traceback_summary"] is not None else True)
 
         # check that no unexpected errors are left
         error_messages = debugger.get_error_messages()
-        self.assertEqual(0, len(debugger.df), msg=f"There should be no errors, but we observed these error messages: {error_messages}")
+        self.assertEqual(0, len(error_messages), msg=f"There should be no errors, but we observed these error messages: {error_messages}")
 
     def test_resume_knn_run(self):
         logger.info("Test resume KNN")

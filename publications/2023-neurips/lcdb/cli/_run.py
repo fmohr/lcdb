@@ -445,7 +445,7 @@ def run_experiment(
     class JsonSanityCheckCallback(Callback):
 
         def on_done(self, job: HPOJob):
-            logger.info(f"Checking sanity of metadata.")
+            logger.info(f"Checking sanity of metadata for job {job.id}. Available keys in the meta-data are {list(job.metadata.keys())}")
             if job.metadata["json"] is None:
                 logger.error("No JSON found in the output.")
                 return
@@ -605,43 +605,51 @@ def run_experiment(
             logger.info(f"Creating RUNNING status file {filename} for {workflow_class}-{campaign}-{openml_id}-{workflow_seed}-{test_seed}-{valid_seed}.")
             status_file_manager.create_status_file(workflow=workflow_class, campaign=campaign, openmlid=openml_id, workflowseed=workflow_seed, testseed=test_seed, valseed=valid_seed, status=StatusFileManager.EXPERIMENT_STATUS_RUNNING)
 
-        # check whether we already have results in a results file
-        list_of_previous_results = []
-        num_previous_results = 0
-        logger.info(f"Scanning folder {log_dir} folder already existing result files.")
-        covered_indices = []
-        for file in os.listdir(log_dir):
-            if file.startswith("results") and file.endswith(".csv"):
-                logger.debug(f"Reading results from {file}")
-                df_results_in_file = pd.read_csv(f"{log_dir}/{file}")
-                for i, row in df_results_in_file.iterrows():
-                    config = {k[2:]: v for k, v in row.items() if k.startswith("p:")}
-                    for idx, requested_config in enumerate(initial_points):
-                        if config == requested_config and idx not in covered_indices:
-                            covered_indices.append(idx)
-                            list_of_previous_results.append(row)
-                            num_previous_results += 1
-
-        logger.info(f"Previous results found in {len(list_of_previous_results)} result files. Removing the {num_previous_results} configs with indices {covered_indices} from the todo list.")
-        
-        # Required for MPI just the root rank will execute the search
-        # other ranks will be considered as workers
-        if evaluator.is_master:
+            # check whether we already have results in a results file
+            list_of_previous_results = []
+            logger.info(f"Scanning folder {pathlib.Path(log_dir).resolve()} for already existing result files.")
+            covered_indices = []
+            num_covered_result_files = 0
+            for file in os.listdir(log_dir):
+                if file.startswith("results") and file.endswith(".csv"):
+                    logger.debug(f"Reading results from {file}")
+                    list_of_previous_results_in_this_file = []
+                    covered_indices_in_this_file = []
+                    df_results_in_file = pd.read_csv(f"{log_dir}/{file}")
+                    for i, row in df_results_in_file.iterrows():
+                        config = {k[2:]: v for k, v in row.items() if k.startswith("p:")}
+                        for idx, requested_config in enumerate(initial_points):
+                            if config == requested_config and idx not in covered_indices:
+                                covered_indices_in_this_file.append(idx)
+                                list_of_previous_results_in_this_file.append(row)
+                    list_of_previous_results.extend(list_of_previous_results_in_this_file)
+                    covered_indices.extend(covered_indices_in_this_file)
+                    logger.info(f"{len(list_of_previous_results)} previous results found in {file}. Config indices are {covered_indices_in_this_file}.")
+                    num_covered_result_files += 1
+            num_previous_results = len(list_of_previous_results)
+                            
+            # now update what is being sent to deephyper
+            configs_to_eval = [config for i, config in enumerate(initial_points) if i not in covered_indices]
+            if num_previous_results > 0:
+                max_evals -= num_previous_results
+                assert max_evals > 0
+            logger.info(
+                f"In total, {num_previous_results} previous results found in {num_covered_result_files} result files. " +
+                (f"Removed the {num_previous_results} configs with indices {covered_indices} from the todo list. " if num_previous_results > 0 else "") +
+                f"What will be sent to deephyper now is:\n\t{len(configs_to_eval)} configs\n\t{max_evals=}"
+            )
 
             # Set the search algorithm
             search = CBO(
                 problem=problem,
                 evaluator=evaluator,
                 log_dir=log_dir,
-                initial_points=[config for i, config in enumerate(initial_points) if i not in covered_indices],
+                initial_points=configs_to_eval,
                 surrogate_model="DUMMY",
                 verbose=verbose
             )
 
             # Execute the search (this will also generate/replace the results.csv)
-            if num_previous_results > 0:
-                max_evals -= num_previous_results
-                assert max_evals > 0
             if timeout == -1: 
                 logger.info("Disabling timeout")
                 timeout = None

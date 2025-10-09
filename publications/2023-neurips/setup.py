@@ -34,6 +34,7 @@ REQUIRED = [
     "requests",
     "tqdm>=4.64.0",
     "xgboost>=1.7.6",
+    "jsonlines==4.0.0"
 ]
 
 
