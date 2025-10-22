@@ -86,55 +86,57 @@ class TestBuildFunctionalities(unittest.TestCase):
             params["epoch_schedule"] = "linear"
             params["num_epochs"] = 10
 
-        logger.info(f"Starting test of workflow {workflow} on dataset {openmlid}")
-        try:
-            out = run_learning_workflow(
-                openml_id=openmlid,
-                workflow_class=workflow,
-                workflow_parameters=params,
-                valid_seed=val_seed,
-                test_seed=test_seed,
-                workflow_seed=workflow_seed,
-                monotonic=monotonic,
-                raise_errors=True,
-                anchor_schedule="power-2-2-2",
-                max_sample_anchor=MAX_SAMPLE_ANCHOR
-            )
+        for n_jobs in [1, 2]:
+            logger.info(f"Starting test of workflow {workflow} on dataset {openmlid} with n_jobs={n_jobs}")
+            try:
+                out = run_learning_workflow(
+                    openml_id=openmlid,
+                    workflow_class=workflow,
+                    workflow_parameters=params,
+                    valid_seed=val_seed,
+                    test_seed=test_seed,
+                    workflow_seed=workflow_seed,
+                    monotonic=monotonic,
+                    raise_errors=True,
+                    anchor_schedule="power-2-2-2",
+                    max_sample_anchor=MAX_SAMPLE_ANCHOR,
+                    n_jobs=n_jobs
+                )
 
-            parsed_json = json.loads(out["metadata"]["json"])
+                parsed_json = json.loads(out["metadata"]["json"])
 
-            final_node = parsed_json["children"][-1]
-            self.assertEqual("build_curves", final_node["tag"])
-            first_anchor_in_final_node = final_node["children"][0]
-            self.assertEqual("anchor", first_anchor_in_final_node["tag"])
-            self.assertEqual(64, first_anchor_in_final_node["metadata"]["value"])
-            metrics_in_first_anchor_in_final_node = first_anchor_in_final_node["children"][-1]
-            self.assertEqual("metrics", metrics_in_first_anchor_in_final_node["tag"])
-            validation_confusion_matrix_in_first_anchor_in_final_node = metrics_in_first_anchor_in_final_node["children"][1]["children"][0]
-            self.assertEqual("confusion_matrix", validation_confusion_matrix_in_first_anchor_in_final_node["tag"])
+                final_node = parsed_json["children"][-1]
+                self.assertEqual("build_curves", final_node["tag"])
+                first_anchor_in_final_node = final_node["children"][0]
+                self.assertEqual("anchor", first_anchor_in_final_node["tag"])
+                self.assertEqual(64, first_anchor_in_final_node["metadata"]["value"])
+                metrics_in_first_anchor_in_final_node = first_anchor_in_final_node["children"][-1]
+                self.assertEqual("metrics", metrics_in_first_anchor_in_final_node["tag"])
+                validation_confusion_matrix_in_first_anchor_in_final_node = metrics_in_first_anchor_in_final_node["children"][1]["children"][0]
+                self.assertEqual("confusion_matrix", validation_confusion_matrix_in_first_anchor_in_final_node["tag"])
 
-            def test_timestamp_consistency(d, earliest_ts_start=0):
-                ts_start = d["timestamp_start"]
-                ts_end = d["timestamp_stop"]
-                self.assertTrue(ts_start >= earliest_ts_start)
-                self.assertTrue(ts_start <= ts_end)
+                def test_timestamp_consistency(d, earliest_ts_start=0):
+                    ts_start = d["timestamp_start"]
+                    ts_end = d["timestamp_stop"]
+                    self.assertTrue(ts_start >= earliest_ts_start)
+                    self.assertTrue(ts_start <= ts_end)
 
-                # test integrity of children
-                if "children" in d:
-                    t_cur = ts_start
-                    for child in d["children"]:
-                        t_cur = test_timestamp_consistency(child, earliest_ts_start=t_cur)
-                    self.assertTrue(t_cur <= ts_end)
-                return ts_end
+                    # test integrity of children
+                    if "children" in d:
+                        t_cur = ts_start
+                        for child in d["children"]:
+                            t_cur = test_timestamp_consistency(child, earliest_ts_start=t_cur)
+                        self.assertTrue(t_cur <= ts_end)
+                    return ts_end
 
-            test_timestamp_consistency(parsed_json)
+                test_timestamp_consistency(parsed_json)
 
-        except Exception as e:
-            msg = str(e)
-            if "covariance is ill defined" in msg:
-                pass
-            else:
-                raise e
+            except Exception as e:
+                msg = str(e)
+                if "covariance is ill defined" in msg:
+                    pass
+                else:
+                    raise e
 
     @parameterized.expand(list(it.product(DATASETS, WORKFLOWS, VAL_SEEDS, TEST_SEEDS, WORKFLOW_SEEDS, [True, False])))
     def test_ability_to_work_all_types_of_datasets(self, openmlid, workflow, val_seed, test_seed, workflow_seed, monotonic):

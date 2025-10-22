@@ -5,6 +5,7 @@ from statistics import mean
 import trace
 import pandas as pd
 from lcdb.db._repository import Repository
+from lcdb.db._results import ResultSet
 from lcdb.db._util import get_path_to_lcdb,  CountAwareGenerator
 from tqdm import tqdm
 import logging
@@ -145,7 +146,6 @@ class LCDB:
             workflow_seeds=None,
             test_seeds=None,
             validation_seeds=None,
-            parse_detail_json=True,
             processors=None
     ):
         """
@@ -211,16 +211,16 @@ class LCDB:
         def generator():
             for gen in result_generators:
                 for res in gen:
-                    if parse_detail_json:
-                        for row in res:
-                            if row[DETAIL_KEY] is not None:
-                                row[DETAIL_KEY] = json.loads(row[DETAIL_KEY])
+
+                    assert res is not None
+                    
+                    # create result set from all the results and apply processors if any given
+                    rs = ResultSet(res)
+                    #rs._unpack_results()
+                    #rs._unpack_build_issues()
                     if processors is not None:
-                        for row in res:
-                            for processor in processors:
-                                row.update(processor(row))
-                        
-                    yield res
+                        rs.apply(processors)
+                    yield rs
 
         return CountAwareGenerator(sum([len(g) for g in result_generators]), generator())
 

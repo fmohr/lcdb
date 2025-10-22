@@ -22,6 +22,8 @@ class BaseWorkflow(abc.ABC):
         else:
             self.timer = timer
         
+        self.logger = logging.getLogger("LCDB") if logger is None else logger
+        
         # set memory limit
         self.memory_limit_in_bytes = memory_limit_in_bytes
         self.n_jobs = n_jobs
@@ -31,7 +33,7 @@ class BaseWorkflow(abc.ABC):
             )
 
         # generate warning if the randomness is not seeded
-        if self.__class__.is_randomizable() and random_state is None and logger is not None:
+        if self.__class__.is_randomizable() and random_state is None:
             logger.warning(
                 f"Workflow {self.__class__.__name__} is randomizable but no seed was provided!"
             )
@@ -54,8 +56,6 @@ class BaseWorkflow(abc.ABC):
         self.constant_prediction = None  # this is used to treat cases where only one class is provided
 
         self.label_encoder = LabelEncoder()  # internally we will always work with numeric classes
-
-        self.logger = logging.getLogger("LCDB") if logger is None else logger
 
     def get_reason_why_workflow_cannot_be_fit_on_dataset(self, X, y):
         """

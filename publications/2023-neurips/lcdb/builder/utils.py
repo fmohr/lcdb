@@ -327,6 +327,7 @@ def estimate_memory_consumption_for_dataset(shape, dtype=np.float64, unit="B"):
 
 def convert_deephyper_result_row_to_dict(row):
     config = {}
+    experiment = {}
     remaining_fields = {}
     for field, value in row.items():
 
@@ -339,10 +340,15 @@ def convert_deephyper_result_row_to_dict(row):
         elif field == "m:json":
             remaining_fields["results"] = value
         elif field.startswith('m:'):
-            remaining_fields[field[2:]] = value
+            if field.startswith("m:timestamp_") or field in ["m:lcdb_version", "m:memory"]:
+                experiment[field[2:]] = value
+            else:
+                remaining_fields[field[2:]] = value
+        elif field.startswith('sol.'):
+            pass
         elif field not in ["job_id", "job_status", "objective"]:
             remaining_fields[field] = value
-    row_to_write = {"config": config}
+    row_to_write = {"config": config, "experiment_metadata": experiment}
     row_to_write.update(remaining_fields)
     return row_to_write
 

@@ -1,11 +1,10 @@
-from lcdb.analysis.views._base import JsonBasedLCDBView
 from lcdb.analysis.views._util import get_cli_test_command as _get_cli_test_command
-from lcdb.analysis.processors._traceback_extractor import TracebackExtractor
+from lcdb.db.processors._traceback_extractor import TracebackExtractor
 import pandas as pd
 import numpy as np
 
 
-class Debugger(JsonBasedLCDBView):
+class Debugger:
 
     def __init__(self):
         super().__init__([

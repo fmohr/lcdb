@@ -124,12 +124,18 @@ def run_learning_workflow(
     workflow_kwargs["memory_limit_in_bytes"] = memory_limit_in_bytes
     workflow_kwargs["n_jobs"] = n_jobs
 
-    logger.info("Preparing factory ...")
+    # create workflow object
+    logger.info(f"Creating workflow object from factory {WorkflowClass.__name__} with arguments {''.join(['\n\t' + str(k) + ': ' + str(v) for k, v in workflow_kwargs.items()])}")
     def workflow_factory():
         return WorkflowClass(timer=timer, **workflow_kwargs)
+    workflow = workflow_factory()
+    assert workflow.logger is not None, "For some reason the logger was not properly passed to the workflow."
+    if WorkflowClass.is_randomizable():
+        assert workflow.random_state is not None, "For some reason the random state was not properly passed to the workflow."
+    else:
+        assert workflow.random_state is  None, f"Workflow class {workflow_class} is not randomizable." f" Yet, a workflow random state different from None (namely {workflow.random_state}) was set."
     
     # check whether the workflow can be fitted on this data
-    workflow = workflow_factory()
     reason_to_not_build = workflow.get_reason_why_workflow_cannot_be_fit_on_dataset(X=X, y=y)
     if reason_to_not_build is not None:
         logger.info(
