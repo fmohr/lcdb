@@ -3,6 +3,7 @@ import logging
 
 from typing import Any
 from lcdb.builder.timer import Timer
+from lcdb.builder.utils import get_random_state
 import ConfigSpace
 
 import numpy as np
@@ -37,9 +38,7 @@ class BaseWorkflow(abc.ABC):
             logger.warning(
                 f"Workflow {self.__class__.__name__} is randomizable but no seed was provided!"
             )
-        self.random_state = random_state
-        if not isinstance(self.random_state, np.random.RandomState):
-            self.random_state = np.random.RandomState(self.random_state)
+        self.random_state = get_random_state(random_state)
 
         self.infos = {}
 
@@ -56,15 +55,6 @@ class BaseWorkflow(abc.ABC):
         self.constant_prediction = None  # this is used to treat cases where only one class is provided
 
         self.label_encoder = LabelEncoder()  # internally we will always work with numeric classes
-
-    def get_reason_why_workflow_cannot_be_fit_on_dataset(self, X, y):
-        """
-            Determines whether the workflow can be fitted on given data.
-            Overwrite this with a check and return False if you anticipate that this workflow cannot be fitted on the given data (at any anchor)
-
-            :return: `None` if the workflow can be built. Otherwise a string with the reason why it cannot be built.
-        """
-        return None
     
     def get_reason_why_workflow_cannot_be_built_at_anchor(self, X, y, a):
         """
@@ -76,6 +66,10 @@ class BaseWorkflow(abc.ABC):
         return None
     
     def fit(self, X, y, X_valid, y_valid, X_test, y_test, metadata) -> "BaseWorkflow":
+
+        # check that categorial columns are properly encoded in metadata
+        if type(metadata["categories"]["columns"]) != np.ndarray or len(metadata["categories"]["columns"].shape) != 1:
+            raise ValueError(f"The binary mask for categorical columns must be a binary 1D numpy array but is {type(metadata['categories']['columns'])}")
 
         # get label-encoded versions of target
         y_complete = np.concatenate([y, y_valid, y_test])

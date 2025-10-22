@@ -345,6 +345,8 @@ class PreprocessedWorkflow(BaseWorkflow, ABC):
         return X
 
     def get_pp_steps(self, X, y, metadata, **kwargs):
+        if type(metadata["categories"]["columns"]) != np.ndarray or len(metadata["categories"]["columns"].shape) != 1:
+            raise ValueError(f"The binary mask for categorical columns must be a binary 1D numpy array but is {type(metadata['categories']['columns'])}")
         idx_cat_col = np.where(metadata["categories"]["columns"])[0]
         idx_num_col = np.where(~np.array(metadata["categories"]["columns"]))[0]
         has_cat = len(idx_cat_col) > 0
@@ -361,6 +363,7 @@ class PreprocessedWorkflow(BaseWorkflow, ABC):
 
         # step 2: encoding of categorical attributes
         if has_cat:
+            self.logger.info(f"Data has categorical attributes. Encoder to treat these is {kwargs[KEY_CAT_ENCODER] if KEY_CAT_ENCODER in kwargs else 'not specified'}.")
             if KEY_CAT_ENCODER not in kwargs or kwargs[KEY_CAT_ENCODER] == "none":
                 msg = f"The value for {KEY_CAT_ENCODER} is set to none even though the data has categorical attributes."
                 if self.raise_exception_on_unsuitable_preprocessor:
@@ -384,20 +387,23 @@ class PreprocessedWorkflow(BaseWorkflow, ABC):
                     f"Unknown {KEY_CAT_ENCODER} technique {kwargs['cat_encoder']}"
                 )
             cat_steps.append((KEY_CAT_ENCODER, cat_encoder))
-        elif KEY_CAT_ENCODER in kwargs and kwargs["cat_encoder"] != "none":
-            msg = f"The value for {KEY_CAT_ENCODER} is set (to {kwargs['cat_encoder']}) even though the data has no categorical attributes."\
-                  " This may indicate an inefficiency, because different values may tried without having any effect."
-            if self.raise_exception_on_unsuitable_preprocessor:
-                msg += "\nYou can avoid that this situation generates an exception"\
-                       "by setting `raise_exception_on_unsuitable_preprocessor=False`."
-                raise ValueError(msg)
-            self.logger.warning(msg)
+        else:
+            self.logger.info("Data has no categorical attributes.")
+            if KEY_CAT_ENCODER in kwargs and kwargs["cat_encoder"] != "none":
+                msg = f"The value for {KEY_CAT_ENCODER} is set (to {kwargs['cat_encoder']}) even though the data has no categorical attributes."\
+                    " This may indicate an inefficiency, because different values may tried without having any effect."
+                if self.raise_exception_on_unsuitable_preprocessor:
+                    msg += "\nYou can avoid that this situation generates an exception"\
+                        "by setting `raise_exception_on_unsuitable_preprocessor=False`."
+                    raise ValueError(msg)
+                self.logger.warning(msg)
 
         treated_kws.append(KEY_CAT_ENCODER)
 
         # initialize steps with the preliminary transformers
         transformers = []
         if has_cat and cat_steps:
+            self.logger.debug(f"Registering categorical transformations for categorical columns {idx_cat_col}.")
             transformers.append(
                 ("cat_transformations", Pipeline(cat_steps), idx_cat_col)
             )
@@ -576,7 +582,7 @@ class PreprocessedWorkflow(BaseWorkflow, ABC):
         X, y = self._transform_train_data_prior_to_standard_preprocessing(X, y)
 
         # transform all the data and store them
-        self.logger.info(f"Starting transformation of training data of size {X.shape}")
+        self.logger.info(f"Starting transformation of training data of size {X.shape}.")
         X_train_transformed = self.transform(X=X, y=y, metadata=metadata, timer_suffix="_train").astype(np.float32)  # create + fit pp pipeline
         self.logger.info(f"Finished transformation of training data. New size is {X_train_transformed.shape}")
         self.logger.info(f"Starting transformation of validation data of size {X_valid.shape}")

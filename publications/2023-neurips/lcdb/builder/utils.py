@@ -222,7 +222,7 @@ def terminate_on_memory_exceeded(
         "timestamp_end": timestamp_end,
     }
 
-    metadata["memory"] = memory_peak
+    metadata["max_memory"] = memory_peak
 
     metadata.update(output["metadata"])
     output["metadata"] = metadata
@@ -237,6 +237,9 @@ def get_schedule(name, **kwargs):
         name (str): name of the schedule.
         **kwargs: optional arguments to pass to the schedule.
     """
+    if type(name) == int:
+        return [name]
+    
     if name == "full":
         return get_linear_schedule(**kwargs)
     elif name == "linear":
@@ -391,4 +394,7 @@ class StatusFileManager:
     def remove_status_file(self, workflow, openmlid, campaign, workflowseed, testseed, valseed, status):
         pathlib.Path(self.get_path_to_status_file(workflow=workflow, openmlid=openmlid, campaign=campaign, workflowseed=workflowseed, testseed=testseed, valseed=valseed, status=status)).unlink(missing_ok=True)
 
-        
+def get_random_state(randomness_description):    
+    if isinstance(randomness_description, np.random.RandomState):
+        return randomness_description
+    return np.random.RandomState(randomness_description)

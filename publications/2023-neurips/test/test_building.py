@@ -3,17 +3,24 @@ import logging
 from parameterized import parameterized
 import unittest
 
+from ConfigSpace import CategoricalHyperparameter
+
+from lcdb.data._base import load_task
+from lcdb.data.split import train_valid_test_split
 from lcdb.workflow._preprocessing_workflow import PreprocessedWorkflow
 from lcdb.workflow.xgboost import XGBoostWorkflow
 from lcdb.workflow.keras import DenseNNWorkflow
-from lcdb.workflow.sklearn import TreesEnsembleWorkflow
-from lcdb.builder import run_learning_workflow
+from lcdb.workflow.sklearn import SklearnWorkflow, TreesEnsembleWorkflow
+from lcdb.builder import run_learning_workflow, create_workflow
+from lcdb.builder.utils import get_random_state
 from lcdb.workflow._util import get_workflow_class, get_config_space_of_workflow
 import itertools as it
 import json
 
 from lcdb.analysis.json import QueryPreprocessorResults, QueryDatasetMetadata, QueryAnchorValues
 import numpy as np
+
+from sklearn.preprocessing import FunctionTransformer, OneHotEncoder
 
 ch = logging.StreamHandler()
 ch.setLevel(logging.INFO)
@@ -66,6 +73,95 @@ class TestBuildFunctionalities(unittest.TestCase):
         from lcdb import LCDB
         version = LCDB().get_version()
         self.assertIsNotNone(version)
+    
+    @parameterized.expand(list(it.product([3, 188], WORKFLOWS, WORKFLOW_SEEDS)))
+    def test_workflow_initialization(self, openmlid, workflow_class, workflow_seed):
+        
+        (X, y), dataset_metadata = load_task(f"openml.{openmlid}")
+
+
+        # Transform categorical features
+        columns_categories = np.asarray(dataset_metadata["categories"], dtype=bool)
+        dataset_metadata["categories"] = {"columns": columns_categories}
+
+        # train/validation/test split
+        X_train, X_valid, X_test, y_train, y_valid, y_test = train_valid_test_split(X, y, test_seed=0, valid_seed=0)
+        X_train = X_train[:256]
+        y_train = y_train[:256]
+
+        for hp_name, hp_obj in get_workflow_class(workflow_class).config_space().items():
+            if not hp_name.startswith("pp@") or not isinstance(hp_obj, CategoricalHyperparameter):
+                continue
+
+            for choice in hp_obj.choices:
+            
+                params = {
+                    hp_name: choice
+                }
+                if hp_name == "pp@cat_encoder":
+                    if openmlid in [3, 188]:
+                        if choice == "none":
+                            continue
+                    else:
+                        if choice != "none":
+                            continue
+
+                else:
+                    if openmlid in [3, 188]:
+                        params["pp@cat_encoder"] = "onehot"
+                    else:
+                        params["pp@cat_encoder"] = "none"
+                
+                for n_jobs in [1, 2]:
+                    workflow = create_workflow(
+                        workflow_class=workflow_class,
+                        workflow_parameters=params,
+                        workflow_seed=workflow_seed,
+                        raise_exception_on_unsuitable_preprocessor=True,
+                        memory_limit_in_bytes=1024 ** 3,
+                        epoch_schedule="first",
+                        n_jobs=n_jobs,
+                        timer=None,
+                        logger=logger
+                    )
+
+                    assert not isinstance(workflow, PreprocessedWorkflow) or workflow.is_randomizable()
+                    expected_random_state = get_random_state(workflow_seed)
+                    if workflow.is_randomizable():
+                        
+                        # check that the random state in the workflow is what we would expect initially
+                        s1 = expected_random_state.get_state()
+                        s2 = workflow.random_state.get_state()
+                        for a, b in zip(s1, s2):
+                            assert np.all(a == b), f"Initialization of random_state for {workflow_class} does not work properly"  # or just rs1
+
+                    # now fit the workflow
+                    with workflow.timer.time("fit"):
+                        workflow.fit(X_train, y_train, X_valid, y_valid, X_test, y_test, metadata=dataset_metadata)
+                        y_train_hat_proba = workflow.predict_proba(X_train)
+                        y_valid_hat_proba = workflow.predict_proba(X_valid)
+                        y_test_hat_proba = workflow.predict_proba(X_test)
+
+                    # fit a copy of the workflow to see whether we get the same prediction vectors on all three folds
+                    workflow2 = create_workflow(
+                        workflow_class=workflow_class,
+                        workflow_parameters=params,
+                        workflow_seed=workflow_seed,
+                        raise_exception_on_unsuitable_preprocessor=True,
+                        epoch_schedule="first",
+                        memory_limit_in_bytes=1024 ** 3,
+                        n_jobs=n_jobs,
+                        timer=None,
+                        logger=logger
+                    )
+                    with workflow2.timer.time("fit"):
+                        workflow2.fit(X_train, y_train, X_valid, y_valid, X_test, y_test, metadata=dataset_metadata)
+                        y_train_hat_proba2 = workflow2.predict_proba(X_train)
+                        y_valid_hat_proba2 = workflow2.predict_proba(X_valid)
+                        y_test_hat_proba2 = workflow2.predict_proba(X_test)
+                        assert np.allclose(y_train_hat_proba, y_train_hat_proba2), f"Predictions are not reproducible for workflow {workflow_class} with params {params=}, workflow_seed={workflow_seed}, epoch_schedule={epoch_schedule}, n_jobs={n_jobs}"
+                        assert np.allclose(y_valid_hat_proba, y_valid_hat_proba2), f"Predictions are not reproducible for workflow {workflow_class} with params {params=}, workflow_seed={workflow_seed}, epoch_schedule={epoch_schedule}, n_jobs={n_jobs}"
+                        assert np.allclose(y_test_hat_proba, y_test_hat_proba2), f"Predictions are not reproducible for workflow {workflow_class} with params {params=}, workflow_seed={workflow_seed}, epoch_schedule={epoch_schedule}, n_jobs={n_jobs}"
 
     @parameterized.expand(list(it.product([61], WORKFLOWS, VAL_SEEDS, TEST_SEEDS, WORKFLOW_SEEDS, [True, False])))
     def test_workflow_base_functionality_and_integrity(self, openmlid, workflow, val_seed, test_seed, workflow_seed, monotonic):

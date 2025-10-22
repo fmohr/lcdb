@@ -7,10 +7,10 @@ import numpy as np
 class Debugger:
 
     def __init__(self):
-        super().__init__([
+        self.processors = [
             TracebackExtractor(),
             lambda row: {"payload": len(str(row["m:json"]) if "m:json" in row and row["m:json"] is not None else "")}
-        ])
+        ]
     
     def filter_result(self, row):
 

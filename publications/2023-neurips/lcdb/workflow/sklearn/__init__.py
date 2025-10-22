@@ -1,5 +1,6 @@
 """Sub-package for sklearn models.
 """
+from ._base import SklearnWorkflow
 from ._discriminant_analysis import LDAWorkflow, QDAWorkflow
 from ._linear_model import LRWorkflow, RidgeWorkflow, PAWorkflow, PerceptronWorkflow
 from ._naive_bayes import GaussianNBWorkflow

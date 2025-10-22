@@ -27,6 +27,59 @@ class AnticipatedMemoryError(Exception):
     def __init__(self, msg):
         super().__init__(msg)
 
+def create_workflow(
+    workflow_class: str,
+    workflow_parameters: dict = None,
+    workflow_seed: int = 42,
+    raise_exception_on_unsuitable_preprocessor: bool = True,
+    epoch_schedule: str = "power",
+    memory_limit_in_bytes: int = 32 * 1024**3,  # 32 GB by default
+    n_jobs: int = 1,
+    timer=None,
+    logger=None
+    ):
+    if "random_state" in workflow_parameters:
+        raise ValueError("Do not specify `random_state` in the workflow_parameters. This field will be set automatically using `workflow_seed`")
+    if "epoch_schedule" in workflow_parameters:
+        raise ValueError("Do not specify `epoch_schedule` in the workflow_parameters. This field will be set automatically using `epoch_schedule` in the workflow construction.")
+    logger.info("Getting workflow class...")
+    from lcdb.workflow._util import get_workflow_class # lazy import to avoid cyclic dependencies
+    WorkflowClass = get_workflow_class(workflow_class) if isinstance(workflow_class, str) else workflow_class
+    logger.info(f"Preparing workflow kwargs ...")
+    if workflow_parameters is not None and not isinstance(workflow_parameters, dict):
+        raise ValueError(f"workflow_parameters must be None or a dict but is {type(workflow_parameters)}")
+    workflow_kwargs = workflow_parameters.copy() if workflow_parameters is not None else {}
+    if WorkflowClass.builds_iteration_curve():
+        workflow_kwargs["epoch_schedule"] = epoch_schedule
+    if WorkflowClass.is_randomizable():
+        workflow_kwargs["random_state"] = workflow_seed
+    elif workflow_seed != 0:
+        logger.warning(
+            f"Workflow class {workflow_class} is not randomizable."
+            f" Yet, a workflow seed different from 0 (namely {workflow_seed}) was provided."
+        )
+
+    # the import is done here to avoid cyclic dependencies
+    from lcdb.workflow._preprocessing_workflow import PreprocessedWorkflow
+    if issubclass(WorkflowClass, PreprocessedWorkflow):
+        workflow_kwargs["raise_exception_on_unsuitable_preprocessor"] = raise_exception_on_unsuitable_preprocessor
+
+    workflow_kwargs["logger"] = logger
+    workflow_kwargs["memory_limit_in_bytes"] = memory_limit_in_bytes
+    workflow_kwargs["n_jobs"] = n_jobs
+
+    # create workflow object
+    logger.info(f"Creating workflow object from factory {WorkflowClass.__name__} with arguments {''.join(['\n\t' + str(k) + ': ' + str(v) for k, v in workflow_kwargs.items()])}")
+    def workflow_factory():
+        return WorkflowClass(timer=timer, **workflow_kwargs)
+    workflow = workflow_factory()
+    assert workflow.logger is not None, "For some reason the logger was not properly passed to the workflow."
+    if WorkflowClass.is_randomizable():
+        assert workflow.random_state is not None, "For some reason the random state was not properly passed to the workflow."
+    else:
+        assert workflow.random_state is  None, f"Workflow class {workflow_class} is not randomizable." f" Yet, a workflow random state different from None (namely {workflow.random_state}) was set."
+    return workflow
+
 def run_learning_workflow(
     openml_id: int = 3,
     task_type: str = "classification",
@@ -97,53 +150,6 @@ def run_learning_workflow(
         load_timer["cols"] = X.shape[1]
         load_timer["num_classes"] = dataset_metadata["num_classes"]
 
-    # Create and fit the workflow
-    logger.info("Getting workflow class...")
-    from lcdb.workflow._util import get_workflow_class # lazy import to avoid cyclic dependencies
-    WorkflowClass = get_workflow_class(workflow_class) if isinstance(workflow_class, str) else workflow_class
-    logger.info(f"Preparing workflow kwargs ...")
-    if workflow_parameters is not None and not isinstance(workflow_parameters, dict):
-        raise ValueError(f"workflow_parameters must be None or a dict but is {type(workflow_parameters)}")
-    workflow_kwargs = workflow_parameters.copy() if workflow_parameters is not None else {}
-    if WorkflowClass.builds_iteration_curve():
-        workflow_kwargs["epoch_schedule"] = epoch_schedule
-    if WorkflowClass.is_randomizable():
-        workflow_kwargs["random_state"] = workflow_seed
-    elif workflow_seed != 0:
-        logger.warning(
-            f"Workflow class {workflow_class} is not randomizable."
-            f" Yet, a workflow seed different from 0 (namely {workflow_seed}) was provided."
-        )
-
-    # the import is done here to avoid cyclic dependencies
-    from lcdb.workflow._preprocessing_workflow import PreprocessedWorkflow
-    if issubclass(WorkflowClass, PreprocessedWorkflow):
-        workflow_kwargs["raise_exception_on_unsuitable_preprocessor"] = raise_exception_on_unsuitable_preprocessor
-
-    workflow_kwargs["logger"] = logger
-    workflow_kwargs["memory_limit_in_bytes"] = memory_limit_in_bytes
-    workflow_kwargs["n_jobs"] = n_jobs
-
-    # create workflow object
-    logger.info(f"Creating workflow object from factory {WorkflowClass.__name__} with arguments {''.join(['\n\t' + str(k) + ': ' + str(v) for k, v in workflow_kwargs.items()])}")
-    def workflow_factory():
-        return WorkflowClass(timer=timer, **workflow_kwargs)
-    workflow = workflow_factory()
-    assert workflow.logger is not None, "For some reason the logger was not properly passed to the workflow."
-    if WorkflowClass.is_randomizable():
-        assert workflow.random_state is not None, "For some reason the random state was not properly passed to the workflow."
-    else:
-        assert workflow.random_state is  None, f"Workflow class {workflow_class} is not randomizable." f" Yet, a workflow random state different from None (namely {workflow.random_state}) was set."
-    
-    # check whether the workflow can be fitted on this data
-    reason_to_not_build = workflow.get_reason_why_workflow_cannot_be_fit_on_dataset(X=X, y=y)
-    if reason_to_not_build is not None:
-        logger.info(
-            "Not building the curve for this workflow as it confirms that the curve cannot be built."
-            f"The following reason is given:\n{reason_to_not_build}."
-        )
-        results = {"objective": "F", "metadata": {"reason_for_fail": reason_to_not_build}}
-
     # create builder
     if task_type not in ["classification", "regression"]:
         raise ValueError(
@@ -155,7 +161,17 @@ def run_learning_workflow(
     logger.info(f"Creating LearningCurveBuilder")
     builder = LearningCurveBuilder(
         timer=timer,
-        workflow_factory=workflow_factory,
+        workflow_factory=lambda: create_workflow(
+            workflow_class=workflow_class,
+            workflow_parameters=workflow_parameters,
+            workflow_seed=workflow_seed,
+            raise_exception_on_unsuitable_preprocessor=raise_exception_on_unsuitable_preprocessor,
+            epoch_schedule=epoch_schedule,
+            memory_limit_in_bytes=memory_limit_in_bytes,
+            n_jobs=n_jobs,
+            timer=timer,
+            logger=logger
+        ),
         is_classification=is_classification,
         X=X,
         y=y,

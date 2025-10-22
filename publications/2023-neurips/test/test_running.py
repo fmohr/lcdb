@@ -3,7 +3,8 @@ import logging
 from parameterized import parameterized
 import unittest
 
-from lcdb.analysis.views._debugger import Debugger
+from lcdb.db.processors._traceback_extractor import TracebackExtractor
+from lcdb.db._results import ResultSet
 import pandas as pd
 from pathlib import Path
 import shutil
@@ -104,19 +105,21 @@ class TestRunFunctionalities(unittest.TestCase):
         deephyper_results_to_jsonl(f"{test_status_dir_for_case}/results.csv", f"{test_status_dir_for_case}/results.jsonl")
 
         # check that there are no errors
-        debugger = Debugger()
-        debugger.load_data(jsonl=f"{test_status_dir_for_case}/results.jsonl")
-        self.assertEqual(__class__.num_evals_in_first, debugger.num_rows)
+        rs = ResultSet()
+        rs.load(f"{test_status_dir_for_case}/results.jsonl")
+        rs._unpack_build_issues()
+        rs.apply(TracebackExtractor())
+        self.assertEqual(__class__.num_evals_in_first, rs.num_rows)
 
         # remove some of the error files if they are expected
-        if "LibSVM" in workflow and debugger.num_rows > 0:
-            debugger.reduce(lambda r: any(["The dual coefficients or intercepts are not finite." in s["message"] for s in r["traceback_summary"]]) if r["traceback_summary"] is not None else True)
-        if "keras" in workflow and debugger.num_rows > 0:
-            debugger.reduce(lambda r: any(["There are NAN values in the NN prediction." in s["message"] for s in r["traceback_summary"]]) if r["traceback_summary"] is not None else True)
+        if "LibSVM" in workflow and rs.num_rows > 0:
+            rs.reduce(lambda r: any(["The dual coefficients or intercepts are not finite." in s["message"] for s in r["traceback_summary"]]) if r["traceback_summary"] is not None else True)
+        if "keras" in workflow and rs.num_rows > 0:
+            rs.reduce(lambda r: any(["There are NAN values in the NN prediction." in s["message"] for s in r["traceback_summary"]]) if r["traceback_summary"] is not None else True)
 
         # check that no unexpected errors are left
-        error_messages = debugger.get_error_messages()
-        self.assertEqual(0, len(error_messages), msg=f"There should be no errors, but we observed these error messages: {error_messages}")
+        rs.drop_rows_without_build_issues()
+        self.assertEqual(0, rs.num_rows, msg=f"There should be no errors, but we observed {rs.num_rows} rows with build errors left.")
 
     def test_resume_knn_run(self):
         logger.info("Test resume KNN")
