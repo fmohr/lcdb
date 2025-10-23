@@ -156,49 +156,131 @@ class PCloudRepository(Repository):
 
     
     def add_results(self, campaign, *result_files):
-        """Uploads results as a CSV file to pCloud."""
+        """Uploads result files (JSONL or CSV) to pCloud, preserving lcdb/data/<workflow>/<campaign>/<openmlid>/<file> structure."""
+        import gzip
+        import io
+        import os
+        import re
+        import json
+        import requests
+        import pandas as pd
+
         self.update_content()
+
         for result_file in result_files:
-            # read result file
-            if result_file.endswith((".gz", ".gzip")):
-                with gzip.GzipFile(result_file, "rb") as f:
-                    df = pd.read_csv(f)
+            is_jsonl = result_file.endswith((".jsonl", ".jsonl.gz", ".jsonl.gzip"))
+
+            # ------------------------------------------------------------
+            # Extract workflow and openmlid from file path
+            # ------------------------------------------------------------
+            workflow = None
+            openmlid = None
+
+            parts = result_file.split("/")
+            for part in parts:
+                if part.startswith("lcdb.workflow"):
+                    workflow = part.split("-")[0]  # strip memory bin suffix
+                if re.fullmatch(r"\d+", part):
+                    openmlid = part
+
+            if workflow is None:
+                workflow = "unknown_workflow"
+            if openmlid is None:
+                openmlid = "unknown_dataset"
+
+            # ------------------------------------------------------------
+            # Derive seeds from JSONL content (if available)
+            # ------------------------------------------------------------
+            workflow_seed = valid_seed = test_seed = 0
+
+            if is_jsonl:
+                opener = gzip.open if result_file.endswith((".gz", ".gzip")) else open
+                try:
+                    with opener(result_file, "rt", encoding="utf-8") as f:
+                        first_line = f.readline()
+                        if first_line.strip():
+                            record = json.loads(first_line)
+                            workflow_seed = int(record.get("workflow_seed", 0))
+                            valid_seed = int(record.get("valid_seed", 0))
+                            test_seed = int(record.get("test_seed", 0))
+                except Exception as e:
+                    print(f"Warning: Could not extract seeds from {result_file}: {e}")
+
+            # ------------------------------------------------------------
+            # Build destination path and base filename
+            # ------------------------------------------------------------
+            path = f"data/{workflow}/{campaign}/{openmlid}"
+            folder_id = self._get_or_create_folder_id(path)
+
+            if is_jsonl:
+                base_name = f"{workflow_seed}-{test_seed}-{valid_seed}.jsonl.gz"
             else:
-                df = pd.read_csv(result_file)
+                base_name = f"{workflow_seed}-{test_seed}-{valid_seed}.csv.gz"
 
-            # decompose the dataframe to have results for a single workflow/openmlid and seeds
-            for (workflow, openmlid, workflow_seed, valid_seed, test_seed), group in df.groupby(
-                    ["m:workflow", "m:openmlid", "m:workflow_seed", "m:valid_seed", "m:test_seed"]
-            ):
-                openmlid = int(openmlid)
-                name = f"{int(workflow_seed)}-{int(test_seed)}-{int(valid_seed)}.csv.gz"
-                print(f"Adding results for {workflow}/{campaign}/{openmlid}/{name}")
-                path = f"data/{workflow}/{campaign}/{openmlid}"
-                folder_id = self._get_or_create_folder_id(path)
+            print(f"Uploading {base_name} to {path}")
 
-                # Create a BytesIO object to hold the CSV in binary format
+            # ------------------------------------------------------------
+            # JSONL(.gz): upload raw file as-is
+            # ------------------------------------------------------------
+            if is_jsonl:
+                if result_file.endswith((".gz", ".gzip")):
+                    with open(result_file, "rb") as f:
+                        content = f.read()
+                else:
+                    with open(result_file, "rb") as f:
+                        data = f.read()
+                    buf = io.BytesIO()
+                    with gzip.GzipFile(fileobj=buf, mode="wb") as gz:
+                        gz.write(data)
+                    buf.seek(0)
+                    content = buf.read()
+
+                upload_buf = io.BytesIO(content)
+                url = (
+                    f"https://eapi.pcloud.com/uploadfile"
+                    f"?code={self.repo_code}&auth={self.token}"
+                    f"&folderid={folder_id}&filename={base_name}"
+                )
+                status = requests.post(
+                    url, files={"file": (base_name, upload_buf, "application/gzip")}
+                ).json()
+
+            # ------------------------------------------------------------
+            # CSV(.gz): legacy fallback
+            # ------------------------------------------------------------
+            else:
+                if result_file.endswith((".gz", ".gzip")):
+                    with gzip.open(result_file, "rt", encoding="utf-8") as f:
+                        df = pd.read_csv(f)
+                else:
+                    df = pd.read_csv(result_file)
+
                 csv_buffer = io.BytesIO()
-
-                # Write the DataFrame to the buffer in CSV format, but use StringIO first to handle text conversion
                 csv_string = df.to_csv(index=False)
-
-                # Compress the CSV data using gzip
-                with gzip.GzipFile(fileobj=csv_buffer, mode='wb') as gz:
-                    gz.write(csv_string.encode('utf-8'))  # Compress the CSV string (convert it to bytes first)
-
-                # Reset the buffer's position to the beginning
+                with gzip.GzipFile(fileobj=csv_buffer, mode="wb") as gz:
+                    gz.write(csv_string.encode("utf-8"))
                 csv_buffer.seek(0)
 
-                # upload the file
-                url = f"https://eapi.pcloud.com/uploadfile?code={self.repo_code}&auth={self.token}&folderid={folder_id}&filename={name}"
-                status = requests.post(url, files={'file': (name, csv_buffer, 'application/gzip')}).json()
-                if not isinstance(status, dict):
-                    raise ValueError(
-                        f"Could not add result. Object received from pCloud should be a dict but is {type(status)}"
-                    )
-                if status["result"] != 0:
-                    raise ValueError(f"Could not add result. Received an error response from pCloud: {status}")
-                
+                url = (
+                    f"https://eapi.pcloud.com/uploadfile"
+                    f"?code={self.repo_code}&auth={self.token}"
+                    f"&folderid={folder_id}&filename={base_name}"
+                )
+                status = requests.post(
+                    url, files={"file": (base_name, csv_buffer, "application/gzip")}
+                ).json()
+
+            # ------------------------------------------------------------
+            # Verify upload result
+            # ------------------------------------------------------------
+            if not isinstance(status, dict):
+                raise ValueError(
+                    f"Could not add result. pCloud returned {type(status)} instead of dict."
+                )
+            if status.get("result") != 0:
+                raise ValueError(
+                    f"pCloud upload failed for {result_file}: {status}"
+                )                
 
 
     def _upload_file(self, folder_id, file_path, file_name):
