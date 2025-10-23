@@ -231,7 +231,7 @@ class TestBuildFunctionalities(unittest.TestCase):
                 workflow_seed=workflow_seed,
                 monotonic=monotonic,
                 raise_errors=True,
-                anchor_schedule="power-2-2-2",
+                anchor_schedule=32,
                 epoch_schedule=epoch_schedule,
                 max_sample_anchor=MAX_SAMPLE_ANCHOR
             )
@@ -242,7 +242,7 @@ class TestBuildFunctionalities(unittest.TestCase):
             self.assertEqual("build_curves", final_node["tag"])
             first_anchor_in_final_node = final_node["children"][0]
             self.assertEqual("anchor", first_anchor_in_final_node["tag"])
-            self.assertEqual(64, first_anchor_in_final_node["metadata"]["value"])
+            self.assertEqual(32, first_anchor_in_final_node["metadata"]["value"])
             metrics_in_first_anchor_in_final_node = first_anchor_in_final_node["children"][-1]
             self.assertEqual("metrics", metrics_in_first_anchor_in_final_node["tag"])
             validation_confusion_matrix_in_first_anchor_in_final_node = metrics_in_first_anchor_in_final_node["children"][1]["children"][0]
@@ -312,7 +312,7 @@ class TestBuildFunctionalities(unittest.TestCase):
             valid_prop=0.1,
             test_prop=0.1,
             timeout_on_fit=60,
-            anchor_schedule="power",
+            anchor_schedule="first",
             epoch_schedule="power-2-2-2",
             raise_errors=True,
             logger=logger
