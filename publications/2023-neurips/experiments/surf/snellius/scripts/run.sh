@@ -83,6 +83,7 @@ for LCDB_VALID_SEED in "${VAL_SEEDS[@]}"; do
                     --timeout-on-metrics 60 \
                     --workflow-seed $LCDB_WORKFLOW_SEED \
                     --workflow-memory-limit $LCDB_WORKFLOW_MEMORY_LIMIT \
+                    --memory-patience 10 \
                     --ncpus $CPUS_PER_CONFIG \
                     --valid-seed $LCDB_VALID_SEED \
                     --no-exception-on-unsuitable-preprocessor \
