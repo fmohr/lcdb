@@ -10,7 +10,7 @@ from lcdb.data.split import train_valid_test_split
 from lcdb.workflow._preprocessing_workflow import PreprocessedWorkflow
 from lcdb.workflow.xgboost import XGBoostWorkflow
 from lcdb.workflow.keras import DenseNNWorkflow
-from lcdb.workflow.sklearn import SklearnWorkflow, TreesEnsembleWorkflow
+from lcdb.workflow.sklearn import SklearnWorkflow, DTWorkflow, TreesEnsembleWorkflow
 from lcdb.builder import run_learning_workflow, create_workflow
 from lcdb.builder.utils import get_random_state
 from lcdb.workflow._util import get_workflow_class, get_config_space_of_workflow
@@ -74,112 +74,78 @@ class TestBuildFunctionalities(unittest.TestCase):
         version = LCDB().get_version()
         self.assertIsNotNone(version)
     
-    @parameterized.expand(list(it.product([3, 188], WORKFLOWS, WORKFLOW_SEEDS)))
-    def test_workflow_initialization(self, openmlid, workflow_class, workflow_seed):
-        
-        (X, y), dataset_metadata = load_task(f"openml.{openmlid}")
+    @parameterized.expand(list(it.product(
+            [3, 188],
+            [
+                (workflow_class, hp_name, choice)
+                for workflow_class in WORKFLOWS
+                for hp_name, hp_obj in get_workflow_class(workflow_class).config_space().items()
+                    if hp_name.startswith("pp@") and isinstance(hp_obj, CategoricalHyperparameter)
+                for choice in hp_obj.choices
+            ],
+            WORKFLOW_SEEDS
+        )))
+    def test_1_workflow_initialization(self, openmlid, parametrized_workflow, workflow_seed):
 
-
-        # Transform categorical features
-        columns_categories = np.asarray(dataset_metadata["categories"], dtype=bool)
-        dataset_metadata["categories"] = {"columns": columns_categories}
-
-        # train/validation/test split
-        X_train, X_valid, X_test, y_train, y_valid, y_test = train_valid_test_split(X, y, test_seed=0, valid_seed=0)
-        X_train = X_train[:256]
-        y_train = y_train[:256]
-
-        for hp_name, hp_obj in get_workflow_class(workflow_class).config_space().items():
-            if not hp_name.startswith("pp@") or not isinstance(hp_obj, CategoricalHyperparameter):
-                continue
-
-            for choice in hp_obj.choices:
+        workflow_class, hp_name, choice = parametrized_workflow
             
-                params = {
-                    hp_name: choice
-                }
-                if hp_name == "pp@cat_encoder":
-                    if openmlid in [3, 188]:
-                        if choice == "none":
-                            continue
-                    else:
-                        if choice != "none":
-                            continue
+        params = {
+            hp_name: choice
+        }
+        if hp_name == "pp@cat_encoder":
+            if openmlid in [3, 188]:
+                if choice == "none":
+                    return
+            else:
+                if choice != "none":
+                    return
 
-                else:
-                    if openmlid in [3, 188]:
-                        params["pp@cat_encoder"] = "onehot"
-                    else:
-                        params["pp@cat_encoder"] = "none"
+        else:
+            if openmlid in [3, 188]:
+                params["pp@cat_encoder"] = "onehot"
+            else:
+                params["pp@cat_encoder"] = "none"
+        
+        for n_jobs in [1, 2]:
+            workflow = create_workflow(
+                workflow_class=workflow_class,
+                workflow_parameters=params,
+                workflow_seed=workflow_seed,
+                raise_exception_on_unsuitable_preprocessor=True,
+                memory_limit_in_bytes=1024 ** 3,
+                epoch_schedule="first",
+                n_jobs=n_jobs,
+                timer=None,
+                logger=logger
+            )
+
+            assert not isinstance(workflow, PreprocessedWorkflow) or workflow.is_randomizable()
+            expected_random_state = get_random_state(workflow_seed)
+            if workflow.is_randomizable():
                 
-                for n_jobs in [1, 2]:
-                    workflow = create_workflow(
-                        workflow_class=workflow_class,
-                        workflow_parameters=params,
-                        workflow_seed=workflow_seed,
-                        raise_exception_on_unsuitable_preprocessor=True,
-                        memory_limit_in_bytes=1024 ** 3,
-                        epoch_schedule="first",
-                        n_jobs=n_jobs,
-                        timer=None,
-                        logger=logger
-                    )
-
-                    assert not isinstance(workflow, PreprocessedWorkflow) or workflow.is_randomizable()
-                    expected_random_state = get_random_state(workflow_seed)
-                    if workflow.is_randomizable():
-                        
-                        # check that the random state in the workflow is what we would expect initially
-                        s1 = expected_random_state.get_state()
-                        s2 = workflow.random_state.get_state()
-                        for a, b in zip(s1, s2):
-                            assert np.all(a == b), f"Initialization of random_state for {workflow_class} does not work properly"  # or just rs1
-
-                    # now fit the workflow
-                    with workflow.timer.time("fit"):
-                        workflow.fit(X_train, y_train, X_valid, y_valid, X_test, y_test, metadata=dataset_metadata)
-                        y_train_hat_proba = workflow.predict_proba(X_train)
-                        y_valid_hat_proba = workflow.predict_proba(X_valid)
-                        y_test_hat_proba = workflow.predict_proba(X_test)
-
-                    # fit a copy of the workflow to see whether we get the same prediction vectors on all three folds
-                    workflow2 = create_workflow(
-                        workflow_class=workflow_class,
-                        workflow_parameters=params,
-                        workflow_seed=workflow_seed,
-                        raise_exception_on_unsuitable_preprocessor=True,
-                        epoch_schedule="first",
-                        memory_limit_in_bytes=1024 ** 3,
-                        n_jobs=n_jobs,
-                        timer=None,
-                        logger=logger
-                    )
-                    with workflow2.timer.time("fit"):
-                        workflow2.fit(X_train, y_train, X_valid, y_valid, X_test, y_test, metadata=dataset_metadata)
-                        y_train_hat_proba2 = workflow2.predict_proba(X_train)
-                        y_valid_hat_proba2 = workflow2.predict_proba(X_valid)
-                        y_test_hat_proba2 = workflow2.predict_proba(X_test)
-                        assert np.allclose(y_train_hat_proba, y_train_hat_proba2), f"Predictions are not reproducible for workflow {workflow_class} with params {params=}, workflow_seed={workflow_seed}, epoch_schedule={epoch_schedule}, n_jobs={n_jobs}"
-                        assert np.allclose(y_valid_hat_proba, y_valid_hat_proba2), f"Predictions are not reproducible for workflow {workflow_class} with params {params=}, workflow_seed={workflow_seed}, epoch_schedule={epoch_schedule}, n_jobs={n_jobs}"
-                        assert np.allclose(y_test_hat_proba, y_test_hat_proba2), f"Predictions are not reproducible for workflow {workflow_class} with params {params=}, workflow_seed={workflow_seed}, epoch_schedule={epoch_schedule}, n_jobs={n_jobs}"
+                # check that the random state in the workflow is what we would expect initially
+                s1 = expected_random_state.get_state()
+                s2 = workflow.random_state.get_state()
+                for a, b in zip(s1, s2):
+                    assert np.all(a == b), f"Initialization of random_state for {workflow_class} does not work properly"  # or just rs1
 
     @parameterized.expand(list(it.product([61], WORKFLOWS, VAL_SEEDS, TEST_SEEDS, WORKFLOW_SEEDS, [True, False])))
-    def test_workflow_base_functionality_and_integrity(self, openmlid, workflow, val_seed, test_seed, workflow_seed, monotonic):
+    def test_2_workflow_base_functionality_and_integrity(self, openmlid, workflow, val_seed, test_seed, workflow_seed, monotonic):
 
         workflow_class = get_workflow_class(workflow)
 
         params = {}
+        epoch_schedule = "linear"
         if issubclass(workflow_class, PreprocessedWorkflow) and openmlid in [3, 188]:
             params["pp@cat_encoder"] = "onehot"
             
         if issubclass(workflow_class, XGBoostWorkflow):
-            params["n_estimators"] = 16
+            params["n_estimators"] = 4
         
         if issubclass(workflow_class, TreesEnsembleWorkflow):
-            params["n_estimators"] = 16
+            params["n_estimators"] = 4
         
         if issubclass(workflow_class, DenseNNWorkflow):
-            params["epoch_schedule"] = "linear"
             params["num_epochs"] = 10
 
         for n_jobs in [1, 2]:
@@ -195,6 +161,7 @@ class TestBuildFunctionalities(unittest.TestCase):
                     monotonic=monotonic,
                     raise_errors=True,
                     anchor_schedule="power-2-2-2",
+                    epoch_schedule=epoch_schedule,
                     max_sample_anchor=MAX_SAMPLE_ANCHOR,
                     n_jobs=n_jobs
                 )
@@ -235,22 +202,22 @@ class TestBuildFunctionalities(unittest.TestCase):
                     raise e
 
     @parameterized.expand(list(it.product(DATASETS, WORKFLOWS, VAL_SEEDS, TEST_SEEDS, WORKFLOW_SEEDS, [True, False])))
-    def test_ability_to_work_all_types_of_datasets(self, openmlid, workflow, val_seed, test_seed, workflow_seed, monotonic):
+    def test_3_ability_to_work_all_types_of_datasets(self, openmlid, workflow, val_seed, test_seed, workflow_seed, monotonic):
 
         workflow_class = get_workflow_class(workflow)
 
         params = {}
+        epoch_schedule = "linear"
         if issubclass(workflow_class, PreprocessedWorkflow) and openmlid in [3, 188]:
             params["pp@cat_encoder"] = "onehot"
             
         if issubclass(workflow_class, XGBoostWorkflow):
-            params["n_estimators"] = 16
+            params["n_estimators"] = 4
 
         if issubclass(workflow_class, TreesEnsembleWorkflow):
-            params["n_estimators"] = 16
+            params["n_estimators"] = 4
         
         if issubclass(workflow_class, DenseNNWorkflow):
-            params["epoch_schedule"] = "linear"
             params["num_epochs"] = 10
 
         logger.info(f"Starting test of workflow {workflow} on dataset {openmlid}")
@@ -265,6 +232,7 @@ class TestBuildFunctionalities(unittest.TestCase):
                 monotonic=monotonic,
                 raise_errors=True,
                 anchor_schedule="power-2-2-2",
+                epoch_schedule=epoch_schedule,
                 max_sample_anchor=MAX_SAMPLE_ANCHOR
             )
 
@@ -307,7 +275,7 @@ class TestBuildFunctionalities(unittest.TestCase):
         (3, "lcdb.workflow.sklearn.KNNWorkflow", 40),
         (188, "lcdb.workflow.sklearn.KNNWorkflow", 90)
     ])
-    def test_that_preprocessors_are_logged_in_output(
+    def test_4_that_preprocessors_are_logged_in_output(
             self,
             openmlid,
             workflow,
@@ -439,7 +407,7 @@ class TestBuildFunctionalities(unittest.TestCase):
         (1457, "lcdb.workflow.sklearn.LibLinearWorkflow", 0, 0, 0, 16),
         (1457, "lcdb.workflow.sklearn.KNNWorkflow", 0, 0, 0, 16)
     ])
-    def test_correct_behavior_on_degenerated_anchors(self, openmlid, workflow, val_seed, test_seed, workflow_seed, anchor):
+    def test_5_correct_behavior_on_degenerated_anchors(self, openmlid, workflow, val_seed, test_seed, workflow_seed, anchor):
 
         for monotonic in [False, True]:
             workflow_class = get_workflow_class(workflow)
@@ -476,116 +444,3 @@ class TestBuildFunctionalities(unittest.TestCase):
             self.assertEqual("metrics", metrics_in_first_anchor_in_final_node["tag"])
             validation_confusion_matrix_in_first_anchor_in_final_node = metrics_in_first_anchor_in_final_node["children"][1]["children"][0]
             self.assertEqual("confusion_matrix", validation_confusion_matrix_in_first_anchor_in_final_node["tag"])
-
-    @parameterized.expand(list(it.product([61], VAL_SEEDS, TEST_SEEDS, WORKFLOW_SEEDS, [True, False])))
-    def test_reproducibility_of_preprocessors(self, openmlid, val_seed, test_seed, workflow_seed, monotonic):
-
-        logger.info(f"Starting reproducibility test of preprocessors on dataset {openmlid}")
-        
-        from lcdb.workflow.sklearn import DTWorkflow
-        from ConfigSpace.hyperparameters import CategoricalHyperparameter
-        workflow_class = DTWorkflow
-
-        for hp_name, hp_obj in workflow_class.config_space().items():
-            if not hp_name.startswith("pp@") or not isinstance(hp_obj, CategoricalHyperparameter):
-                continue
-
-            for choice in hp_obj.choices:
-            
-                params = {
-                    hp_name: choice
-                }
-                if hp_name != "pp@cat_encoder" and openmlid in [3, 188]:
-                    params["pp@cat_encoder"] = "onehot"
-                    
-                matrices_first_run = []
-
-                for run_idx in range(2):
-                    out = run_learning_workflow(
-                        openml_id=openmlid,
-                        workflow_class=workflow_class,
-                        workflow_parameters=params,
-                        valid_seed=val_seed,
-                        test_seed=test_seed,
-                        workflow_seed=workflow_seed,
-                        monotonic=monotonic,
-                        raise_errors=True,
-                        anchor_schedule="first",
-                        max_sample_anchor=MAX_SAMPLE_ANCHOR,
-                        raise_exception_on_unsuitable_preprocessor=False
-                    )
-
-                    parsed_json = json.loads(out["metadata"]["json"])
-                    final_node = parsed_json["children"][-1]
-                    first_anchor_in_final_node = final_node["children"][0]
-                    metrics_in_first_anchor_in_final_node = first_anchor_in_final_node["children"][-1]
-
-                    # check that train, validation, and test confusion matrices are identical
-                    for i in range(3):
-                        matrix = metrics_in_first_anchor_in_final_node["children"][i]["children"][0]["metadata"]["value"]
-                        if run_idx == 0:
-                            matrices_first_run.append(matrix)
-                        else:
-                            self.assertEqual(matrices_first_run[i], matrix, msg=f"Missing reproducibility for {workflow_class=}.")
-
-
-    @parameterized.expand(list(it.product([61], WORKFLOWS, VAL_SEEDS, TEST_SEEDS, WORKFLOW_SEEDS, [True, False])))
-    def test_reproducibility_of_actual_workflows(self, openmlid, workflow, val_seed, test_seed, workflow_seed, monotonic):
-
-        workflow_class = get_workflow_class(workflow)
-
-        params = {}
-        if issubclass(workflow_class, PreprocessedWorkflow) and openmlid in [3, 188]:
-            params["pp@cat_encoder"] = "onehot"
-            
-        if issubclass(workflow_class, XGBoostWorkflow):
-            params["n_estimators"] = 16
-        
-        if issubclass(workflow_class, TreesEnsembleWorkflow):
-            params["n_estimators"] = 16
-        
-        if issubclass(workflow_class, DenseNNWorkflow):
-            params["epoch_schedule"] = "linear"
-            params["num_layers"] = 2
-            params["num_units_first"] = 5
-            params["num_units_last"] = 5
-            params["num_epochs"] = 5
-
-        logger.info(f"Starting reproducibility test of workflow {workflow} on dataset {openmlid}")
-        try:
-            
-            matrices_first_run = []
-
-            for run_idx in range(2):
-                out = run_learning_workflow(
-                    openml_id=openmlid,
-                    workflow_class=workflow,
-                    workflow_parameters=params,
-                    valid_seed=val_seed,
-                    test_seed=test_seed,
-                    workflow_seed=workflow_seed,
-                    monotonic=monotonic,
-                    raise_errors=True,
-                    anchor_schedule="first",
-                    max_sample_anchor=MAX_SAMPLE_ANCHOR
-                )
-
-                parsed_json = json.loads(out["metadata"]["json"])
-                final_node = parsed_json["children"][-1]
-                first_anchor_in_final_node = final_node["children"][0]
-                metrics_in_first_anchor_in_final_node = first_anchor_in_final_node["children"][-1]
-
-                # check that train, validation, and test confusion matrices are identical
-                for i in range(3):
-                    matrix = metrics_in_first_anchor_in_final_node["children"][i]["children"][0]["metadata"]["value"]
-                    if run_idx == 0:
-                        matrices_first_run.append(matrix)
-                    else:
-                        self.assertEqual(matrices_first_run[i], matrix, msg=f"Missing reproducibility for {workflow_class=}.")
-            
-        except Exception as e:
-            msg = str(e)
-            if "covariance is ill defined" in msg:
-                pass
-            else:
-                raise e

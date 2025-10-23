@@ -116,8 +116,12 @@ class Timer:
         self.stack = []
         self.precision = precision
         self.id_counter = 0
+        self.accumulated_synthetic_time = 0
+    
+    def inject_synthetically_elapsed_time(self, elapsed_time_in_s):
+        self.accumulated_synthetic_time += elapsed_time_in_s
 
-    def start(self, tag: Hashable, metadata: dict = None, timestamp_start=None) -> int:
+    def start(self, tag: Hashable, metadata: dict = None) -> int:
         """Start the timer for a new tag (i.e., creates a child node in the time tree).
 
         Args:
@@ -129,7 +133,7 @@ class Timer:
             int: id of the created node in the timer tree.
         """
 
-        node = TimerNode(self.id_counter, tag, metadata, self.precision, timestamp_start=timestamp_start)
+        node = TimerNode(self.id_counter, tag, metadata, self.precision, timestamp_start=time.time() + self.accumulated_synthetic_time)
         self.id_counter += 1
 
         if self.root is None:
@@ -142,14 +146,14 @@ class Timer:
 
         return node.id
 
-    def stop(self, metadata: dict = None, timestamp_end=None):
+    def stop(self, metadata: dict = None):
         """Stops the current timer and steps back to the parent node"""
 
         if len(self.stack) == 0:
             raise ValueError("No timer currently active!")
 
         node = self.stack.pop()
-        node.stop(metadata, timestamp_end=timestamp_end)
+        node.stop(metadata, timestamp_end=time.time() + self.accumulated_synthetic_time)
 
     def inject(self, timer_node, offset=0, ignore_root=True):
         """
@@ -215,10 +219,9 @@ class Timer:
             self,
             tag: Hashable,
             metadata: dict = None,
-            cancel_on_error=False,
-            timestamp_start=None,
-            timestamp_end=None):
-        node_id = self.start(tag, metadata, timestamp_start=timestamp_start)
+            cancel_on_error=False
+        ):
+        node_id = self.start(tag, metadata)
         try:
             yield self.active_node
         except:
@@ -227,7 +230,7 @@ class Timer:
             else:
                 raise
         else:
-            self.stop(timestamp_end=timestamp_end)
+            self.stop()
 
 
 def test_timer():

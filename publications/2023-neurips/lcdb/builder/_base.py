@@ -38,10 +38,14 @@ def create_workflow(
     timer=None,
     logger=None
     ):
-    if "random_state" in workflow_parameters:
-        raise ValueError("Do not specify `random_state` in the workflow_parameters. This field will be set automatically using `workflow_seed`")
-    if "epoch_schedule" in workflow_parameters:
-        raise ValueError("Do not specify `epoch_schedule` in the workflow_parameters. This field will be set automatically using `epoch_schedule` in the workflow construction.")
+
+    # check that random_state and epoch_schedule are not specified in workflow_parameters (to avoid redundancy)
+    if workflow_parameters is not None:
+        if "random_state" in workflow_parameters:
+            raise ValueError("Do not specify `random_state` in the workflow_parameters. This field will be set automatically using `workflow_seed`")
+        if "epoch_schedule" in workflow_parameters:
+            raise ValueError("Do not specify `epoch_schedule` in the workflow_parameters. This field will be set automatically using `epoch_schedule` in the workflow construction.")
+    
     logger.info("Getting workflow class...")
     from lcdb.workflow._util import get_workflow_class # lazy import to avoid cyclic dependencies
     WorkflowClass = get_workflow_class(workflow_class) if isinstance(workflow_class, str) else workflow_class

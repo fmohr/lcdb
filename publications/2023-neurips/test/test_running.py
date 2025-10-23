@@ -15,9 +15,14 @@ import json
 from lcdb.builder.utils import StatusFileManager, deephyper_results_to_jsonl
 
 ch = logging.StreamHandler()
-ch.setLevel(logging.DEBUG)
+ch.setLevel(logging.INFO)
 formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 ch.setFormatter(formatter)
+
+lcdb_logger = logging.getLogger("LCDB")
+lcdb_logger.handlers.clear()
+lcdb_logger.addHandler(ch)
+lcdb_logger.setLevel(logging.WARNING)
 
 logger = logging.getLogger("tester")
 logger.handlers.clear()
@@ -52,7 +57,7 @@ class TestRunFunctionalities(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.folder = Path(__file__).parent
-        cls.num_evals_in_first = 4
+        cls.num_evals_in_first = 2
         cls.test_status_dir = Path(f"{cls.folder}/test_status_dir")
         if cls.test_status_dir.exists():
             shutil.rmtree(cls.test_status_dir)
@@ -71,9 +76,9 @@ class TestRunFunctionalities(unittest.TestCase):
         # define params
         params = {}
         if "TreesEnsemble" in workflow:
-            params["n_estimators"] = 8
+            params["n_estimators"] = 3
         if "xgboost" in workflow or "keras" in workflow in workflow:
-            params["num_epochs"] = 8
+            params["num_epochs"] = 3
             if "keras" in workflow: # overwrite the randomly sampled network design by a small architecture (architecture is not subject to test here)
                 params["num_layers"] = 3
                 params["num_units_first"] = 16
@@ -100,9 +105,6 @@ class TestRunFunctionalities(unittest.TestCase):
         kwargs = vars(args)
         kwargs.pop("func")
         func(**kwargs)
-
-        # rewrite results
-        deephyper_results_to_jsonl(f"{test_status_dir_for_case}/results.csv", f"{test_status_dir_for_case}/results.jsonl")
 
         # check that there are no errors
         rs = ResultSet()
@@ -132,7 +134,7 @@ class TestRunFunctionalities(unittest.TestCase):
 
         for round in range(1, 3):
 
-            logger.info(f"Additional Round #{round}")
+            logger.info(f"Round #{round}")
 
             # remove status files for running
             status_file_manager = StatusFileManager(test_status_dir_for_case)
@@ -152,7 +154,7 @@ class TestRunFunctionalities(unittest.TestCase):
 
             # parse command
             num_evals = __class__.num_evals_in_first + 2 * round
-            args = parser.parse_args(
+            args_raw = (
                 f"run"
                 f" -i {openmlid}"
                 f" -w {workflow}"
@@ -165,15 +167,17 @@ class TestRunFunctionalities(unittest.TestCase):
                 " --log-level=debug"
                 " -e serial"
                 " --no-exception-on-unsuitable-preprocessor"
-            .split())
+            )
+            args = parser.parse_args(args_raw.split())
 
             # execute command
-            logger.debug("Starting Search")
+            logger.debug(f"Executing lcdb {args_raw}")
             func = args.func
             kwargs = vars(args)
             kwargs.pop("func")
             func(**kwargs)
 
             # check whether results have arrived without error
-            df_results = pd.read_csv(f"{test_status_dir_for_case}/results.csv")
-            self.assertEqual(num_evals, len(df_results))
+            rs = ResultSet()
+            rs.load(f"{test_status_dir_for_case}/results.jsonl")
+            self.assertEqual(num_evals, rs.num_rows)

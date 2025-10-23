@@ -201,27 +201,3 @@ class ResultSet(ABC):
         self.apply(LearningCurveExtractor(metrics=metrics))
         return merge_curves([row["learning_curve"] for row in self._rows if row["learning_curve"] is not None])
 
-
-if __name__ == "__main__":
-    
-    print("Loading")
-    rs = ResultSet()
-    rs.load([
-        #"/home/felix/Uni/papers/lcdb/publications/2023-neurips/experiments/debugging/results-23.jsonl",
-        #"/home/felix/Uni/papers/lcdb/publications/2023-neurips/experiments/debugging/results-3.jsonl",
-        "/home/felix/Uni/papers/lcdb/publications/2023-neurips/experiments/debugging/results-61.jsonl"
-    ])
-    print(len(rs))
-    rs.drop_rows_with_build_issues()
-    rs._unpack_results()
-    print(len(rs))
-    #rs._unpack_build_issues()
-    
-
-    
-
-    #print(rs[0]["learning_curve"].values.shape)
-    #rs.drop_raw_results()
-
-    for c, rs_for_c in rs.group_by_config():
-        print(rs_for_c.get_learning_curve().values.shape)
