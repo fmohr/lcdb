@@ -63,7 +63,7 @@ class TestDenseNetwork(unittest.TestCase):
     @parameterized.expand([(p.copy(), ) for p in single_change_parametrizations_of_workflow])
     def test_functionality_and_reproducibility(self, params):
 
-        params["epoch_schedule"] = "linear"
+        epoch_schedule = "linear"
         params["num_epochs"] = 3
         if "pp@cat_encoder" not in params:
             params["pp@cat_encoder"] = "onehot"
@@ -90,7 +90,8 @@ class TestDenseNetwork(unittest.TestCase):
                     workflow_seed=0,
                     monotonic=False,
                     raise_errors=True,
-                    anchor_schedule=anchor_schedule
+                    anchor_schedule=anchor_schedule,
+                    epoch_schedule=epoch_schedule
                 )
                 self.assertNotEqual("none", params["pp@cat_encoder"])
 

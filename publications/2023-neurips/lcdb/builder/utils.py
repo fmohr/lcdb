@@ -134,6 +134,7 @@ def terminate_on_timeout(timeout, func, *args, **kwargs):
 def terminate_on_memory_exceeded(
     memory_limit,
     memory_tracing_interval,
+    patience,
     raise_exception,
     func,
     log_interval=5,
@@ -145,6 +146,7 @@ def terminate_on_memory_exceeded(
     Args:
         memory_limit (int): In bytes, if set to a positive integer, the memory usage is measured at regular intervals and the function is interrupted if the memory usage exceeds the limit. If set to ``-1``, only the peak memory is measured. If the executed function is busy outside of the Python interpretor, this mechanism will not work properly. Defaults to ``-1``.
         memory_tracing_interval (float): In seconds, the interval at which the memory usage is measured. Defaults to ``0.1``.
+        patience: In seconds, the number of intervals after which a memory violation will result in a kill
 
     Returns:
         function: a decorated function.
@@ -176,31 +178,47 @@ def terminate_on_memory_exceeded(
             memory_peak = p.memory_info().rss
 
             # start monitoring memory consumption of the process
+            first_time_of_violation_in_sequence = None
+            remaining_time_before_kill = None
             while not future.done():
 
                 # in bytes (not the peak memory but last snapshot)
-                memory_peak = max(p.memory_info().rss, memory_peak)
+                memory_now = p.memory_info().rss
+                memory_peak = max(memory_now, memory_peak)
                 now = time.time()
                 if now - timestamp_last_log_message > log_interval:
-                    logger.debug(f"Current memory consumption: {memory_peak // 1024**2}MB ({np.round(100.0 * memory_peak / memory_limit, 2)}% of the defined limit)")
+                    logger.debug(f"Current memory consumption: {memory_now // 1024**2}MB ({np.round(100.0 * memory_now / memory_limit, 2)}% of the defined limit)")
                     timestamp_last_log_message = now
+                
 
-                if memory_limit > 0 and memory_peak > memory_limit:
-                    output = "F_memory_limit_exceeded"
-                    os.kill(pid, signal.SIGTERM)
-                    future.cancel()
-
-                    if raise_exception:
-                        raise CancelledError(
-                            f"Memory limit exceeded: {memory_peak} > {memory_limit}"
-                        )
+                if memory_limit > 0 and memory_now > memory_limit:
+                    if first_time_of_violation_in_sequence is None:
+                        first_time_of_violation_in_sequence = time.time()
+                    elapsed_time_in_forbidden_zone = (time.time() - first_time_of_violation_in_sequence)
+                    remaining_time_before_kill = patience - elapsed_time_in_forbidden_zone
+                    if remaining_time_before_kill > 0:
+                        logger.warning(f"Function is exceeding allowed memory ({memory_now // 1024**2}/{memory_limit // 1024**2}MB). Remaining time before kill: {round(remaining_time_before_kill, 1)}s.")
                     else:
-                        logger.warning(
-                            f"Function call was cancelled due to exceeded memory limit: {memory_peak} > {memory_limit}"
-                        )
+                        output = "F_memory_limit_exceeded"
+                        os.kill(pid, signal.SIGTERM)
+                        future.cancel()
 
-                    break
+                        if raise_exception:
+                            raise CancelledError(
+                                f"Memory limit exceeded: {memory_peak} > {memory_limit}"
+                            )
+                        else:
+                            logger.warning(
+                                f"Function call was cancelled due to exceeded memory limit: {memory_peak} > {memory_limit}"
+                            )
 
+                        break
+                
+                else:
+                    if first_time_of_violation_in_sequence is not None:
+                        logger.info("Memory usage is back in the allowed region.")
+                        first_time_of_violation_in_sequence = None
+                        remaining_time_before_kill = None
                 time.sleep(memory_tracing_interval)
 
             if output is None:
@@ -222,7 +240,7 @@ def terminate_on_memory_exceeded(
         "timestamp_end": timestamp_end,
     }
 
-    metadata["max_memory"] = memory_peak
+    metadata["memory_max"] = memory_peak
 
     metadata.update(output["metadata"])
     output["metadata"] = metadata
@@ -343,13 +361,18 @@ def convert_deephyper_result_row_to_dict(row):
         elif field == "m:json":
             remaining_fields["results"] = value
         elif field.startswith('m:'):
-            if field.startswith("m:timestamp_") or field in ["m:lcdb_version", "m:memory"]:
+            if field.startswith("m:timestamp_") or field in ["m:lcdb_version"]:
                 experiment[field[2:]] = value
             else:
                 remaining_fields[field[2:]] = value
+        elif field in ["job_id", "job_status"]:
+            experiment[field] = value
         elif field.startswith('sol.'):
             pass
-        elif field not in ["job_id", "job_status", "objective"]:
+        elif field == "objective":
+            if type(value) == str:
+                remaining_fields["error"] = value
+        else:
             remaining_fields[field] = value
     row_to_write = {"config": config, "experiment_metadata": experiment}
     row_to_write.update(remaining_fields)

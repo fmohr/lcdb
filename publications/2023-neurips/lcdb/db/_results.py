@@ -13,8 +13,10 @@ def get_packed_results(rows):
     packed_rows = []
     for row in rows:
         row_copy = row.copy()
-        if row_copy[RESULT_KEY] is not None:
+        if RESULT_KEY in row_copy and type(row_copy[RESULT_KEY]) == dict:
             row_copy[RESULT_KEY] = json.dumps(row[RESULT_KEY])
+        if BUILD_ISSUES_KEY in row_copy and type(row_copy[BUILD_ISSUES_KEY]) == dict:
+            row_copy[BUILD_ISSUES_KEY] = json.dumps(row[BUILD_ISSUES_KEY])
         packed_rows.append(row_copy)
     return packed_rows
 
@@ -22,7 +24,7 @@ def get_unpacked_results(rows):
     packed_rows = []
     for row in rows:
         row_copy = row.copy()
-        if row_copy[RESULT_KEY] is not None:
+        if RESULT_KEY in row_copy and row_copy[RESULT_KEY] is not None:
             row_copy[RESULT_KEY] = json.loads(row[RESULT_KEY])
         packed_rows.append(row_copy)
     return packed_rows
@@ -48,10 +50,35 @@ class ResultSet(ABC):
             if BUILD_ISSUES_KEY in row and row[BUILD_ISSUES_KEY] is not None:
                 row[BUILD_ISSUES_KEY] = json.loads(row[BUILD_ISSUES_KEY])
         self.build_issues_unpacked = True
+    
+    @classmethod
+    def read_jsonl(cls, path_to_jsonl):
+         rs = ResultSet()
+         rs.load(path_to_jsonl)
+         return rs
+    
+    @classmethod
+    def concat(cls, result_sets):
+        rs = result_sets[0].clone()
+        for rs_i in result_sets[1:]:
+            rs.extend(rs_i)
+        return rs
 
     @property
     def num_rows(self):
         return len(self._rows) if self._rows is not None else 0
+    
+    @property
+    def empty(self):
+        return self._rows is None or len(self._rows) == 0
+    
+    @property
+    def num_rows_with_results(self):
+        return len([r for r in self._rows if RESULT_KEY in r and r[RESULT_KEY] is not None])
+    
+    @property
+    def num_rows_with_build_issues(self):
+        return len([r for r in self._rows if BUILD_ISSUES_KEY in r and r[BUILD_ISSUES_KEY] is not None])
 
     @property
     def datasets(self):
@@ -65,14 +92,17 @@ class ResultSet(ABC):
         return self.num_rows
 
     def __getitem__(self, idx):
-        return self._rows[idx]
+        if type(idx) == int:
+            return self._rows[idx]
+        if type(idx) == str:
+            return [r[idx] if idx in r else None for r in self._rows] if self._rows is not None else []
     
     def __iter__(self):
         for i in range(self.num_rows):
             yield self._rows[i]
 
     def load(self, path_to_jsonl):
-        if type(path_to_jsonl) == str:
+        if type(path_to_jsonl) != list:
             path_to_jsonl = [path_to_jsonl]
         self._rows = []
         for path in path_to_jsonl:
@@ -118,13 +148,16 @@ class ResultSet(ABC):
     def drop_rows_without_build_issues(self):
         self._rows = [r for r in self._rows if "build_issues" in r and r["build_issues"] is not None]
         return self
-
-    def clone(self):
-        new_view = self.__class__(self._rows.copy(),     
+    
+    def _create_copy_with_rows(self, rows):
+        new_view = self.__class__(rows,
             results_unpacked=self.results_unpacked,
             build_issues_unpacked=self.build_issues_unpacked
         )
         return new_view
+
+    def clone(self):
+        return self._create_copy_with_rows(self._rows.copy())
 
     def _group(self, field):
 
@@ -149,11 +182,15 @@ class ResultSet(ABC):
                 build_issues_unpacked=self.build_issues_unpacked
             )
 
-    def filter_datasets(self, openmlids):
+    def filter_datasets(self, openmlids, inplace=False):
         if type(openmlids) == int:
             openmlids = [openmlids]
-        self._rows = [r for r in self._rows if r["openmlid"] in openmlids]
-        return self
+        new_rows = [r for r in self._rows if r["openmlid"] in openmlids]
+        if inplace:
+            self._rows = new_rows
+            return self
+        else:
+            return self._create_copy_with_rows(new_rows)
 
     def group_by_campaign(self):
         return self._group("campaign")
@@ -176,6 +213,20 @@ class ResultSet(ABC):
     def group_by_test_seed(self):
         return self._group("test_seed")
     
+    def split(self, filter_fun):
+        rows_left = []
+        rows_right = []
+        if self._rows is not None:
+            for row in self._rows:
+                if filter_fun(row):
+                    rows_left.append(row)
+                else:
+                    rows_right.append(row)
+        return (
+            ResultSet(rows=rows_left, results_unpacked=self.results_unpacked, build_issues_unpacked=self.build_issues_unpacked),
+            ResultSet(rows=rows_right, results_unpacked=self.results_unpacked, build_issues_unpacked=self.build_issues_unpacked)
+        )
+    
     def extend(self, rs):
 
         if type(rs) != ResultSet:
@@ -194,6 +245,17 @@ class ResultSet(ABC):
             filter_fun (callable): the predicate function to filter rows
         """
         self._rows = [r for r in self._rows if filter_fun(r)]
+    
+    def filter(self, filter_fun):
+        return ResultSet(
+            rows=[r for r in self._rows if filter_fun(r)],
+            results_unpacked=self.results_unpacked,
+            build_issues_unpacked=self.build_issues_unpacked
+        )
+    
+    def to_pandas(self):
+        import pandas as pd
+        return pd.DataFrame(self._rows)
     
     def get_learning_curve(self, metrics=["error_rate"]):
         if not self.results_unpacked:

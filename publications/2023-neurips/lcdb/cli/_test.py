@@ -133,6 +133,14 @@ def add_subparser(subparsers):
         help="Memory limit per config (MBs).",
     )
     subparser.add_argument(
+        "-mp",
+        "--memory-patience",
+        type=int,
+        default=0,
+        required=False,
+        help="The number of seconds to wait before a workflow that exceeds the memory will be killed. Set to 0 to kill it immediately.",
+    )
+    subparser.add_argument(
         "-ll",
         "--log-level",
         type=str,
@@ -192,6 +200,7 @@ def main(
     timeout_on_metrics,
     parameters,
     workflow_memory_limit,
+    memory_patience,
     log_level,
     anchor_schedule,
     epoch_schedule,
@@ -241,6 +250,7 @@ def main(
         terminate_on_memory_exceeded,
         workflow_memory_limit * (1024**2),  # was given in MB initially
         memory_tracing_interval,
+        memory_patience,
         raise_exception,
         run_learning_workflow
     )

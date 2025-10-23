@@ -5,6 +5,8 @@ from typing import Any, Hashable
 
 import lcdb.json
 import numpy as np
+import psutil
+import os
 
 
 # !Private class to be used within the Timer class
@@ -14,7 +16,7 @@ class TimerNode:
     CANCELED: str = "CANCELED"
 
     def __init__(
-        self, id_: int, tag: str, metadata: dict = None, precision: int = 6, timestamp_start=None
+        self, id_: int, tag: str, metadata: dict = None, precision: int = 6, timestamp_start=None, memory=None
     ) -> None:
         self.id = id_
 
@@ -26,6 +28,8 @@ class TimerNode:
 
         self.timestamp_start = self.time() if timestamp_start is None else timestamp_start
         self.timestamp_end = None
+        self.memory_start = memory
+        self.memory_end = None
 
         assert metadata is None or isinstance(metadata, dict)
         self.metadata = {} if metadata is None else metadata
@@ -36,8 +40,9 @@ class TimerNode:
         # return np.round(time.time(), decimals=self.precision)
         return time.time()
 
-    def stop(self, metadata=None, timestamp_end=None):
+    def stop(self, metadata=None, timestamp_end=None, memory=None):
         self.timestamp_end = self.time() if timestamp_end is None else timestamp_end
+        self.memory_end = memory
         if metadata is not None:
             self.metadata.update(metadata)
         self.status = TimerNode.STOPPED
@@ -52,9 +57,10 @@ class TimerNode:
             assert self.timestamp_end >= self.children[-1].timestamp_end, \
                 f"node {self.tag} ended {self.children[-1].timestamp_end - self.timestamp_end}s earlier than its last child {self.children[-1].tag}"
 
-    def cancel(self):
+    def cancel(self, memory=None):
         self.timestamp_end = self.time()
         self.status = TimerNode.CANCELED
+        self.memory_end = memory
 
     def __getitem__(self, key):
         return self.metadata[key]
@@ -71,13 +77,12 @@ class TimerNode:
             ),
             timestamp_stop=np.round(
                 self.timestamp_end - timestamp_offset, self.precision
-            ),
-            # TODO: remove because redundant with timestamp_start/end
-            # duration=np.round(
-            #     self.timestamp_end - self.timestamp_start, self.precision
-            # ),
-            # status=self.status,
+            )
         )
+        if self.memory_start is not None:
+            out["memory_start"] = self.memory_start
+        if self.memory_end is not None:
+            out["memory_end"] = self.memory_end
 
         if len(self.metadata) > 0:
             out["metadata"] = self.metadata
@@ -111,12 +116,14 @@ class Timer:
         precision (int): Number of digits recorded in measurement.
     """
 
-    def __init__(self, precision: int = 6):
+    def __init__(self, precision: int = 6, track_memory=True):
         self.root = None
         self.stack = []
         self.precision = precision
         self.id_counter = 0
         self.accumulated_synthetic_time = 0
+        self.track_memory = track_memory
+        self.process = psutil.Process(os.getpid()) if track_memory else None
     
     def inject_synthetically_elapsed_time(self, elapsed_time_in_s):
         self.accumulated_synthetic_time += elapsed_time_in_s
@@ -133,7 +140,14 @@ class Timer:
             int: id of the created node in the timer tree.
         """
 
-        node = TimerNode(self.id_counter, tag, metadata, self.precision, timestamp_start=time.time() + self.accumulated_synthetic_time)
+        node = TimerNode(
+            self.id_counter,
+            tag,
+            metadata,
+            self.precision,
+            timestamp_start=time.time() + self.accumulated_synthetic_time, 
+            memory=np.round(self.process.memory_info().rss / 1024**3, 1) if self.track_memory else None
+        )
         self.id_counter += 1
 
         if self.root is None:
@@ -153,7 +167,8 @@ class Timer:
             raise ValueError("No timer currently active!")
 
         node = self.stack.pop()
-        node.stop(metadata, timestamp_end=time.time() + self.accumulated_synthetic_time)
+        memory = np.round(self.process.memory_info().rss / 1024**3, 1) if self.track_memory else None
+        node.stop(metadata, timestamp_end=time.time() + self.accumulated_synthetic_time, memory=memory)
 
     def inject(self, timer_node, offset=0, ignore_root=True):
         """
@@ -193,7 +208,7 @@ class Timer:
                 self.stack.append(node)
                 break
 
-            node.cancel()
+            node.cancel(memory=np.round(self.process.memory_info().rss / 1024**3, 1) if self.track_memory else None)
 
         # Record source of cancellation at root of cancelled branch
         node.cancellation_source_id = source.id

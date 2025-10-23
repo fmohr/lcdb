@@ -160,6 +160,14 @@ def add_subparser(subparsers):
         help="Memory limit per config (MBs).",
     )
     subparser.add_argument(
+        "-mp",
+        "--memory-patience",
+        type=int,
+        default=0,
+        required=False,
+        help="The number of seconds to wait before a workflow that exceeds the memory will be killed. Set to 0 to kill it immediately.",
+    )
+    subparser.add_argument(
         "--initial-configs",
         type=str,
         required=False,
@@ -260,6 +268,7 @@ def run_learning_workflow_from_deephyper(
         anchor_schedule: str = "power",
         epoch_schedule: str = "power",
         memory_limit_in_bytes: int = 32 * (1024**3),  # 32 GB by default
+        memory_patience: int = 0,
         logger=None,
         n_jobs=1,
 ):
@@ -321,6 +330,7 @@ def run_learning_workflow_from_deephyper(
         terminate_on_memory_exceeded,
         memory_limit_in_bytes,
         memory_tracing_interval,
+        memory_patience,
         raise_exception,
         run_learning_workflow,
         log_interval,
@@ -371,7 +381,8 @@ def run_learning_workflow_from_deephyper(
         "test_prop": valid_prop,
         "monotonic": monotonic,
         "valid_seed": valid_seed,
-        "test_seed": test_seed
+        "test_seed": test_seed,
+        "memory_limit": int(memory_limit_in_bytes)
     }
     if "metadata" in results:  # this is just for ordering purposes
         experiment_data.update(results["metadata"])
@@ -414,6 +425,7 @@ def run_experiment(
     anchor_schedule,
     epoch_schedule,
     workflow_memory_limit,
+    memory_patience,
     ncpus,
     no_exception_on_unsuitable_preprocessor
 ):
@@ -571,6 +583,7 @@ def run_experiment(
         "epoch_schedule": epoch_schedule,
         "logger": logger,
         "memory_limit_in_bytes": workflow_memory_limit * 1024**2,
+        "memory_patience": memory_patience,
         "n_jobs": ncpus,
         "raise_exception_on_unsuitable_preprocessor": not no_exception_on_unsuitable_preprocessor
     }

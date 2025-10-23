@@ -146,7 +146,9 @@ class LCDB:
             workflow_seeds=None,
             test_seeds=None,
             validation_seeds=None,
-            processors=None
+            processors=None,
+            unpack_results=True,
+            unpack_build_issues=True
     ):
         """
         Gets a dictionary or generator of result dataframes. In the case of a dictionary, there is one dataframe per workflow; these are not unified since different workflows have different hyperparameters. In the case of a generator, each returned dataframe is for a single workflow, but it may (and typically will) occur that several dataframes for the same workflow are returned (but with values for different datasets or different seeds). In other words, it can always be assumed that the workflows of the returned dataframes (either by a generator or contained in the dictionary) have a homogenous worklfow attribute.
@@ -216,8 +218,10 @@ class LCDB:
                     
                     # create result set from all the results and apply processors if any given
                     rs = ResultSet(res)
-                    #rs._unpack_results()
-                    #rs._unpack_build_issues()
+                    if unpack_results:
+                        rs._unpack_results()
+                    if unpack_build_issues:
+                        rs._unpack_build_issues()
                     if processors is not None:
                         rs.apply(processors)
                     yield rs

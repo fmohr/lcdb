@@ -415,7 +415,7 @@ class LearningCurveBuilder:
                                 self.timer.active_node["cause"] = "timeout"
                                 self.report["build_issues"][anchor] = "timeout"
                                 if self.objective is None:
-                                        self.objective = "F_function_call_timeout_error"
+                                    self.objective = "F_function_call_timeout_error"
                             elif isinstance(exception, MemoryError):
                                 self.timer.active_node["cause"] = "memory"
                                 self.report["build_issues"][anchor] = "actual memory error"
