@@ -73,7 +73,7 @@ def create_workflow(
     workflow_kwargs["n_jobs"] = n_jobs
 
     # create workflow object
-    logger.info(f"Creating workflow object from factory {WorkflowClass.__name__} with arguments {''.join(['\n\t' + str(k) + ': ' + str(v) for k, v in workflow_kwargs.items()])}")
+    logger.info(f"Creating workflow object from factory {WorkflowClass.__name__} with arguments" + (''.join(['\n\t' + str(k) + ': ' + str(v) for k, v in workflow_kwargs.items()])))
     def workflow_factory():
         return WorkflowClass(timer=timer, **workflow_kwargs)
     workflow = workflow_factory()
