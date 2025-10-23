@@ -11,7 +11,7 @@ from lcdb.analysis.json import (
     QueryMetricTimesFoldWise
 )
 from lcdb.analysis.score import balanced_accuracy_from_confusion_matrix
-from lcdb.analysis._learning_curves import LearningCurve
+from lcdb.db._learning_curves import LearningCurve
 
 import time
 
@@ -29,10 +29,10 @@ class RuntimeExtractor:
         """
             Computes the sample-wise learning curve for a specific metric for a set of configurations, possibly across workflows and datasets.
         """
-        if not row["has_result"]:
-            return None
+        if row["results"] is None:
+            return {}
 
-        lc_dict = row["m:json"]
+        lc_dict = row["results"]
 
         # determine anchors and whether this is an iteration curve
         try:
@@ -78,7 +78,7 @@ class RuntimeExtractor:
             for anchor, runtimes_at_anchor in runtimes.items():
                 all_metrics_runtimes = {k: v for k, v in runtimes_at_anchor.items() if k not in ["fit", "epoch", "transform_train", "transform_valid", "transform_test", "predictions", "metrics"]}
                 if "metrics" in runtimes_at_anchor:
-                    assert sum(all_metrics_runtimes.values()) <= runtimes_at_anchor["metrics"], f"Metric runtime {runtimes_at_anchor['metrics']} at anchor {anchor} is shorter than sum of all metric runtimes: {all_metrics_runtimes}"
+                    assert np.round(sum(all_metrics_runtimes.values()), 6) <= runtimes_at_anchor["metrics"], f"Metric runtime {runtimes_at_anchor['metrics']} at anchor {anchor} is shorter than sum of all metric runtimes, which is {sum(all_metrics_runtimes.values())} based on {all_metrics_runtimes}"
             
             # tag-wise summary
             tags = runtimes[np.min(list(runtimes.keys()))]
@@ -91,7 +91,6 @@ class RuntimeExtractor:
             runtimes["summary"]["learn"] = np.round(runtimes["summary"].get("fit", 0) - (runtimes["summary"].get("transform_train", 0) + runtimes["summary"].get("transform_valid", 0) + runtimes["summary"].get("transform_test", 0)), 6)
 
             # return dictionary with runtimes
-            print("Runtime extraction took", np.round(time.time() - t_start, 2), "s")
             return runtimes
             
 

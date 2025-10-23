@@ -1,6 +1,7 @@
 import logging
 from lcdb.db import LCDB
-from lcdb.analysis import LearningCurveExtractor, RuntimeExtractor
+from lcdb.db._results import ResultSet
+from lcdb.db.processors import LearningCurveExtractor, RuntimeExtractor
 import re
 import json
 
@@ -20,8 +21,7 @@ Path(OUTPUT_DIR).mkdir(parents=True, exist_ok=True)
 lcdb = LCDB()
 
 def compute_payload(row):
-    return len(str(row["m:json"]))
-
+    return {"payload": len(str(row["results"])) if row["results"] is not None else 0}
 
 
 def extract_anticipated_memory(row):
@@ -75,38 +75,46 @@ for workflow_class in [
     "lcdb.workflow.xgboost.XGBoostWorkflow"
 ]:
 
-    file = Path(f"{OUTPUT_DIR}/{workflow_class}.csv")
+    file = Path(f"{OUTPUT_DIR}/{workflow_class}.jsonl")
     if not file.exists():
 
         print(workflow_class)
 
-        campaign_name = "pre-config-100"
-        if "XGBoost" in workflow_class:
-            campaign_name = "pre-config-100-new"
+        campaign_name = "liblinear-new"
+        #if "XGBoost" in workflow_class:
+            #campaign_name = "pre-config-100-new"
 
         gen = lcdb.query(
             campaigns=[campaign_name],
             workflows=[workflow_class],
-            test_seeds=[0],
-            return_generator=True,
-            processors={
-                #"learning_curve": LearningCurveExtractor(metrics=["error_rate"]),
-                #"payload": compute_payload,
-                "runtimes": RuntimeExtractor(),
+            processors=[
+                LearningCurveExtractor(metrics=["error_rate"]),
+                compute_payload,
+                RuntimeExtractor(),
                 #"anticipated_memory": extract_anticipated_memory,
-            },
-            show_progress=True
+            ]
         )
 
+        if gen is None:
+            print("No results found")
+            continue
+
         # get all dataframes
-        dfs = []
-        for chunk_df in tqdm(gen):
-            dfs.append(chunk_df)
-        df = pd.concat(dfs)
+        results = None
+        for chunk_rs in tqdm(gen):
+            assert type(chunk_rs) == ResultSet, f"Expected ResultSet but got {type(chunk_rs)}"
+            chunk_rs.drop_raw_results()
+            if results is None:
+                results = chunk_rs
+            else:
+                results.extend(chunk_rs)
+        if results is not None:
+            print(results.num_rows)
 
-        # serialize learning curves
-        #df["learning_curve"] = df["learning_curve"].apply(lambda lc: lc.to_json() if lc is not None else None)
-        df["runtimes"] = df["runtimes"].apply(lambda c: json.dumps(c) if c is not None else None)
+            # serialize learning curves
+            #df["learning_curve"] = df["learning_curve"].apply(lambda lc: lc.to_json() if lc is not None else None)
+            #df["runtimes"] = df["runtimes"].apply(lambda c: json.dumps(c) if c is not None else None)
 
-        # save to CSV
-        df.to_csv(file, index=False)
+            # save to CSV
+            #df.to_csv(file, index=False)
+            results.save(file)

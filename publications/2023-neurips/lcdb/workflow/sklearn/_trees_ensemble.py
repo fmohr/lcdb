@@ -144,7 +144,7 @@ class TreesEnsembleWorkflow(SklearnWorkflow):
     ):
         self.metadata = metadata
 
-        t_inner = time.time()  # record inner time to manage time consumption inside this function
+        #t_inner = time.time()  # record inner time to manage time consumption inside this function
 
         # first train full bagging ensemble. This is because training them iteratively is highly inefficient in sklearn
         self.logger.info(f"Training {self.max_n_estimators} trees using {self.n_jobs} CPU(s) in parallel.")
@@ -162,6 +162,7 @@ class TreesEnsembleWorkflow(SklearnWorkflow):
         total_training_time_sequential = total_training_time * self.n_jobs
         avg_fit_time_per_learner = total_training_time_sequential / self.learner.n_estimators
         self.logger.info(f"Trained {self.max_n_estimators} trees in {total_training_time}s ({total_training_time_sequential}s when unserialized).")
+        self.timer.inject_synthetically_elapsed_time(-total_training_time) # make the actual training time up to here be ignored
 
         # compute metrics
         data = dict(
@@ -184,12 +185,10 @@ class TreesEnsembleWorkflow(SklearnWorkflow):
             )
         )
 
-        scorer_timer = Timer()
-        scorer_timer.start("artificial_root")
         scorer = ClassificationScorer(
             classes_learner=list(self.learner.classes_),
             classes_overall=self.infos["classes_overall"],
-            timer=scorer_timer
+            timer=self.timer
         )
 
         # now compute metrics for partial forest sizes (and simulate the time for training)
@@ -201,139 +200,111 @@ class TreesEnsembleWorkflow(SklearnWorkflow):
         y_pred_proba_forest_oob = np.zeros((n_samples, len(np.unique(y))))
         oob_counters = np.zeros(y_pred_proba_forest_oob.shape)
 
-        stopwatch = Stopwatch()
-        stopwatch.start()
-        for i, n_estimators in enumerate(tqdm(self.schedule)):
-
-            # determine indices of estimators to be evaluated in this cycle
-            indices_of_estimators = list(range(self.schedule[i - 1] if i > 0 else 0, self.schedule[i]))
+        schedule_index = 0
+        for n_estimators in tqdm(range(1, 1 + self.max_n_estimators)):
 
             t_epoch_start = time.time()
             self.logger.debug(f"Forest Size {n_estimators}")
 
-            self.timer.start("epoch", metadata={"value": n_estimators}, timestamp_start=t_inner)
+            with self.timer.time("epoch", metadata={"value": n_estimators}):
 
-            # simulate training time
-            self.timer.start("epoch_train", timestamp_start=t_inner)
-            t_inner += avg_fit_time_per_learner
-            self.timer.stop(timestamp_end=t_inner)
+                # simulate training time
+                with self.timer.time("epoch_train"):
+                    self.timer.inject_synthetically_elapsed_time(avg_fit_time_per_learner)
 
-            # compute test scores
-            t_inner += stopwatch.checkpoint().elapsed_time_since_last_checkpoint
-            self.timer.start("epoch_test", timestamp_start=t_inner)
-            t_inner += stopwatch.checkpoint().elapsed_time_since_last_checkpoint
-            self.timer.start("metrics", timestamp_start=t_inner)
+                # if this forest size is in the epoch schedule, compute metics
+                if n_estimators in self.schedule:
 
-            # compute train, validation, and test scores of current forest
-            for label_split, data_split in data.items():
+                    # determine indices of estimators to be evaluated in this cycle
+                    indices_of_estimators = list(range(self.schedule[schedule_index - 1] if schedule_index > 0 else 0, self.schedule[schedule_index]))
+                    schedule_index += 1
+                    with self.timer.time("epoch_eval"):
 
-                y_pred_proba_forest = y_pred_proba_forest_per_fold[label_split]
+                        # compute train, validation, and test scores of current forest
+                        for label_split, data_split in data.items():
 
-                t_inner += stopwatch.checkpoint().elapsed_time_since_last_checkpoint
-                self.timer.start(label_split, timestamp_start=t_inner)
-                t_inner += stopwatch.checkpoint().elapsed_time_since_last_checkpoint
-                self.timer.start("predict_with_proba", timestamp_start=t_inner)
+                            y_pred_proba_forest = y_pred_proba_forest_per_fold[label_split]
 
-                for i_estimator in indices_of_estimators:
+                            with self.timer.time(f"{label_split}_fold"):
 
-                    # update forest prediction
-                    y_pred, y_pred_proba = self._predict_with_proba_of_single_tree_without_transform(
-                        X=data_split["X"],
-                        i_estimator=i_estimator
-                    )
-                    assert len(data_split["X"]) == len(y_pred_proba)
-                    if y_pred_proba_forest is None:
-                        y_pred_proba_forest = y_pred_proba
-                    else:
-                        y_pred_proba_forest += 1 / (i_estimator + 1) * (y_pred_proba - y_pred_proba_forest)
-                    y_pred_forest = y_pred_proba_forest.argmax(axis=1)
-                    self.logger.debug(
-                        f"Updated probabilistic forest predictions for fold {label_split} at size {i_estimator + 1}."
-                    )
-                t_inner += stopwatch.checkpoint().elapsed_time_since_last_checkpoint
-                self.timer.stop(timestamp_end=t_inner)  # exit from predict_proba
+                                # first get predictions
+                                with self.timer.time("predict_with_proba"):
+                                    for i_estimator in indices_of_estimators:
 
-                # compute score based on current prediction (but only at check points)
-                y_true = data_split["y"]
-                with scorer_timer.time(label_split):
-                    scorer.score(
-                        y_true=y_true,
-                        y_pred=y_pred_forest,
-                        y_pred_proba=y_pred_proba_forest,
-                    )
+                                        # update forest prediction
+                                        y_pred, y_pred_proba = self._predict_with_proba_of_single_tree_without_transform(
+                                            X=data_split["X"],
+                                            i_estimator=i_estimator
+                                        )
+                                        assert len(data_split["X"]) == len(y_pred_proba)
+                                        if y_pred_proba_forest is None:
+                                            y_pred_proba_forest = y_pred_proba
+                                        else:
+                                            y_pred_proba_forest += 1 / (i_estimator + 1) * (y_pred_proba - y_pred_proba_forest)
+                                        y_pred_forest = y_pred_proba_forest.argmax(axis=1)
+                                        self.logger.debug(
+                                            f"Updated probabilistic forest predictions for fold {label_split} at size {i_estimator + 1}."
+                                        )
+                                    
+                                # compute score based on current prediction (but only at check points)
+                                y_true = data_split["y"]
+                                with self.timer.time("metrics"):
+                                    scorer.score(
+                                        y_true=y_true,
+                                        y_pred=y_pred_forest,
+                                        y_pred_proba=y_pred_proba_forest,
+                                    )
 
-                # attach scores to current timer
-                offset = t_inner - scorer_timer.active_node.children[-1].timestamp_start
-                self.timer.inject(scorer_timer.active_node.children[-1], ignore_root=True, offset=offset)
-                stopwatch.checkpoint().elapsed_time_since_last_checkpoint
-                t_inner = self.timer.active_node.children[-1].timestamp_end
-                self.timer.stop(timestamp_end=t_inner)  # exit from fold
+                        """
+                            maybe add OOB fold (in case of bootstrapping);
+                            this requires again predictions from all trees on a sub-set of training data but is necessary
+                            for clean separation between training and OOB prediction times
+                        """
+                        if self.learner.bootstrap:
 
-            """
-                maybe add OOB fold (in case of bootstrapping);
-                this requires again predictions from all trees on a sub-set of training data but is necessary
-                for clean separation between training and OOB prediction times
-            """
-            if self.learner.bootstrap:
+                            # compute train, validation, and test scores of current forest
+                            #t_inner += stopwatch.checkpoint().elapsed_time_since_last_checkpoint
+                            with self.timer.time("oob"):
+                                labels = list(self.learner.classes_)
+                                n_labels = len(labels)
 
-                # compute train, validation, and test scores of current forest
-                t_inner += stopwatch.checkpoint().elapsed_time_since_last_checkpoint
-                self.timer.start("oob", timestamp_start=t_inner)
-                labels = list(self.learner.classes_)
-                n_labels = len(labels)
+                                # update OOB prediction of forest
+                                with self.timer.time("oob_predictions"):
+                                    for t in indices_of_estimators:
+                                        considered_tree = self.learner.estimators_[t]
+                                        val_indices = get_unsampled_indices(considered_tree)
+                                        y_pred_oob_tree = considered_tree.predict_proba(X[val_indices])
+                                        y_pred_proba_forest_oob[val_indices] = (
+                                            y_pred_proba_forest_oob[val_indices]
+                                            * oob_counters[val_indices]
+                                            + y_pred_oob_tree
+                                        ) / (oob_counters[val_indices] + 1)
+                                        oob_counters[val_indices] += 1
+                                    y_pred_forest_oob = np.array(
+                                        [
+                                            labels[ind]
+                                            for ind in np.argmax(y_pred_proba_forest_oob, axis=1)
+                                        ]
+                                    )
+                                y_true = y
 
-                # update OOB prediction of forest
-                for t in indices_of_estimators:
-                    considered_tree = self.learner.estimators_[t]
-                    val_indices = get_unsampled_indices(considered_tree)
-                    y_pred_oob_tree = considered_tree.predict_proba(X[val_indices])
-                    y_pred_proba_forest_oob[val_indices] = (
-                        y_pred_proba_forest_oob[val_indices]
-                        * oob_counters[val_indices]
-                        + y_pred_oob_tree
-                    ) / (oob_counters[val_indices] + 1)
-                    oob_counters[val_indices] += 1
-                y_pred_forest_oob = np.array(
-                    [
-                        labels[ind]
-                        for ind in np.argmax(y_pred_proba_forest_oob, axis=1)
-                    ]
-                )
-                y_true = y
+                            # Only keep OOB samples
+                            sum_of_probs = y_pred_proba_forest_oob.sum(axis=1)
+                            mask = sum_of_probs > 0.0
+                            num_samples = np.sum(mask)
+                            self.timer.active_node["num_samples"] = int(num_samples)
+                            assert np.allclose(
+                                1, sum_of_probs[mask]
+                            ), f"NOT A DISTRIBUTION: {y_pred_proba_forest[mask]}"
 
-                # Only keep OOB samples
-                sum_of_probs = y_pred_proba_forest_oob.sum(axis=1)
-                mask = sum_of_probs > 0.0
-                num_samples = np.sum(mask)
-                self.timer.active_node["num_samples"] = int(num_samples)
-                assert np.allclose(
-                    1, sum_of_probs[mask]
-                ), f"NOT A DISTRIBUTION: {y_pred_proba_forest[mask]}"
-
-                with scorer_timer.time("oob"):
-                    scorer.score(
-                        y_true=y_true[mask],
-                        y_pred=y_pred_forest_oob[mask],
-                        y_pred_proba=y_pred_proba_forest_oob[mask],
-                    )
-
-                # attach scores to current timer
-                offset = t_inner - scorer_timer.active_node.children[-1].timestamp_start
-                self.timer.inject(scorer_timer.active_node.children[-1], ignore_root=True, offset=offset)
-                stopwatch.checkpoint().elapsed_time_since_last_checkpoint
-                t_inner = self.timer.active_node.children[-1].timestamp_end
-                self.timer.stop(timestamp_end=t_inner)  # leave from OOB
-
-            t_inner += stopwatch.checkpoint().elapsed_time_since_last_checkpoint
-            self.timer.stop(timestamp_end=t_inner) # leave from metrics
-            t_inner += stopwatch.checkpoint().elapsed_time_since_last_checkpoint
-            self.timer.stop(timestamp_end=t_inner) # leave from epoch test
-            t_inner += stopwatch.checkpoint().elapsed_time_since_last_checkpoint
-            self.timer.stop(timestamp_end=t_inner)  # leave from epoch
-            t_epoch_end = time.time()
-            self.logger.debug(f"Finished epoch {n_estimators} within {round(t_epoch_end - t_epoch_start, 4)}s")
-
-        scorer_timer.stop()
+                            with self.timer.time("metrics"):
+                                scorer.score(
+                                    y_true=y_true[mask],
+                                    y_pred=y_pred_forest_oob[mask],
+                                    y_pred_proba=y_pred_proba_forest_oob[mask],
+                                )
+                t_epoch_end = time.time()
+                self.logger.debug(f"Finished epoch {n_estimators} within {round(t_epoch_end - t_epoch_start, 4)}s")
         self.infos["classes"] = list(self.learner.classes_)
 
     def _predict_after_transform(self, X):

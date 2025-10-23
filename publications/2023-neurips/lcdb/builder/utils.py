@@ -222,7 +222,7 @@ def terminate_on_memory_exceeded(
         "timestamp_end": timestamp_end,
     }
 
-    metadata["memory"] = memory_peak
+    metadata["max_memory"] = memory_peak
 
     metadata.update(output["metadata"])
     output["metadata"] = metadata
@@ -237,6 +237,9 @@ def get_schedule(name, **kwargs):
         name (str): name of the schedule.
         **kwargs: optional arguments to pass to the schedule.
     """
+    if type(name) == int:
+        return [name]
+    
     if name == "full":
         return get_linear_schedule(**kwargs)
     elif name == "linear":
@@ -327,6 +330,7 @@ def estimate_memory_consumption_for_dataset(shape, dtype=np.float64, unit="B"):
 
 def convert_deephyper_result_row_to_dict(row):
     config = {}
+    experiment = {}
     remaining_fields = {}
     for field, value in row.items():
 
@@ -339,10 +343,15 @@ def convert_deephyper_result_row_to_dict(row):
         elif field == "m:json":
             remaining_fields["results"] = value
         elif field.startswith('m:'):
-            remaining_fields[field[2:]] = value
+            if field.startswith("m:timestamp_") or field in ["m:lcdb_version", "m:memory"]:
+                experiment[field[2:]] = value
+            else:
+                remaining_fields[field[2:]] = value
+        elif field.startswith('sol.'):
+            pass
         elif field not in ["job_id", "job_status", "objective"]:
             remaining_fields[field] = value
-    row_to_write = {"config": config}
+    row_to_write = {"config": config, "experiment_metadata": experiment}
     row_to_write.update(remaining_fields)
     return row_to_write
 
@@ -385,4 +394,7 @@ class StatusFileManager:
     def remove_status_file(self, workflow, openmlid, campaign, workflowseed, testseed, valseed, status):
         pathlib.Path(self.get_path_to_status_file(workflow=workflow, openmlid=openmlid, campaign=campaign, workflowseed=workflowseed, testseed=testseed, valseed=valseed, status=status)).unlink(missing_ok=True)
 
-        
+def get_random_state(randomness_description):    
+    if isinstance(randomness_description, np.random.RandomState):
+        return randomness_description
+    return np.random.RandomState(randomness_description)

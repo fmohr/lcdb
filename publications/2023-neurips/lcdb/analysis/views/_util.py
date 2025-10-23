@@ -7,7 +7,7 @@ def get_cli_test_command(entry):
         f"lcdb test"
         f" -i {openmlid}"
         f" -w {entry['workflow']}"
-        f" --parameters='{json.dumps({k[2:]: v for k, v in entry.items() if k.startswith('p:')})}'"
+        f" --parameters='{json.dumps(entry['config'])}'"
         f" --log-level=debug"
         f" --no-exception-on-unsuitable-preprocessor"
         f" --suppress-json-output"

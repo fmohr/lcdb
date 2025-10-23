@@ -8,7 +8,7 @@ from lcdb.analysis.json import (
     QueryMetricValuesFromEpochs,
 )
 from lcdb.analysis.score import balanced_accuracy_from_confusion_matrix
-from lcdb.analysis._learning_curves import LearningCurve
+from lcdb.db._learning_curves import LearningCurve
 
 DETAIL_KEY = "results"
 
@@ -53,6 +53,9 @@ class LearningCurveExtractor:
         """
             Computes the sample-wise learning curve for a specific metric for a set of configurations, possibly across workflows and datasets.
         """
+        if "learning_curve" in row:
+            return {} # no updates if the learning curve is already there
+        
         if DETAIL_KEY not in row or row[DETAIL_KEY] is None or len(row[DETAIL_KEY]) == 0:
             return {"learning_curve": None}
 

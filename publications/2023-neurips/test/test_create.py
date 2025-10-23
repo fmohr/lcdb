@@ -1,11 +1,7 @@
-import pytest
 import unittest
 
 import pandas as pd
-import numpy as np
 from lcdb.workflow._util import get_config_space_of_workflow
-from lcdb.analysis import LearningCurveExtractor, merge_curves
-from lcdb import LCDB, Debugger
 from parameterized import parameterized
 import logging
 

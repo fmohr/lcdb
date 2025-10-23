@@ -1,4 +1,5 @@
 import importlib
+import numpy as np
 
 def get_workflow_class(workflow_class_as_str: str):
     """Import an attribute from a module given its path.
@@ -35,4 +36,3 @@ def get_default_config(config_space):
     )
     # default_config = config_space.deactivate_inactive_hyperparameters(default_config, config_space) # only available in later version...
     return default_config
-

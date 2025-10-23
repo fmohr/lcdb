@@ -2,7 +2,7 @@ import pytest
 import unittest
 
 import numpy as np
-from lcdb.analysis import LearningCurveExtractor, merge_curves
+from lcdb.db.processors import LearningCurveExtractor, merge_curves
 from lcdb import LCDB, Debugger
 from parameterized import parameterized
 import logging

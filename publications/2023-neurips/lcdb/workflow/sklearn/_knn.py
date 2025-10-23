@@ -51,8 +51,6 @@ class KNNWorkflow(SklearnWorkflow):
     def __init__(
         self,
         timer=None,
-        random_state=None,
-        logger=None,
         n_neighbors=5,
         weights="uniform",
         p=2,

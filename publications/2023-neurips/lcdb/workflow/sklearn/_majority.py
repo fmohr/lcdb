@@ -33,7 +33,7 @@ class MajorityWorkflow(BaseWorkflow):
     
     @classmethod
     def is_randomizable(cls):
-        return False
+        return True
 
     def _fit(self, X, y, X_valid, y_valid, X_test, y_test, metadata):
         self.metadata = metadata

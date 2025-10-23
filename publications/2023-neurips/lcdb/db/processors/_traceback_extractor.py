@@ -23,8 +23,10 @@ class TracebackExtractor:
         errors = []
 
         # if there are build issues, add them
-        if "m:build_issues" in row and isinstance(row["m:build_issues"], str):
-            for anchor, traceback_at_anchor in json.loads(row["m:build_issues"]).items():
+        if "build_issues" in row and row["build_issues"] is not None:
+            if isinstance(row["build_issues"], str):
+                raise ValueError(f"Buid issues should already be unpacked, but got string: {row['build_issues']}")
+            for anchor, traceback_at_anchor in row["build_issues"].items():
                 errors.append({
                     "message": self.extract_error_message_from_traceback(traceback_at_anchor),
                     "location": f"anchor_{anchor}",
@@ -33,11 +35,11 @@ class TracebackExtractor:
                 })
         
         # if there is a general traceback, also add it
-        if "m:traceback" in row and isinstance(row["m:traceback"], str):
+        if "traceback" in row and isinstance(row["traceback"], str):
             errors.append({
-                "message": self.extract_error_message_from_traceback(row["m:traceback"]),
+                "message": self.extract_error_message_from_traceback(row["traceback"]),
                 "location": f"global",
-                "traceback": row["m:traceback"],
+                "traceback": row["traceback"],
                 "cli_test_command": base_test_command
             })
         return {"traceback_summary": errors if errors else None}

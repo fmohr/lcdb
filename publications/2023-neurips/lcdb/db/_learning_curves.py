@@ -23,7 +23,10 @@ class LearningCurve:
         self.hp_config = hp_config
         self.openmlid = openmlid
 
+        # 7-dimensional tensor
         self.values = values
+
+        # axis labels for each of the 7 dimensions
         self.metrics = metrics
         self.fold_names = fold_names
         self.test_seeds = test_seeds

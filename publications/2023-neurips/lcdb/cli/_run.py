@@ -435,6 +435,7 @@ def run_experiment(
     import numpy as np
     import pandas as pd
     import json
+    import jsonlines
 
     from deephyper.evaluator import Evaluator, HPOJob
     from deephyper.evaluator.callback import Callback, TqdmCallback
@@ -659,9 +660,14 @@ def run_experiment(
                 df_results = pd.concat([pd.DataFrame(list_of_previous_results), df_results_new])
             else:
                 df_results = df_results_new
-            out_file = f"{log_dir}/results.csv"
+            
+            # writing results to jsonl
+            from lcdb.builder.utils import convert_deephyper_result_row_to_dict
+            out_file = f"{log_dir}/results.jsonl"
             logger.info(f"Writing {len(df_results)} results to {out_file}")
-            df_results.to_csv(out_file, index=False)
+            with jsonlines.open(out_file, mode='w') as writer:
+                for _, row in df_results.iterrows():
+                    writer.write(convert_deephyper_result_row_to_dict(row))
 
             # now check whether we need to merge
             filename = status_file_manager.get_path_to_status_file(workflow=workflow_class, campaign=campaign, openmlid=openml_id, workflowseed=workflow_seed, testseed=test_seed, valseed=valid_seed, status=StatusFileManager.EXPERIMENT_STATUS_COMPLETED)

@@ -7,6 +7,7 @@ import io
 import time
 import os
 import json
+import jsonlines
 
 import pandas as pd
 import numpy as np
@@ -56,7 +57,7 @@ class PCloudRepository(Repository):
         if self.token is None:
             raise ValueError(f"Authentication failed. Response from server was {response}.")
 
-    def read_result_file(self, file, usecols=None):
+    def read_result_file(self, file):
 
         # get download link
         response = requests.get(f"https://eapi.pcloud.com/getpublinkdownload?code={self.repo_code}&fileid={file}").json()
@@ -72,16 +73,13 @@ class PCloudRepository(Repository):
 
             t_start = time.time()
             if download_link.endswith((".gz", ".gzip")):
-                compressed_file = io.BytesIO(response.content)
-                with gzip.GzipFile(fileobj=compressed_file) as f:
-                    df = pd.read_csv(f, usecols=usecols)
+                filehandle = io.BytesIO(response.content)
             else:
-                df = pd.read_csv(file, usecols=usecols)
-            t_end = time.time()
-            logging.info(
-                f"Reading {len(df)} lines with {df.shape[1]} cols from {file} took {int(1000 * (t_end - t_start))}ms.")
-            return df
-
+                filehandle = download_link
+            with gzip.open(filehandle, 'rt', encoding='utf-8') as f:
+                reader = jsonlines.Reader(f)
+                for obj in reader:
+                    yield obj
         else:
             print(f"Failed to fetch the file. Status code: {response.status_code}")
 
@@ -270,7 +268,7 @@ class PCloudRepository(Repository):
         result_files = []
         for file_data in result_files_unfiltered:
             filename = file_data["name"]
-            offset = 4 if filename.endswith(".csv") else 7
+            offset = 6 if filename.endswith(".jsonl") else 9
             try:
                 _workflow_seed, _test_seed, _val_seed = [int(i) for i in filename[:-offset].split("-")]
                 if workflow_seeds is not None and _workflow_seed not in workflow_seeds:
@@ -282,7 +280,7 @@ class PCloudRepository(Repository):
                 if openmlid is not None and openmlid != int(openmlid):
                     continue
             except ValueError:
-                print(f"Invalid filename {filename}")
+                print(f"Could not load file {filename} from pCloud repository. Invalid filename {filename}")
                 continue
 
             result_files.append([workflow, campaign, openmlid, _workflow_seed, _test_seed, _val_seed, file_data["fileid"]])
@@ -398,27 +396,17 @@ class PCloudRepository(Repository):
         # read in all result files
         def gen_fun(raise_errors=False):
             total_entries = 0
-
+            if result_files is None:
+                return
             for i, file_desc in result_files.iterrows():
                 if total_entries > 10 ** 6:
                     raise ValueError(f"Cannot read in more than 10**6 results.")
  
                 try:
-                    df = self.read_result_file(file_desc["fileid"])
-                    
-                    if False:
-                        df["m:json"] = df["m:json"].apply(
-                            lambda s: json.loads(s)
-                            if s is not None and isinstance(s, str)
-                            else (None if type(s) == float and np.isnan(s) else s)
-                        )
-                        df["m:workflow"] = file_desc['workflow']
-                        df["has_result"] = [isinstance(e, dict) and e.get("tag") == "run" for e in df["m:json"]]
-                    df["m:json"] = [j if type(j) == str else None for j in df["m:json"]]
-                    rows = [convert_deephyper_result_row_to_dict(row) for _, row in df.iterrows()]
+                    rows = [convert_deephyper_result_row_to_dict(row) for row in self.read_result_file(file_desc["fileid"])]
                     total_entries += len(rows)
                     yield rows
-                        
+
                 except Exception as e:
                     is_parsing_error = isinstance(e, JSONDecodeError)
                     if is_parsing_error:
@@ -440,4 +428,4 @@ class PCloudRepository(Repository):
                         print(error_msg)
                     df = None
 
-        return CountAwareGenerator(len(result_files), gen=gen_fun())
+        return CountAwareGenerator(len(result_files) if result_files is not None else 0, gen=gen_fun())
