@@ -629,16 +629,20 @@ def run_experiment(
                     logger.debug(f"Reading results from {file}")
                     list_of_previous_results_in_this_file = []
                     covered_indices_in_this_file = []
+                    num_undone_ignored_jobs = 0
                     df_results_in_file = pd.read_csv(f"{log_dir}/{file}")
                     for i, row in df_results_in_file.iterrows():
                         config = {k[2:]: v for k, v in row.items() if k.startswith("p:")}
-                        for idx, requested_config in enumerate(initial_points):
-                            if config == requested_config and idx not in covered_indices:
-                                covered_indices_in_this_file.append(idx)
-                                list_of_previous_results_in_this_file.append(row)
+                        if config["job_status"] == "DONE": # only consider results of jobs that have been done
+                            for idx, requested_config in enumerate(initial_points):
+                                if config == requested_config and idx not in covered_indices:
+                                    covered_indices_in_this_file.append(idx)
+                                    list_of_previous_results_in_this_file.append(row)
+                        else:
+                            num_undone_ignored_jobs += 1
                     list_of_previous_results.extend(list_of_previous_results_in_this_file)
                     covered_indices.extend(covered_indices_in_this_file)
-                    logger.info(f"{len(list_of_previous_results)} previous results found in {file}. Config indices are {covered_indices_in_this_file}.")
+                    logger.info(f"{len(list_of_previous_results)} previous results found in {file}. In that file, we also found {num_undone_ignored_jobs} configs that did not have job_status = DONE and are hence ignored. Config indices are {covered_indices_in_this_file}.")
                     num_covered_result_files += 1
             num_previous_results = len(list_of_previous_results)
                             
