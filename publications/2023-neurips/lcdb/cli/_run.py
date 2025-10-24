@@ -563,6 +563,7 @@ def run_experiment(
             if k not in config_default.keys():
                 config_default[k] = skopt_space.dimensions[i].bounds[0]
         initial_points.append(config_default)
+    logger.info(f"Invoked lcdb run with MPI Communicator. Identified {len(initial_points)} configurations and a {max_evals=}.")
 
     run_function_kwargs = {
         "campaign": campaign,
@@ -594,12 +595,13 @@ def run_experiment(
         method_kwargs["callbacks"].append(TqdmCallback())
 
     method_kwargs["storage"] = MemoryStorage()
-    print("method_kwargs", method_kwargs)
+
     # print the run function setup
+    logger.info(f"Running new experiment.\n\tExperiment config: {method_kwargs}\n\tStatus File Dir: {status_dir}")
 
     # create status file manager
     status_file_manager = StatusFileManager(working_directory=status_dir)
-    print(status_dir)
+    
     
     with Evaluator.create(
         run_learning_workflow_from_deephyper if evaluator != "serial" else run_learning_workflow_from_deephyper_coroutine,
@@ -621,98 +623,126 @@ def run_experiment(
 
             # check whether we already have results in a results file
             list_of_previous_results = []
-            logger.info(f"Scanning folder {pathlib.Path(log_dir).resolve()} for already existing result files.")
+            existing_files = [file for file in os.listdir(log_dir) if file.startswith("results") and file.endswith(".csv")]
+            logger.info(f"Scanned folder {pathlib.Path(log_dir).resolve()} for already existing result files. Found these:" + ("".join(["\n\t" + f for f in existing_files])))
             covered_indices = []
             num_covered_result_files = 0
-            for file in os.listdir(log_dir):
-                if file.startswith("results") and file.endswith(".csv"):
-                    logger.debug(f"Reading results from {file}")
-                    list_of_previous_results_in_this_file = []
-                    covered_indices_in_this_file = []
-                    num_undone_ignored_jobs = 0
-                    df_results_in_file = pd.read_csv(f"{log_dir}/{file}")
-                    for i, row in df_results_in_file.iterrows():
-                        config = {k[2:]: v for k, v in row.items() if k.startswith("p:")}
-                        if config["job_status"] == "DONE": # only consider results of jobs that have been done
-                            for idx, requested_config in enumerate(initial_points):
-                                if config == requested_config and idx not in covered_indices:
-                                    covered_indices_in_this_file.append(idx)
-                                    list_of_previous_results_in_this_file.append(row)
-                        else:
-                            num_undone_ignored_jobs += 1
-                    list_of_previous_results.extend(list_of_previous_results_in_this_file)
-                    covered_indices.extend(covered_indices_in_this_file)
-                    logger.info(f"{len(list_of_previous_results)} previous results found in {file}. In that file, we also found {num_undone_ignored_jobs} configs that did not have job_status = DONE and are hence ignored. Config indices are {covered_indices_in_this_file}.")
-                    num_covered_result_files += 1
+            for file in existing_files:
+                logger.debug(f"Reading results from {file}")
+                list_of_previous_results_in_this_file = []
+                covered_indices_in_this_file = []
+                num_undone_ignored_jobs = 0
+                df_results_in_file = pd.read_csv(f"{log_dir}/{file}")
+                for i, row in df_results_in_file.iterrows():
+                    config = {k[2:]: v for k, v in row.items() if k.startswith("p:")}
+                    if row["job_status"] == "DONE": # only consider results of jobs that have been done
+                        for idx, requested_config in enumerate(initial_points):
+                            if config == requested_config and idx not in covered_indices:
+                                covered_indices_in_this_file.append(idx)
+                                list_of_previous_results_in_this_file.append(row)
+                    else:
+                        num_undone_ignored_jobs += 1
+                list_of_previous_results.extend(list_of_previous_results_in_this_file)
+                covered_indices.extend(covered_indices_in_this_file)
+                logger.info(f"{len(list_of_previous_results_in_this_file)} previous results found in {file}. In that file, we also found {num_undone_ignored_jobs} configs that did not have job_status = DONE and are hence ignored. Config indices are {covered_indices_in_this_file}.")
+                num_covered_result_files += 1
             num_previous_results = len(list_of_previous_results)
                             
             # now update what is being sent to deephyper
             configs_to_eval = [config for i, config in enumerate(initial_points) if i not in covered_indices]
+            max_evals_effective = max_evals
             if num_previous_results > 0:
-                max_evals -= num_previous_results
-                assert max_evals > 0
+                max_evals_effective -= num_previous_results
+
             logger.info(
                 f"In total, {num_previous_results} previous results found in {num_covered_result_files} result files. " +
-                (f"Removed the {num_previous_results} configs with indices {covered_indices} from the todo list. " if num_previous_results > 0 else "") +
-                f"What will be sent to deephyper now is:\n\t{len(configs_to_eval)} configs\n\t{max_evals=}"
+                (f"Removed the {num_previous_results} configs with indices {covered_indices} from the todo list. " if num_previous_results > 0 else "")
             )
 
-            # Set the search algorithm
-            search = CBO(
-                problem=problem,
-                evaluator=evaluator,
-                log_dir=log_dir,
-                initial_points=configs_to_eval,
-                surrogate_model="DUMMY",
-                verbose=verbose
-            )
-
-            # Execute the search (this will also generate/replace the results.csv)
-            if timeout == -1: 
-                logger.info("Disabling timeout")
-                timeout = None
-            logger.info(f"Starting search with {max_evals} evaluations and timeout {timeout}.")
-            df_results_new = search.search(max_evals=max_evals, timeout=timeout, max_evals_strict=True)
-            if num_previous_results > 0:
-                df_results = pd.concat([pd.DataFrame(list_of_previous_results), df_results_new])
-            else:
-                df_results = df_results_new
-            
-            # writing results to jsonl
-            from lcdb.builder.utils import convert_deephyper_result_row_to_dict
-            out_file = f"{log_dir}/results.jsonl"
-            logger.info(f"Writing {len(df_results)} results to {out_file}")
-            with jsonlines.open(out_file, mode='w') as writer:
-                for _, row in df_results.iterrows():
-                    writer.write(convert_deephyper_result_row_to_dict(row))
-
-            # now check whether we need to merge
-            filename = status_file_manager.get_path_to_status_file(workflow=workflow_class, campaign=campaign, openmlid=openml_id, workflowseed=workflow_seed, testseed=test_seed, valseed=valid_seed, status=StatusFileManager.EXPERIMENT_STATUS_COMPLETED)
-            logger.info(f"Creating COMPLETED status file {filename} for {workflow_class}-{campaign}-{openml_id}-{workflow_seed}-{test_seed}-{valid_seed}.")
-            status_file_manager.create_status_file(
-                workflow=workflow_class,
-                campaign=campaign,
-                openmlid=openml_id,
-                workflowseed=workflow_seed,
-                testseed=test_seed,
-                valseed=valid_seed,
-                status=StatusFileManager.EXPERIMENT_STATUS_COMPLETED
+            if max_evals_effective > 0:
+                logger.info(f"What will be sent to deephyper now is:\n\t{len(configs_to_eval)} configs\n\tmax_evals={max_evals_effective}")
+                
+                # Set the search algorithm
+                search = CBO(
+                    problem=problem,
+                    evaluator=evaluator,
+                    log_dir=log_dir,
+                    initial_points=configs_to_eval,
+                    surrogate_model="DUMMY",
+                    verbose=verbose
                 )
 
-            # remove checkpoint results if those exist
-            folder_with_checkpoint_results = get_path_for_intermediate_results(
-                    workflow_class=workflow_class,
+                # Execute the search (this will also generate/replace the results.csv)
+                if timeout == -1: 
+                    logger.info("Disabling timeout")
+                    timeout = None
+                logger.info(f"Starting search with {max_evals} evaluations and timeout {timeout}.")
+                df_results_new = search.search(max_evals=max_evals_effective, timeout=timeout, max_evals_strict=True)
+                success_mask = df_results_new["job_status"] == "DONE"
+                df_results_new_complete = df_results_new[success_mask]
+                logger.info(f"Deephyper finished. Result dataframe has {len(df_results_new)} entries of which {len(df_results_new_complete)} finished properly.")
+            
+            else:
+                logger.info("Results are already complete, deephyper will not be started. Just re-computing the result file.")
+                df_results_new = None
+
+            if num_previous_results > 0:
+                df_previous_results = pd.DataFrame(list_of_previous_results)
+                if df_results_new is not None:
+                    df_results = pd.concat([df_previous_results, df_results_new])
+                else:
+                    df_results = df_previous_results
+            else:
+                if df_results_new is not None:
+                    df_results = df_results_new
+                else:
+                    raise ValueError("We neither have existing results nor new results. This shouldn't ever happen.")
+            
+            # check whether we have all results
+            if len(df_results) == max_evals and (df_results_new is None or (len(df_results_new_complete) == len(df_results_new))):
+
+                logger.info("Results are complete, now creating final result file and cleaning up status files.")
+
+                # writing results to jsonl
+                from lcdb.builder.utils import convert_deephyper_result_row_to_dict
+                out_file = f"{log_dir}/results.jsonl"
+                logger.info(f"Writing {len(df_results)} results to {out_file}")
+                with jsonlines.open(out_file, mode='w') as writer:
+                    for _, row in df_results.iterrows():
+                        writer.write(convert_deephyper_result_row_to_dict(row))
+
+                # now check whether we need to merge
+                filename = status_file_manager.get_path_to_status_file(workflow=workflow_class, campaign=campaign, openmlid=openml_id, workflowseed=workflow_seed, testseed=test_seed, valseed=valid_seed, status=StatusFileManager.EXPERIMENT_STATUS_COMPLETED)
+                logger.info(f"Creating COMPLETED status file {filename} for {workflow_class}-{campaign}-{openml_id}-{workflow_seed}-{test_seed}-{valid_seed}.")
+                status_file_manager.create_status_file(
+                    workflow=workflow_class,
                     campaign=campaign,
-                    openml_id=openml_id,
-                    workflow_seed=workflow_seed,
-                    test_seed=test_seed,
-                    valid_seed=valid_seed
+                    openmlid=openml_id,
+                    workflowseed=workflow_seed,
+                    testseed=test_seed,
+                    valseed=valid_seed,
+                    status=StatusFileManager.EXPERIMENT_STATUS_COMPLETED
                     )
-            
-            if folder_with_checkpoint_results.exists():
-                import shutil
-                shutil.rmtree(folder_with_checkpoint_results)
-            
+
+                # remove checkpoint results if those exist
+                folder_with_checkpoint_results = get_path_for_intermediate_results(
+                        workflow_class=workflow_class,
+                        campaign=campaign,
+                        openml_id=openml_id,
+                        workflow_seed=workflow_seed,
+                        test_seed=test_seed,
+                        valid_seed=valid_seed
+                        )
+                
+                if folder_with_checkpoint_results.exists():
+                    import shutil
+                    shutil.rmtree(folder_with_checkpoint_results)
+            else:
+                if len(df_results_new_complete) != len(df_results_new):
+                    logger.warning(f"Results are INCOMPLETE, because in this last run some of the configs did not evaluate properly. Check to re-run.")
+                else:
+                    logger.warning(f"Results are INCOMPLETE. We had to compute results for {max_evals} configs, but result dataframe has {len(df_results)} entries. Possible reasons are global timeouts or so.")
+                
 
 
 def main(**kwargs):
