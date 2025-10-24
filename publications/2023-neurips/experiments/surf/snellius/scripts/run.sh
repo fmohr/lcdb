@@ -27,7 +27,7 @@ mkdir -p "$LCDB_BIN_LOG_OUT" "$LCDB_BIN_LOG_ERR"
 # === END BIN_TAG ===
 
 #!!! CONFIGURATION - START
-export timeout=3500
+export timeout=-1
 export NTOTRANKS=$DESIRED_CORES
 #!!! CONFIGURATION - END
 
