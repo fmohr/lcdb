@@ -8,21 +8,46 @@ conda activate lcdb
 
 declare -a result_files=("$@")
 
+echo "==== Starting campaign upload ===="
+echo "Total result files to process: ${#result_files[@]}"
 
-# Load the .env file if it exists
+# -------------------------------------------------------------------------
+# Load .env for authentication
+# -------------------------------------------------------------------------
 if [ -f "$ENV_PATH" ]; then
+    echo "Loading environment variables from $ENV_PATH"
     export $(grep -v '^#' "$ENV_PATH" | xargs)
+else
+    echo "Warning: .env file not found at $ENV_PATH"
 fi
 
-# update token before uploading data
+# -------------------------------------------------------------------------
+# Authenticate to pCloud
+# -------------------------------------------------------------------------
+echo "Authenticating with pCloud..."
 srun lcdb pcloud -p "$ENV_PATH" || { echo "Authentication failed in lcdb pcloud, exiting."; exit 1; }
 
-# re-load the .env file if it exists
+# Refresh environment (new token)
 if [ -f "$ENV_PATH" ]; then
     export $(grep -v '^#' "$ENV_PATH" | xargs)
 fi
 
+# -------------------------------------------------------------------------
+# Upload results
+# -------------------------------------------------------------------------
+uploaded=0
+missing=0
 
 for file in "${result_files[@]}"; do
-  srun lcdb add -c "$CAMPAIGN_NAME" -t "$PCLOUD_TOKEN" "$file" || true
+    if [ -f "$file" ]; then
+        echo "Uploading $file..."
+        srun lcdb add -c "$CAMPAIGN_NAME" -t "$PCLOUD_TOKEN" "$file" || true
+        ((uploaded++))
+    else
+        echo "Warning: missing result file $file"
+        ((missing++))
+    fi
 done
+
+echo "==== Upload finished ===="
+echo "Uploaded: $uploaded | Missing: $missing"

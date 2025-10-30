@@ -56,9 +56,10 @@ export CAMPAIGN_NAME=$(yq -r '.campaign_name' "$CONFIG_FILE" | tr -d '"')
 # *********Memory Calculations*********
 # cluster profile
 # genoa
-export NODES=2
+export NODES=1
 CPUS_PER_TASK=192
 MEMORY_PER_NODE_GB=336
+
 
 # rome example:
 # export NODES=2

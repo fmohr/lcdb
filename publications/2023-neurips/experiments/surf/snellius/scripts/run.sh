@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --time=48:00:00
+#SBATCH --time=1:00:00
 #SBATCH --threads-per-core=1
 
 module load 2024
@@ -58,6 +58,7 @@ for LCDB_VALID_SEED in "${VAL_SEEDS[@]}"; do
 
         if [ -f "$STATUS_FILE" ]; then
             echo "File $STATUS_FILE already exists. Skipping this configuration."
+            gzip -f --best results.jsonl
             continue
         else
             echo "Creating status file: $STATUS_FILE"
@@ -93,10 +94,10 @@ for LCDB_VALID_SEED in "${VAL_SEEDS[@]}"; do
                     --epoch-schedule=power-2-0.25-0 
 
             # convert the csv format of deephyper into a jsonl file
-            python deephyper_csv_to_jsonl.py results.csv results.jsonl
+            python /home/cyan/lcdb/publications/2023-neurips/experiments/surf/snellius/scripts/deephyper_csv_to_jsonl.py results.csv results.jsonl
 
             # gzip the json results
-            gzip --best results.jsonl
+            gzip -f --best results.jsonl
         fi
     done 
 done

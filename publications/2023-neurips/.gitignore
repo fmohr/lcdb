@@ -13,3 +13,8 @@ __pycache__
 *.sh.o*
 
 test/test_status_dir
+# Memory bin configurations files and randomized preprocessor configs
+*_bins.csv
+randomized_preprocessor_configs
+# Data collected for debugging purposes
+**/debugging/data/
