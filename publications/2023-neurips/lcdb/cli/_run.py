@@ -2,6 +2,7 @@
 
 import logging
 import os
+import sys
 
 # Avoid Tensorflow Warnings
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = str(3)
@@ -563,7 +564,7 @@ def run_experiment(
             if k not in config_default.keys():
                 config_default[k] = skopt_space.dimensions[i].bounds[0]
         initial_points.append(config_default)
-    logger.info(f"Invoked lcdb run with MPI Communicator. Identified {len(initial_points)} configurations and a {max_evals=}.")
+    logger.info(f"Invoked lcdb run with MPI Communicator. Identified {len(initial_points)} configurations and {max_evals=}.")
 
     run_function_kwargs = {
         "campaign": campaign,
@@ -644,7 +645,11 @@ def run_experiment(
                         num_undone_ignored_jobs += 1
                 list_of_previous_results.extend(list_of_previous_results_in_this_file)
                 covered_indices.extend(covered_indices_in_this_file)
-                logger.info(f"{len(list_of_previous_results_in_this_file)} previous results found in {file}. In that file, we also found {num_undone_ignored_jobs} configs that did not have job_status = DONE and are hence ignored. Config indices are {covered_indices_in_this_file}.")
+                logger.info(
+                    f"{len(list_of_previous_results_in_this_file)} previous results found in {file}. "
+                    f"In that file, we also found {num_undone_ignored_jobs} configs that did not have job_status = DONE and are hence ignored. "
+                    f"Config indices are {sorted(covered_indices_in_this_file)}."
+                )
                 num_covered_result_files += 1
             num_previous_results = len(list_of_previous_results)
                             
@@ -656,7 +661,7 @@ def run_experiment(
 
             logger.info(
                 f"In total, {num_previous_results} previous results found in {num_covered_result_files} result files. " +
-                (f"Removed the {num_previous_results} configs with indices {covered_indices} from the todo list. " if num_previous_results > 0 else "")
+                (f"Removed the {num_previous_results} configs with indices {sorted(covered_indices)} from the todo list. " if num_previous_results > 0 else "")
             )
 
             if max_evals_effective > 0:
@@ -708,8 +713,10 @@ def run_experiment(
                 out_file = f"{log_dir}/results.jsonl"
                 logger.info(f"Writing {len(df_results)} results to {out_file}")
                 with jsonlines.open(out_file, mode='w') as writer:
-                    for _, row in df_results.iterrows():
-                        writer.write(convert_deephyper_result_row_to_dict(row))
+                    for i, row in df_results.iterrows():
+                        converted_row = convert_deephyper_result_row_to_dict(row)
+                        logger.info(f"Writing row {i + 1} for config {converted_row['config']}")
+                        writer.write(converted_row)
 
                 # now check whether we need to merge
                 filename = status_file_manager.get_path_to_status_file(workflow=workflow_class, campaign=campaign, openmlid=openml_id, workflowseed=workflow_seed, testseed=test_seed, valseed=valid_seed, status=StatusFileManager.EXPERIMENT_STATUS_COMPLETED)
@@ -772,6 +779,10 @@ def main(**kwargs):
 
     ch.setLevel(log_level)
     logger.setLevel(log_level)
+
+    # log the CLI call
+    cmd = " ".join(arg for arg in sys.argv)
+    logger.info(f"executing `{cmd}`")
 
     # there is no point in making the logger configurable at the CLI, the log level maybe
     kwargs["logger"] = logger

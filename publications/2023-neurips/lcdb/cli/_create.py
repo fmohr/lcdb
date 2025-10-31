@@ -71,41 +71,65 @@ def main(
     # Sample the configurations
     # TODO: LHS should be done here
     config_space.seed(seed)
-    configs = [dict(c) for c in config_space.sample_configuration(size=num_configs if exclude_default_config else num_configs - 1)]
-    for config in configs:
+    attempts = 0
+    max_attempts = 10
+    configs = []
+    configs_as_set = set()
+    while attempts < max_attempts:
+        
+        attempts += 1
+        print(f"Attempt #{attempts}. Current config set size is {len(configs)}/{num_configs}")
 
-        # make sure that the value for feature gen is always set
-        if not "pp@featuregen" in config:
-            config["pp@featuregen"] = "none"
-    if verbose:
-        for config in configs:
-            print(config)
+        next_configs = [dict(c) for c in config_space.sample_configuration(size=num_configs if exclude_default_config else num_configs - 1)]
+        for config in next_configs:
 
-    # get default config as basis to modify other configs
-    config_default = config_space.get_default_configuration()
+            # make sure that the value for feature gen is always set
+            if not "pp@featuregen" in config:
+                config["pp@featuregen"] = "none"
+        if verbose:
+            for config in next_configs:
+                print(config)
 
-    # Add the default configuration if it is not excluded
-    if not exclude_default_config:
-        configs.insert(0, config_default)  # at the beginning
+        # get default config as basis to modify other configs
+        config_default = config_space.get_default_configuration()
 
-    # overwrite some of the configs with default learner values
-    cols_no_pp = [c for c in config_space.keys() if "pp@" not in c]
-    if num_configs_with_default_learner > 0:
-        default_learner_params = {hp: config_space[hp].default_value for hp in cols_no_pp}
-        for c in configs[:num_configs_with_default_learner]:
-            if isinstance(c, dict):
-                c.update(default_learner_params)
-            else:
-                for k, v in default_learner_params.items():
-                    c[k] = v
+        # Add the default configuration if it is not excluded
+        if not exclude_default_config:
+            next_configs.insert(0, config_default)  # at the beginning
 
+        # overwrite some of the configs with default learner values
+        cols_no_pp = [c for c in config_space.keys() if "pp@" not in c]
+        if num_configs_with_default_learner > 0:
+            default_learner_params = {hp: config_space[hp].default_value for hp in cols_no_pp}
+            for c in next_configs[:num_configs_with_default_learner]:
+                if isinstance(c, dict):
+                    c.update(default_learner_params)
+                else:
+                    for k, v in default_learner_params.items():
+                        c[k] = v
 
-    # overwrite some of the configs with default pre-processor values
-    cols_pp = [c for c in config_space.keys() if "pp@" in c]
-    if num_configs_with_default_preprocessor > 0:
-        default_preprocessor_params = {hp: config_space[hp].default_value for hp in cols_pp}
-        for c in configs[num_configs_with_default_learner:num_configs_with_default_learner + num_configs_with_default_preprocessor]:
-            c.update(default_preprocessor_params)
+        # overwrite some of the configs with default pre-processor values
+        cols_pp = [c for c in config_space.keys() if "pp@" in c]
+        if num_configs_with_default_preprocessor > 0:
+            default_preprocessor_params = {hp: config_space[hp].default_value for hp in cols_pp}
+            for c in next_configs[num_configs_with_default_learner:num_configs_with_default_learner + num_configs_with_default_preprocessor]:
+                c.update(default_preprocessor_params)
+        
+        # update actual config array
+        for i, c in enumerate(next_configs):    
+            c_as_set = frozenset(c.items())
+            if c_as_set not in configs_as_set:
+                configs.append(c_as_set)
+                configs_as_set.add(c_as_set)
+            if len(configs) == num_configs:
+                break
+        
+        if len(configs) == num_configs:
+            break
+    
+    if len(configs) != num_configs:
+        raise ValueError(f"Number of unique configs generated after {max_attempts} attempts is {len(configs)} while {num_configs} were requested.")
+    configs = [{k: v for k, v in c} for c in configs]
 
     # modify output file
     if campaign is not None:
@@ -116,7 +140,7 @@ def main(
         output_file = f"{output_folder}/configs.csv"
 
     
-    pd.DataFrame(configs,columns=cols_pp + cols_no_pp).astype(
+    pd.DataFrame(configs, columns=cols_pp + cols_no_pp).astype(
         {c: "Int64" for c in ["pp@selectp_percentile", "pp@poly_degree", "pp@feature_map_size"]}
     ).to_csv(
         output_file, index=False
