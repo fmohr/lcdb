@@ -108,6 +108,14 @@ def add_subparser(subparsers):
         help="The amount of memory to use in MBs."
     )
 
+    subparser.add_argument(
+        "-l",
+        "--logs-included",
+        type=bool,
+        required=False,
+        default=False,
+        help="Whether to include logs in the uploaded files."
+    )
     subparser.add_argument('result_files', nargs='+', help='result files')
     subparser.set_defaults(func=function_to_call)
 
@@ -117,7 +125,6 @@ def main(**kwargs):
     """Entry point for the command line interface."""
 
     from lcdb.db import PCloudRepository
-    # repo = PCloudRepository(repo_code="kZySywZOApseDWKEvfPWOYdjem72XRwAqV0", token=kwargs['token'])
     repo = PCloudRepository(repo_code="kZeWywZRr6lScWSloHlzwk6Uxq3GyRtuBaX", token=kwargs['token'])
 
 
@@ -133,4 +140,5 @@ def main(**kwargs):
     repo.add_results(
         kwargs["campaign"],
         *kwargs["result_files"],
+        logs_included=kwargs["logs_included"],
     )

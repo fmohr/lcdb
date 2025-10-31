@@ -32,7 +32,7 @@ fi
 # check that the workflow name exists
 if [[ -n "${mapping[$WORKFLOW_NAME]}" ]]; then
     export LCDB_WORKFLOW=${mapping[$WORKFLOW_NAME]}
-    export LCDB_OUTPUT_WORKFLOW=$output_path/results_test/$WORKFLOW_NAME/output/$LCDB_WORKFLOW
+    export LCDB_OUTPUT_WORKFLOW=$output_path/results/$WORKFLOW_NAME/output/$LCDB_WORKFLOW
 else
     echo "Invalid workflow name: '$WORKFLOW_NAME'"
     exit 1
@@ -126,12 +126,13 @@ if [[ -z "${LCDB_OPENML_ID_ARRAY+x}" || "${#LCDB_OPENML_ID_ARRAY[@]}" -eq 0 ]]; 
 fi
 
 # ********* Config Path Logic *********
-INITIAL_CONFIG_FILE="$path_to_snellius/randomized_preprocessor_configs/${WORKFLOW_NAME}.csv"
+INITIAL_CONFIG_FILE="$path_to_snellius/initial_configs/enforced_defaults/${WORKFLOW_NAME}.csv"
 
 if [[ -f "$INITIAL_CONFIG_FILE" ]]; then
     export LCDB_INITIAL_CONFIGS="$INITIAL_CONFIG_FILE"
     echo "Using pre-defined initial configs: $LCDB_INITIAL_CONFIGS"
 else
-    export LCDB_INITIAL_CONFIGS=$LCDB_OUTPUT_WORKFLOW-$LCDB_WORKFLOW_MEMORY_LIMIT_GB/initial_configs.csv
+    # export LCDB_INITIAL_CONFIGS=$LCDB_OUTPUT_WORKFLOW-$LCDB_WORKFLOW_MEMORY_LIMIT_GB/initial_configs.csv
+    export LCDB_INITIAL_CONFIGS=$output_path/results/$WORKFLOW_NAME/initial_configs.csv
     echo "Creating initial configs: $LCDB_INITIAL_CONFIGS"
 fi

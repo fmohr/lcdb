@@ -1,5 +1,5 @@
 workflow_name: knn
-campaign_name: knn-new-bins
+campaign_name: probing
 desired_memory_GB: 67
 config_num: 100
 workflow_seed: 42
