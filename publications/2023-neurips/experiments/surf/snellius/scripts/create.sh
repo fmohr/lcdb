@@ -15,7 +15,7 @@ if [[ ! -f "$LCDB_INITIAL_CONFIGS" ]]; then
     if (set -o noclobber; : > "$CAMPAIGN_STATUS_FILE") 2> /dev/null; then
         echo "File $CAMPAIGN_STATUS_FILE did not exist. Creating initial configs."
         echo "Creating $LCDB_NUM_CONFIGS configurations for $LCDB_WORKFLOW in $LCDB_INITIAL_CONFIGS"
-        lcdb create -w "$LCDB_WORKFLOW" -n "$LCDB_NUM_CONFIGS" -o "$LCDB_INITIAL_CONFIGS"
+        lcdb create -w "$LCDB_WORKFLOW" -n "$LCDB_NUM_CONFIGS" -ndl $((LCDB_NUM_CONFIGS / 3)) -ndp $((LCDB_NUM_CONFIGS / 3)) -o "$LCDB_INITIAL_CONFIGS"
     else
         echo "File $CAMPAIGN_STATUS_FILE already exists. Skipping initial config creation."
     fi
