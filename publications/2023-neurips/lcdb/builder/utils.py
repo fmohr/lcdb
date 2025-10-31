@@ -137,7 +137,7 @@ def terminate_on_memory_exceeded(
     patience,
     raise_exception,
     func,
-    log_interval=5,
+    log_interval=10,
     *args,
     **kwargs,
 ):
@@ -187,7 +187,7 @@ def terminate_on_memory_exceeded(
                 memory_peak = max(memory_now, memory_peak)
                 now = time.time()
                 if now - timestamp_last_log_message > log_interval:
-                    logger.debug(f"Current memory consumption: {memory_now // 1024**2}MB ({np.round(100.0 * memory_now / memory_limit, 2)}% of the defined limit)")
+                    logger.info(f"Current memory consumption: {memory_now // 1024**2}MB ({np.round(100.0 * memory_now / memory_limit, 2)}% of the defined limit)")
                     timestamp_last_log_message = now
                 
 
