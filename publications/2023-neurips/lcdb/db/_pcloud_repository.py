@@ -388,7 +388,9 @@ class PCloudRepository(Repository):
         result_files = []
         for file_data in result_files_unfiltered:
             filename = file_data["name"]
-            offset = 6 if filename.endswith(".jsonl") else 9
+            if not filename.endswith(".jsonl.gz"):
+                continue
+            offset = 9 # remove .jsonl.gz
             try:
                 _workflow_seed, _test_seed, _val_seed = [int(i) for i in filename[:-offset].split("-")]
                 if workflow_seeds is not None and _workflow_seed not in workflow_seeds:
