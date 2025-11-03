@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --time=1:00:00
+#SBATCH --time=10:00:00
 #SBATCH --threads-per-core=1
 
 module load 2024

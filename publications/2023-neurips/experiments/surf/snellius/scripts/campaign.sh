@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --partition=genoa
+#SBATCH --partition=rome
 #SBATCH --time=2:00:00
 #SBATCH --threads-per-core=1
 
@@ -40,14 +40,10 @@ missing=0
 
 for file in "${result_files[@]}"; do
     if [ -f "$file" ]; then
-        echo "Uploading $file..."
-        srun lcdb add -c "$CAMPAIGN_NAME" -t "$PCLOUD_TOKEN" "$file" || true
-        ((uploaded++))
+        echo "Uploading existing result file: $file"
     else
-        echo "Warning: missing result file $file"
-        ((missing++))
+        echo "Warning: missing result file $file (will still upload logs)"
     fi
-done
+    srun lcdb add -c "$CAMPAIGN_NAME" -t "$PCLOUD_TOKEN" -l True "$file" || true
 
-echo "==== Upload finished ===="
-echo "Uploaded: $uploaded | Missing: $missing"
+done
