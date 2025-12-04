@@ -106,7 +106,8 @@ def main(
                     c.update(default_learner_params)
                 else:
                     for k, v in default_learner_params.items():
-                        c[k] = v
+                        if k in config_space.get_active_hyperparameters(c):
+                            c[k] = v
 
         # overwrite some of the configs with default pre-processor values
         cols_pp = [c for c in config_space.keys() if "pp@" in c]

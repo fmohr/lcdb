@@ -61,6 +61,7 @@ class TestRunFunctionalities(unittest.TestCase):
         cls.num_evals_in_first = 2
         cls.test_status_dir = Path(f"{cls.folder}/test_status_dir")
         if cls.test_status_dir.exists():
+            print(f"Removing directory {cls.test_status_dir}")
             shutil.rmtree(cls.test_status_dir)
 
     @parameterized.expand(list(it.product(WORKFLOWS, DATASETS)))
@@ -124,7 +125,59 @@ class TestRunFunctionalities(unittest.TestCase):
         rs.drop_rows_without_build_issues()
         self.assertEqual(0, rs.num_rows, msg=f"There should be no errors, but we observed {rs.num_rows} rows with build errors left.")
 
-    def test_4_resume_knn_run(self):
+    def test_2_jobname(self):
+
+        logger.info(f"Test that lcdb run will write a job name into the result")
+
+        # create CLI parser
+        parser = create_parser()
+
+        workflow = "lcdb.workflow.sklearn.KNNWorkflow"
+        openmlid = 61
+        job_name = "my-job-name" # this is the name we test whether it is present in the experiment description
+
+        # prepare folder structure
+        test_status_dir = Path(f"{__class__.folder}/test_status_dir_jobname")
+        if test_status_dir.exists():
+            print(f"Removing directory {test_status_dir}")
+            shutil.rmtree(test_status_dir)
+        test_status_dir_for_case = Path(f"{test_status_dir}/{workflow}_{openmlid}")
+
+        # parse command
+        args = parser.parse_args(
+            "run"
+            f" -i {openmlid}"
+            f" -w {workflow}"
+            f" --log-dir={test_status_dir_for_case}"
+            f" --status-dir={test_status_dir_for_case}"
+            f" --initial-configs={__class__.folder}/run_configs/{workflow}.csv"
+            " --max-evals=1"
+            " --anchor-schedule=first"
+            " --epoch-schedule=first"
+            f" -jn {job_name}"
+            " -e serial"
+            " --no-exception-on-unsuitable-preprocessor"
+        .split())
+
+        # execute command
+        func = args.func
+        kwargs = vars(args)
+        kwargs.pop("func")
+        func(**kwargs)
+
+        # check that there are no errors
+        rs = ResultSet()
+        rs.load(f"{test_status_dir_for_case}/results.jsonl")
+        assert len(rs) == 1
+        rs.drop_rows_with_build_issues()
+        assert len(rs) == 1
+
+        # check that the job name has been registered
+        row = rs[0]
+        assert "job_name" in row["experiment_metadata"]
+        assert row["experiment_metadata"]["job_name"] == job_name
+
+    def test_3_resume_knn_run(self):
         logger.info("Test resume KNN")
         
         workflow = "lcdb.workflow.sklearn.KNNWorkflow"

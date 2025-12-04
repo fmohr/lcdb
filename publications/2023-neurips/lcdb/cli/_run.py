@@ -169,6 +169,14 @@ def add_subparser(subparsers):
         help="The number of seconds to wait before a workflow that exceeds the memory will be killed. Set to 0 to kill it immediately.",
     )
     subparser.add_argument(
+        "-jn",
+        "--job-name",
+        type=str,
+        default=None,
+        required=False,
+        help="The job name that will be registered in the experiment meta-data (useful for later runtime analysis).",
+    )
+    subparser.add_argument(
         "--initial-configs",
         type=str,
         required=False,
@@ -254,6 +262,7 @@ def run_learning_workflow_from_deephyper(
         task_type: str = "classification",
         workflow_class: str = "lcdb.workflow.sklearn.LibLinearWorkflow",
         enforced_workflow_parameters: dict = {},
+        job_name: str = None,
         monotonic: bool = True,
         valid_seed: int = 42,
         test_seed: int = 42,
@@ -344,9 +353,7 @@ def run_learning_workflow_from_deephyper(
             raise ValueError(f"enforced_workflow_parameters should be a dict but is of type {type(enforced_workflow_parameters)}")
         workfow_parameters.update(enforced_workflow_parameters)
 
-    # compute the learning curve
-    t_start = time()
-    
+    # compute the learning curve    
     results = run_function(
         openml_id=openml_id,
         task_type=task_type,
@@ -369,7 +376,6 @@ def run_learning_workflow_from_deephyper(
         memory_limit_in_bytes=memory_limit_in_bytes,
         n_jobs=n_jobs
     )
-    t_end = time()
 
     # adding these results is important to avoid that the field is missing if the config is killed
     experiment_data = {
@@ -383,7 +389,8 @@ def run_learning_workflow_from_deephyper(
         "monotonic": monotonic,
         "valid_seed": valid_seed,
         "test_seed": test_seed,
-        "memory_limit": int(memory_limit_in_bytes)
+        "memory_limit": int(memory_limit_in_bytes),
+        "job_name": job_name
     }
     if "metadata" in results:  # this is just for ordering purposes
         experiment_data.update(results["metadata"])
@@ -417,6 +424,7 @@ def run_experiment(
     log_dir,
     max_evals,
     timeout,
+    job_name,
     initial_configs,
     parameters,
     verbose,
@@ -571,6 +579,7 @@ def run_experiment(
         "openml_id": openml_id,
         "task_type": task_type,
         "workflow_class": workflow_class,
+        "job_name": job_name,
         "enforced_workflow_parameters": parameters,
         "monotonic": monotonic,
         "valid_seed": valid_seed,
