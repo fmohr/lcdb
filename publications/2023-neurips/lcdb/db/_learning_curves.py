@@ -25,6 +25,8 @@ class LearningCurve:
 
         # 7-dimensional tensor
         self.values = values
+        if type(self.values) != np.ndarray:
+            raise ValueError("Learning curve values must be a numpy ndarray.")
 
         # axis labels for each of the 7 dimensions
         self.metrics = metrics
@@ -145,14 +147,47 @@ class LearningCurve:
         d["values"] = d["values"].tolist()
         return json.dumps(d)
     
+    def to_pandas(self):
+        labels = [
+            self.metrics,
+            self.fold_names,
+            self.test_seeds,
+            self.val_seeds,
+            self.workflow_seeds,
+            self.anchors_size
+        ]
+        if self.is_iteration_wise_curve:
+            labels.append(self.anchors_iteration)
+
+        indices = np.indices(self.values.shape).reshape(7 if self.is_iteration_wise_curve else 6, -1).T
+        
+        dim_names = ["metrics", "fold_names", "test_seeds", "val_seeds", "workflow_seeds", "anchors_size"]
+        if self.is_iteration_wise_curve:
+            dim_names.append("anchors_iteration")
+        label_columns = {
+            "openmlid": [self.openmlid] * indices.shape[0],
+            "workflow": [self.workflow] * indices.shape[0],
+            "hp_config": [self.hp_config] * indices.shape[0]
+        }
+        label_columns.update({
+            name: [labels[i][idx] for idx in indices[:, i]]
+            for i, name in enumerate(dim_names)
+        })
+        df = pd.DataFrame(label_columns)
+        df["value"] = self.values.flatten()
+        
+        return df        
+    
     @classmethod
     def from_dict(cls, d):
         d = d.copy()
         return cls(**d)
     
     @classmethod
-    def from_json(cls, d):
-        return cls.from_dict(json.loads(d))
+    def from_json(cls, j):
+        d = json.loads(j)
+        d["values"] = np.array(d["values"])
+        return cls.from_dict(d)
 
 class LearningCurveGroup:
 

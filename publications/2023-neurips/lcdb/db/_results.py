@@ -191,6 +191,16 @@ class ResultSet(ABC):
             return self
         else:
             return self._create_copy_with_rows(new_rows)
+    
+    def filter_workflows(self, workflows, inplace=False):
+        if type(workflows) == str:
+            workflows = [workflows]
+        new_rows = [r for r in self._rows if r["workflow"] in workflows]
+        if inplace:
+            self._rows = new_rows
+            return self
+        else:
+            return self._create_copy_with_rows(new_rows)
 
     def group_by_campaign(self):
         return self._group("campaign")
@@ -245,6 +255,17 @@ class ResultSet(ABC):
             filter_fun (callable): the predicate function to filter rows
         """
         self._rows = [r for r in self._rows if filter_fun(r)]
+    
+    def receive_result_visitor(self, visitor):
+
+        def visit_node(n):
+            visitor(n)
+            if "children" in n:
+                for c in n["children"]:
+                    visit_node(c)
+        
+        
+        visit_node()
     
     def filter(self, filter_fun):
         return ResultSet(

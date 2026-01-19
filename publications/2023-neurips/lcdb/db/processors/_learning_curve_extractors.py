@@ -21,8 +21,10 @@ class LearningCurveExtractor:
         folds=["train", "val", "test"],
         rounding_decimals=4,
         return_none_on_error=True,
+        encode_as_json_str=False
     ):
         accepted_metrics = ["error_rate", "balanced_error_rate"]
+        self.encode_as_json_str = encode_as_json_str
 
         self.funs = {}
         self.srcs = {}
@@ -133,7 +135,10 @@ class LearningCurveExtractor:
             }
             if is_iteration_curve:
                 lc_params["anchors_iteration"] = anchors_iteration
-            return {"learning_curve": LearningCurve(**lc_params)}
+            lc = LearningCurve(**lc_params)
+            if self.encode_as_json_str:
+                lc = lc.to_json()
+            return {"learning_curve": lc}
 
         except KeyboardInterrupt:
             raise

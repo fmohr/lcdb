@@ -42,8 +42,12 @@ class TracebackExtractor:
                 "traceback": row["traceback"],
                 "cli_test_command": base_test_command
             })
-        return {"traceback_summary": errors if errors else None}
-
+        
+        # summarize findings
+        out = {"traceback_summary": errors if errors else None}
+        out["timeout"] = any([e["message"] == "timeout" for e in errors]) if errors else False
+        out["anticipated memory overflow"] = any([e["message"] == "anticipated memory overflow" for e in errors]) if errors else False
+        return out
 
 if __name__ == "__main__":
 

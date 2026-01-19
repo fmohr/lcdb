@@ -16,7 +16,7 @@ import pandas as pd
 
 logging.basicConfig(level=logging.INFO)
 
-OUTPUT_DIR = "./experiments/debugging/data"
+OUTPUT_DIR = "./data"
 
 Path(OUTPUT_DIR).mkdir(parents=True, exist_ok=True)
 
@@ -25,10 +25,11 @@ lcdb = LCDB()
 
 for workflow_class in [
     "lcdb.workflow.sklearn.KNNWorkflow",
-    "lcdb.workflow.sklearn.LibLinearWorkflow",
-    "lcdb.workflow.sklearn.LibSVMWorkflow",
-    "lcdb.workflow.sklearn.TreesEnsembleWorkflow",
-    "lcdb.workflow.xgboost.XGBoostWorkflow"
+    #"lcdb.workflow.sklearn.LibLinearWorkflow",
+    #"lcdb.workflow.sklearn.LibSVMWorkflow",
+    #"lcdb.workflow.sklearn.TreesEnsembleWorkflow",
+    #"lcdb.workflow.xgboost.XGBoostWorkflow",
+    #"lcdb.workflow.keras.DenseNNWorkflow"
 ]:
 
     file = Path(f"{OUTPUT_DIR}/{workflow_class}.jsonl")
@@ -36,15 +37,16 @@ for workflow_class in [
 
         print(workflow_class)
 
-        campaign_name = "probing"
+        campaign_name = "probing-test"
         #if "XGBoost" in workflow_class:
             #campaign_name = "pre-config-100-new"
 
         gen = lcdb.query(
             campaigns=[campaign_name],
+            openmlids=[3, 12, 23, 31, 54],
             workflows=[workflow_class],
             processors=[
-                LearningCurveExtractor(metrics=["error_rate"]),
+                LearningCurveExtractor(metrics=["error_rate"], encode_as_json_str=True),
                 compute_payload,
                 TracebackExtractor(),
                 DataMemoryComputer(),
