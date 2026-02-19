@@ -361,7 +361,7 @@ def convert_deephyper_result_row_to_dict(row):
         elif field == "m:json":
             remaining_fields["results"] = value
         elif field.startswith('m:'):
-            if field.startswith("m:timestamp_") or field in ["m:lcdb_version"]:
+            if field.startswith("m:timestamp_") or field in ["m:lcdb_version"] or field in ["m:job_name"]:
                 experiment[field[2:]] = value
             else:
                 remaining_fields[field[2:]] = value

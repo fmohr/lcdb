@@ -72,7 +72,7 @@ class RuntimeExtractor:
             for metric, runtimes_for_metric in metrictimes_foldwise.items():
                 for anchor, timestamps_at_anchor in zip(anchors, runtimes_for_metric):
                     for i, fold in enumerate(["train", "val", "test"]):
-                        runtimes[anchor][f"{metric}_{fold}"] = np.round(timestamps_at_anchor[i][2] - timestamps_at_anchor[i][1], 6)
+                        runtimes[anchor][f"{metric}_{fold}"] = np.round(timestamps_at_anchor[i][2] - timestamps_at_anchor[i][1], 6) if i in timestamps_at_anchor else 0.0
             
             # sanity checks
             for anchor, runtimes_at_anchor in runtimes.items():
@@ -91,7 +91,9 @@ class RuntimeExtractor:
             runtimes["summary"]["learn"] = np.round(runtimes["summary"].get("fit", 0) - (runtimes["summary"].get("transform_train", 0) + runtimes["summary"].get("transform_valid", 0) + runtimes["summary"].get("transform_test", 0)), 6)
 
             # return dictionary with runtimes
-            return runtimes
+            return {
+                "runtimes": runtimes
+            }
             
 
         except KeyboardInterrupt:

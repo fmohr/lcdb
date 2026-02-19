@@ -3,18 +3,42 @@ import os
 import pathlib
 from statistics import mean
 import trace
+import time
 import pandas as pd
 from lcdb.db._repository import Repository
 from lcdb.db._results import ResultSet
 from lcdb.db._util import get_path_to_lcdb,  CountAwareGenerator
+from lcdb.builder.utils import convert_deephyper_result_row_to_dict
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed, wait, FIRST_COMPLETED
+
 from tqdm import tqdm
 import logging
+
+import pickle
+
+def is_picklable(obj) -> bool:
+    try:
+        pickle.dumps(obj)
+        return True
+    except Exception:
+        return False
 
 
 logger = logging.getLogger("lcdb")
 
 DETAIL_KEY = "results"
 
+def _process_results(res, unpack_results, unpack_build_issues, processors):
+    assert type(res) == list, f"Expected list of result rows but got {type(res)}"
+    assert len(res) > 0, f"Expected non-empty list of result rows but got empty list."
+    rs = ResultSet(res)
+    if unpack_results:
+        rs._unpack_results()
+    if unpack_build_issues:
+        rs._unpack_build_issues()
+    if processors is not None:
+        rs.apply(processors)
+    return rs
 
 class LCDB:
     """Used to represent the LCDB database.
@@ -148,7 +172,9 @@ class LCDB:
             validation_seeds=None,
             processors=None,
             unpack_results=True,
-            unpack_build_issues=True
+            unpack_build_issues=True,
+            max_workers=None,
+            buffer_size=2
     ):
         """
         Gets a dictionary or generator of result dataframes. In the case of a dictionary, there is one dataframe per workflow; these are not unified since different workflows have different hyperparameters. In the case of a generator, each returned dataframe is for a single workflow, but it may (and typically will) occur that several dataframes for the same workflow are returned (but with values for different datasets or different seeds). In other words, it can always be assumed that the workflows of the returned dataframes (either by a generator or contained in the dictionary) have a homogenous worklfow attribute.
@@ -195,6 +221,9 @@ class LCDB:
         if processors is not None:
             if type(processors) != list:
                 raise ValueError(f"processors must be None or list but are {type(processors)}")
+            for p in processors:
+                if not is_picklable(p):
+                    raise ValueError(f"Processor {p} of type {type(p)} is not picklable, which is required for parallel processing. Please remove it from the processor list or make it picklable.")
 
         result_generators = []
         for repository in repositories:
@@ -211,22 +240,44 @@ class LCDB:
                 )
 
         def generator():
-            for gen in result_generators:
-                for res in gen:
+            if max_workers is None or max_workers <= 1:
+                num_workers = os.cpu_count()
+            else:
+                num_workers = max_workers
+            
+            with ProcessPoolExecutor(max_workers=num_workers) as executor:
+                futures = set()
 
-                    assert res is not None
-                    
-                    # create result set from all the results and apply processors if any given
-                    rs = ResultSet(res)
-                    if unpack_results:
-                        rs._unpack_results()
-                    if unpack_build_issues:
-                        rs._unpack_build_issues()
-                    if processors is not None:
-                        rs.apply(processors)
-                    yield rs
+                for gen in result_generators:
+                    for res in gen:
 
-        return CountAwareGenerator(sum([len(g) for g in result_generators]), generator())
+                        # check whether result is not None and put it into the queue for processing
+                        assert res is not None
+                        assert type(res) == list, f"Expected list of result rows but got {type(res)}"
+                        assert len(res) > 0, f"Expected non-empty list of result rows but got empty list."
+                        futures.add(executor.submit(_process_results, res, unpack_results, unpack_build_issues, processors))
+                        num_futures_ready = sum(f.done() for f in futures)
+
+                        # process futures that are ready
+                        if num_futures_ready > 0:
+                            done, futures = wait(futures, return_when=FIRST_COMPLETED)
+                            for fut in done:
+                                yield fut.result()
+
+                        # if the queue is very full, wait for one to finish
+                        if len(futures) >= buffer_size:
+                            done, futures = wait(futures, return_when=FIRST_COMPLETED)
+                            for fut in done:
+                                yield fut.result()
+
+                # drain the remainings
+                while futures:
+                    done, futures = wait(futures, return_when=FIRST_COMPLETED)
+                    for fut in done:
+                        print("finally Draining result")
+                        yield fut.result()
+
+        return generator()
 
     def statistics(
             self,

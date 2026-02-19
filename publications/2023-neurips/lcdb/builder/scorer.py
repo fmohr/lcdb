@@ -57,6 +57,7 @@ class ClassificationScorer:
         scores = {}
 
         for metric_name in metric_names:
+            print(metric_name)
             with self.timer.time(metric_name) as metric_timer:
                 score = None
 
@@ -109,6 +110,7 @@ class ClassificationScorer:
                             if average in [None, "micro"] and multi_class != "ovr":
                                 continue
                             if np.any(np.isnan(y_pred_proba)) or (multi_class == "ovo" and num_labels_in_ground_truth > 100):
+                                print(f"Skipping AUC computation.")
                                 auc = np.nan
                             else:
                                 try:

@@ -43,16 +43,18 @@ for workflow_class in [
 
         gen = lcdb.query(
             campaigns=[campaign_name],
-            openmlids=[3, 12, 23, 31, 54],
+            #openmlids=[3, 12, 23, 31, 54],
+            #openmlids=[41167],
             workflows=[workflow_class],
             processors=[
                 LearningCurveExtractor(metrics=["error_rate"], encode_as_json_str=True),
                 compute_payload,
                 TracebackExtractor(),
                 DataMemoryComputer(),
-                #RuntimeExtractor(),
+                RuntimeExtractor(),
                 extract_anticipated_memory
-            ]
+            ],
+            max_workers=4
         )
 
         if gen is None:

@@ -20,14 +20,6 @@ def get_packed_results(rows):
         packed_rows.append(row_copy)
     return packed_rows
 
-def get_unpacked_results(rows):
-    packed_rows = []
-    for row in rows:
-        row_copy = row.copy()
-        if RESULT_KEY in row_copy and row_copy[RESULT_KEY] is not None:
-            row_copy[RESULT_KEY] = json.loads(row[RESULT_KEY])
-        packed_rows.append(row_copy)
-    return packed_rows
 
 class ResultSet(ABC):
 
@@ -40,7 +32,10 @@ class ResultSet(ABC):
     def _unpack_results(self):
         if self.results_unpacked:
             raise ValueError("Results are already unpacked.")
-        self._rows = get_unpacked_results(self._rows)
+        
+        for row in self._rows:
+            if RESULT_KEY in row and row[RESULT_KEY] is not None:
+                row[RESULT_KEY] = json.loads(row[RESULT_KEY])
         self.results_unpacked = True
 
     def _unpack_build_issues(self):

@@ -39,6 +39,7 @@ class PCloudRepository(Repository):
         # update content
         self.update_content()
         self.root_folder_id = self.content['metadata'].get('folderid')
+        self.logger = logging.getLogger(__name__)
 
     def update_content(self):
         self.content = requests.get(f"https://eapi.pcloud.com/showpublink?code={self.repo_code}").json()
@@ -65,7 +66,7 @@ class PCloudRepository(Repository):
         if self.token is None:
             raise ValueError(f"Authentication failed. Response from server was {response}.")
 
-    def get_handle_for_result_file(self, file):
+    def download_result_file_and_get_handle(self, file):
 
         # get download link
         response = requests.get(f"https://eapi.pcloud.com/getpublinkdownload?code={self.repo_code}&fileid={file}").json()
@@ -73,10 +74,13 @@ class PCloudRepository(Repository):
 
         # download file
         t_start = time.time()
-        logging.info(f"Starting download of {download_link}")
+        self.logger.info(f"Starting download of {download_link}")
         response = requests.get(download_link)
         t_end_dl = time.time()
-        logging.info(f"Download finished after {int(1000 * (t_end_dl - t_start))} miliseconds")
+
+        size_bytes = int(response.headers.get("Content-Length", 0))
+        size_mb = int(size_bytes / (1024 * 1024))
+        self.logger.info(f"Download of file with size {size_mb}MB finished after {int(1000 * (t_end_dl - t_start))} miliseconds")
         if response.status_code == 200:
 
             t_start = time.time()
@@ -86,7 +90,7 @@ class PCloudRepository(Repository):
                 filehandle = download_link
             return filehandle
         else:
-            print(f"Failed to fetch the file. Status code: {response.status_code}")
+            self.logger.error(f"Failed to fetch the file. Status code: {response.status_code}")
 
     def _get_folder_id(self, path=None, root=False):
         """Returns the folder ID for a specified full path within the repository."""
@@ -520,37 +524,29 @@ class PCloudRepository(Repository):
         # read in all result files
         def gen_fun(
             raise_errors=False,
-            max_workers=2
+            max_workers=4
             ):
 
             total_entries = 0
             if result_files is None:
                 return 
 
-            filehandle_queue = Queue()
-            result_queue = Queue()
+            result_row_queue = Queue(maxsize=50) # maximum number of result rows that can be stored in memory at once, to prevent memory overflow. Adjust as needed.
 
             # This worker runs in threadpool
             def worker(file_desc):
                 try:
-                    #rows = []
-                    #t_start = time.time()
-                    filehandle = self.get_handle_for_result_file(file_desc["fileid"])
-                    filehandle_queue.put(filehandle)
-                    # for i, row in enumerate(self.read_result_file(file_desc["fileid"])):
-                    #     if i == 0:
-                    #         print("Finished download. Now enqueuing results...")
+                    filehandle = self.download_result_file_and_get_handle(file_desc["fileid"])
+                    with gzip.open(filehandle, 'rt', encoding='utf-8') as f:
+                        reader = jsonlines.Reader(f)
+                        c = 0
+                        t_start = time.time()
+                        for row in reader:
+                            result_row_queue.put(convert_deephyper_result_row_to_dict(row))
+                            c += 1
+                        t_end = time.time()
+                        #print(f"Closing file. Enqueued {c} items. {c / (t_end - t_start)} per second")
 
-                    #     rows.append(convert_deephyper_result_row_to_dict(row))
-                    #     total_entries[0] += 1
-                    #     if total_entries[0] % 50 == 0:
-                    #         queue.put(rows)
-                    #         rows = []
-                    #         print(f"Enqueing next result took {int(1000 * (time.time() - t_start))}ms...")
-                    #         t_start = time.time()
-                    # if rows:
-                    #     print("Enqueing next result...")
-                    #     queue.put(rows)
 
                 except Exception as e:
                     is_parsing_error = isinstance(e, JSONDecodeError)
@@ -580,32 +576,22 @@ class PCloudRepository(Repository):
                 # Meanwhile, yield from queue until all workers finish
                 finished = 0
                 total = len(futures)
-
-                while finished < total or not filehandle_queue.empty():
+                
+                rows = []
+                while finished < total or not result_row_queue.empty():
                     try:
-                        print(f"{finished}/{total} workers finished. Queue size: {filehandle_queue.qsize()}")
-                        filehandle = filehandle_queue.get(timeout=0.1)
-                        print(f"Current queue size: {filehandle_queue.qsize()}")
+                        while len(rows) < 20:
+                            rows.append(result_row_queue.get(timeout=5))
+                        yield rows
                         rows = []
-                        with gzip.open(filehandle, 'rt', encoding='utf-8') as f:
-                            reader = jsonlines.Reader(f)
-                            for row in reader:
-                                rows.append(convert_deephyper_result_row_to_dict(row))
-                                total_entries += 1
-                                if total_entries % 50 == 0:
-                                    yield rows
-                                    rows = []
-
-                            if rows:
-                                yield rows
-                            print("Closing file")
 
                     except:
                         pass
 
                     # Check if any workers have finished
-                    finished = sum(f.done() for f in futures)
-                print("All workers finished.")
-            print("FINISHING")
+                    finished_now = sum(f.done() for f in futures)
+                    if finished_now > finished:
+                        self.logger.info(f"{finished_now}/{total} files processed.")
+                        finished = finished_now
 
-        return CountAwareGenerator(len(result_files) * 10 if result_files is not None else 0, gen=gen_fun())
+        return gen_fun()

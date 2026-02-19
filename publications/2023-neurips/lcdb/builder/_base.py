@@ -9,6 +9,7 @@ import traceback
 import warnings
 
 from tqdm import tqdm
+import time
 
 from lcdb.data.split import train_valid_test_split
 from .timer import Timer
@@ -263,11 +264,11 @@ class LearningCurveBuilder:
         self.num_instances = X.shape[0]
         self.dataset_metadata = dataset_metadata
 
-        self.logger.info(f"Splitting data of shape {X.shape} into train/validation/test")
         self.X = X
         self.y = y
         self.labels = list(np.unique(y))
         self.is_binary = len(self.labels) == 2
+        self.logger.info(f"Splitting data of shape {X.shape} with {len(self.labels)} different labels into train/validation/test")
         (
             self.X_train,
             self.X_valid,
@@ -559,6 +560,7 @@ class LearningCurveBuilder:
         else:
             scorer = RegressionScorer(timer=self.timer)
 
+        t_start_metric_computation = time.time()
         self.logger.info(f"Starting metric computation for the given predictions.")
         with self.timer.time("metrics"):
             for y_true, y_pred, y_pred_proba, label_split in [
@@ -577,5 +579,6 @@ class LearningCurveBuilder:
                         if label_split == "val":
                             self.objective = -scores["mean_squared_error"]
                 self.logger.debug(f"Finished metric computation for the given predictions on {label_split} fold.")
-        self.logger.info(f"Finished metric computation for the given predictions. Objective is {self.objective}")
+        metric_comp_runtime = time.time() - t_start_metric_computation
+        self.logger.info(f"Finished metric computation for the given predictions after {metric_comp_runtime:.1f}s. Objective is {self.objective}. Computation ")
         return 0  # no error occurred

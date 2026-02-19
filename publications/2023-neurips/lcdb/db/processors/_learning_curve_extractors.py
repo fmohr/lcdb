@@ -13,6 +13,11 @@ from lcdb.db._learning_curves import LearningCurve
 DETAIL_KEY = "results"
 
 
+def f1(cm):
+    return 1 - np.diag(cm).sum() / np.sum(cm)
+
+def f2(cm):
+    return 1 - balanced_accuracy_from_confusion_matrix(cm)
 class LearningCurveExtractor:
 
     def __init__(
@@ -35,12 +40,10 @@ class LearningCurveExtractor:
                 raise ValueError(f"Each metric in metrics must be str, but at least one is {type(metric)}: {metric}")
 
             if metric == "error_rate":
-                self.funs[metric] = lambda cm: 1 - np.diag(cm).sum() / np.sum(cm)
+                self.funs[metric] = f1
                 self.srcs[metric] = "confusion_matrix"
             elif metric == "balanced_error_rate":
-                self.funs[metric] = (
-                    lambda cm: 1 - balanced_accuracy_from_confusion_matrix(cm)
-                )
+                self.funs[metric] = f2
                 self.srcs[metric] = "confusion_matrix"
             else:
                 raise ValueError(
@@ -68,6 +71,11 @@ class LearningCurveExtractor:
             anchors_size = QueryAnchorValues()(lc_dict)
             anchors_iterations_per_sample_size = QueryEpochValues()(lc_dict)
             anchors_iteration = set()
+            
+            # if no data can be extracted for the learning curve, return None
+            if anchors_size is None or anchors_iterations_per_sample_size is None:
+                return {"learning_curve": None}
+            
             for iteration_anchors in anchors_iterations_per_sample_size:
                 anchors_iteration |= set(iteration_anchors)
             anchors_iteration = sorted(anchors_iteration)
