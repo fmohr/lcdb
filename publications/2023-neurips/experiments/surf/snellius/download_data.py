@@ -92,12 +92,7 @@ for workflow_class in [
         callbacks=[Callback(results_per_dataset=result_sets_per_dataset)]
     )
 
-    if gen is None:
-        print("No results found")
-        continue
-
     # get all dataframes
-
     for i, chunk_rs in enumerate(tqdm(gen)):
         assert type(chunk_rs) == ResultSet, f"Expected ResultSet but got {type(chunk_rs)}"
         chunk_rs.drop_raw_results()
