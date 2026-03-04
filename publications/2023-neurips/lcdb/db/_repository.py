@@ -35,39 +35,14 @@ class Repository(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def get_result_files_of_workflow_and_dataset_in_campaign(
-            self,
-            campaign,
-            workflow,
-            openmlid,
-            workflow_seeds=None,
-            test_seeds=None,
-            validation_seeds=None
-    ):
-        raise NotImplementedError
+    def get_count_table(self):
+        """
 
-    @abstractmethod
-    def get_result_files_of_workflow_in_campaign(
-            self,
-            campaign,
-            workflow,
-            openmlids=None,
-            workflow_seeds=None,
-            test_seeds=None,
-            validation_seeds=None
-    ):
-        raise NotImplementedError
+        A pandas dataframe with the number of result rows for each combinations of workflow, dataset, campaign, test seed, validation seed, workflow seed
 
-    @abstractmethod
-    def get_result_files_of_workflow(
-            self,
-            workflow=None,
-            campaigns=None,
-            openmlids=None,
-            workflow_seeds=None,
-            test_seeds=None,
-            validation_seeds=None
-    ):
+        Raises:
+            NotImplementedError: _description_
+        """
         raise NotImplementedError
 
     @abstractmethod

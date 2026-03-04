@@ -4,7 +4,9 @@ import pathlib
 from statistics import mean
 import trace
 import time
+import numpy as np
 import pandas as pd
+from lcdb.db.callbacks.counting_callback import CountingCallback
 from lcdb.db._repository import Repository
 from lcdb.db._results import ResultSet
 from lcdb.db._util import get_path_to_lcdb,  CountAwareGenerator
@@ -65,6 +67,7 @@ class LCDB:
             get_path_to_lcdb() if path is None else f"{path}/{lcdb_folder}"
         )
         self.path_to_config = f"{self.path}/{config_filename}"
+        self.path_to_count_table = f"{self.path}/counts.csv"
 
         # state vars
         self.loaded = False
@@ -160,6 +163,23 @@ class LCDB:
             if repository.exists():
                 workflows.update(repository.get_workflows())
         return sorted(workflows)
+    
+    def update_count_index(self):
+        """
+            Updates a local index file that contains information about the number of entries in the database
+        """
+        df = None
+        for repo_name, repository in self.repositories.items():
+            if repository.exists():
+                df_repo = repository.get_count_table().copy()
+                df_repo["repository"] = repo_name
+                df = df_repo if df is None else pd.concat([df, df_repo], ignore_index=True)
+        df = df[["repository", "workflow", "campaign", "openmlid", "seed_test", "seed_val", "seed_workflow", "num_configs"]]
+        df.to_csv(self.path_to_count_table, index=False)
+
+    @property
+    def count_index(self):
+        return pd.read_csv(self.path_to_count_table)
 
     def query(
             self,
@@ -173,8 +193,11 @@ class LCDB:
             processors=None,
             unpack_results=True,
             unpack_build_issues=True,
+            inclusion_predicate=None,
             max_workers=None,
-            buffer_size=2
+            batch_size=100,
+            buffer_size=2,
+            callbacks=None
     ):
         """
         Gets a dictionary or generator of result dataframes. In the case of a dictionary, there is one dataframe per workflow; these are not unified since different workflows have different hyperparameters. In the case of a generator, each returned dataframe is for a single workflow, but it may (and typically will) occur that several dataframes for the same workflow are returned (but with values for different datasets or different seeds). In other words, it can always be assumed that the workflows of the returned dataframes (either by a generator or contained in the dictionary) have a homogenous worklfow attribute.
@@ -225,19 +248,46 @@ class LCDB:
                 if not is_picklable(p):
                     raise ValueError(f"Processor {p} of type {type(p)} is not picklable, which is required for parallel processing. Please remove it from the processor list or make it picklable.")
 
-        result_generators = []
-        for repository in repositories:
-            if repository.exists():
-                result_generators.append(
-                    repository.query_results_as_stream(
-                        campaigns=campaigns,
-                        workflows=workflows,
-                        openmlids=openmlids,
-                        workflow_seeds=workflow_seeds,
-                        test_seeds=test_seeds,
-                        validation_seeds=validation_seeds
-                    )
-                )
+        # create agenda
+        df_agenda = self.count_index
+        if campaigns is not None:
+            df_agenda = df_agenda[df_agenda["campaign"].isin(campaigns)]
+        if workflows is not None:
+            df_agenda = df_agenda[df_agenda["workflow"].isin(workflows)]
+        if openmlids is not None:
+            df_agenda = df_agenda[df_agenda["openmlid"].isin(openmlids)]
+        if test_seeds is not None:
+            df_agenda = df_agenda[df_agenda["seed_test"].isin(test_seeds)]
+        if validation_seeds is not None:
+            df_agenda = df_agenda[df_agenda["seed_val"].isin(validation_seeds)]
+        if workflow_seeds is not None:
+            df_agenda = df_agenda[df_agenda["seed_workflow"].isin(workflow_seeds)]
+        if inclusion_predicate is not None:
+            df_agenda = df_agenda[df_agenda.apply(lambda row: inclusion_predicate(
+                workflow=row["workflow"],
+                openmlid=row["openmlid"],
+                campaign=row["campaign"],
+                workflow_seed=row["seed_workflow"],
+                test_seed=row["seed_test"],
+                val_seed=row["seed_val"]
+            ), axis=1)]
+        df_agenda = df_agenda.reset_index(drop=True).copy()
+
+        # collect generators
+        # result_generators = []
+        # for repo_idx, repository in enumerate(repositories):
+        #     if repository.exists():
+        #         result_generators.append( 
+        #             repository.query_results_as_stream(
+        #                 campaigns=campaigns,
+        #                 workflows=workflows,
+        #                 openmlids=openmlids,
+        #                 workflow_seeds=workflow_seeds,
+        #                 test_seeds=test_seeds,
+        #                 validation_seeds=validation_seeds,
+        #                 inclusion_predicate=inclusion_predicate
+        #             )
+        #         )
 
         def generator():
             if max_workers is None or max_workers <= 1:
@@ -248,36 +298,75 @@ class LCDB:
             with ProcessPoolExecutor(max_workers=num_workers) as executor:
                 futures = set()
 
-                for gen in result_generators:
-                    for res in gen:
+                cur_result_set = None
 
-                        # check whether result is not None and put it into the queue for processing
-                        assert res is not None
-                        assert type(res) == list, f"Expected list of result rows but got {type(res)}"
-                        assert len(res) > 0, f"Expected non-empty list of result rows but got empty list."
-                        futures.add(executor.submit(_process_results, res, unpack_results, unpack_build_issues, processors))
-                        num_futures_ready = sum(f.done() for f in futures)
+                for workflow, df_agenda_workflow in df_agenda.groupby("workflow"):
+                    for openmlid, df_agenda_workflow_and_dataset in df_agenda_workflow.groupby("openmlid"):
+                        for repository_name, df_agenda_local in df_agenda_workflow_and_dataset.groupby("repository"):
+                            
+                            repository = self.repositories[repository_name]
 
-                        # process futures that are ready
-                        if num_futures_ready > 0:
+                            # get generator for this query
+                            gen = repository.query_results_as_stream(
+                                campaigns=campaigns,
+                                workflows=[workflow],
+                                openmlids=[openmlid],
+                                workflow_seeds=df_agenda_local["seed_workflow"].unique(),
+                                test_seeds=df_agenda_local["seed_test"].unique(),
+                                validation_seeds=df_agenda_local["seed_val"].unique()
+                            )
+
+                            for res in gen:
+
+                                # check whether result is not None and put it into the queue for processing
+                                assert res is not None
+                                assert type(res) == list, f"Expected list of result rows but got {type(res)}"
+                                assert len(res) > 0, f"Expected non-empty list of result rows but got empty list."
+
+                                # if the queue is very full, wait for one to finish
+                                if len(futures) >= buffer_size:
+                                    wait(futures, return_when=FIRST_COMPLETED)
+                                futures.add(executor.submit(_process_results, res, unpack_results, unpack_build_issues, processors))
+                                num_futures_ready = sum(f.done() for f in futures)
+
+                                # process futures that are ready
+                                if num_futures_ready > 0:
+                                    done, futures = wait(futures, return_when=FIRST_COMPLETED)
+                                    for fut in done:
+                                        if cur_result_set is not None:
+                                            cur_result_set.extend(fut.result())
+                                        else:
+                                            cur_result_set = fut.result()
+                                        
+                                        # if the result set has the desired batch size, send results
+                                        if len(cur_result_set) >= batch_size:
+                                            to_deliver, cur_result_set = cur_result_set.split_at_index(batch_size)
+                                            yield to_deliver
+                        
+                        # drain the remainings
+                        while futures:
                             done, futures = wait(futures, return_when=FIRST_COMPLETED)
                             for fut in done:
-                                yield fut.result()
+                                if cur_result_set is not None:
+                                    cur_result_set.extend(fut.result())
+                                else:
+                                    cur_result_set = fut.result()
+                                
+                                # if the result set has the desired batch size, send results
+                                while len(cur_result_set) >= batch_size:
+                                    to_deliver, cur_result_set = cur_result_set.split_at_index(batch_size)
+                                    yield to_deliver
+                        
+                        # drain the rest anyway
+                        if cur_result_set is not None and len(cur_result_set) > 0:
+                            yield cur_result_set
 
-                        # if the queue is very full, wait for one to finish
-                        if len(futures) >= buffer_size:
-                            done, futures = wait(futures, return_when=FIRST_COMPLETED)
-                            for fut in done:
-                                yield fut.result()
+                        # when the dataset is finished, send a callback
+                        if callbacks is not None:
+                            for cb in callbacks:
+                                cb.on_workflow_dataset_combination_finished(workflow=workflow, openmlid=openmlid, total_num_records=df_agenda_workflow_and_dataset["num_configs"].sum())
 
-                # drain the remainings
-                while futures:
-                    done, futures = wait(futures, return_when=FIRST_COMPLETED)
-                    for fut in done:
-                        print("finally Draining result")
-                        yield fut.result()
-
-        return generator()
+        return CountAwareGenerator(int(np.ceil(df_agenda["num_configs"].sum() / batch_size)), generator())
 
     def statistics(
             self,

@@ -135,6 +135,20 @@ class ResultSet(ABC):
         for row in self._rows:
             if RESULT_KEY in row:
                 del row[RESULT_KEY]
+
+    def head(self, n):
+        self._rows = self._rows[:n]
+        return self
+
+    def tail(self, n):
+        self._rows = self._rows[-n:]
+        return self
+    
+    def split_at_index(self, idx):
+        head = ResultSet(rows=self._rows[:idx], results_unpacked=self.results_unpacked, build_issues_unpacked=self.build_issues_unpacked)
+        tail = ResultSet(rows=self._rows[idx:], results_unpacked=self.results_unpacked, build_issues_unpacked=self.build_issues_unpacked)
+        assert len(head) + len(tail) == len(self)
+        return head, tail
     
     def drop_rows_with_build_issues(self):
         self._rows = [r for r in self._rows if "build_issues" not in r or r["build_issues"] is None]

@@ -14,6 +14,7 @@ import tempfile
 
 import pandas as pd
 import numpy as np
+from tqdm import tqdm
 
 from lcdb.db._repository import Repository
 from lcdb.builder.utils import convert_deephyper_result_row_to_dict
@@ -26,6 +27,8 @@ from json import JSONDecodeError
 from concurrent.futures import ThreadPoolExecutor
 from queue import Queue
 import threading
+
+from lcdb.db.callbacks._base import LCDBCallback
 
 
 
@@ -374,7 +377,8 @@ class PCloudRepository(Repository):
             openmlid,
             workflow_seeds=None,
             test_seeds=None,
-            validation_seeds=None
+            validation_seeds=None,
+            inclusion_predicate=None
     ):
         # print(f"Getting result files for {workflow}/{campaign}/{openmlid}")
         result_files_unfiltered = jmespath.compile(
@@ -410,6 +414,17 @@ class PCloudRepository(Repository):
             except ValueError:
                 print(f"Could not load file {filename} from pCloud repository. Invalid filename {filename}")
                 continue
+                
+            # check inclusion predicate
+            if inclusion_predicate is not None and not inclusion_predicate(
+                workflow=workflow,
+                campaign=campaign,
+                openmlid=openmlid,
+                workflow_seed=_workflow_seed,
+                test_seed=_test_seed,
+                val_seed=_val_seed
+                ):
+                continue
 
             result_files.append([workflow, campaign, openmlid, _workflow_seed, _test_seed, _val_seed, file_data["fileid"]])
         return pd.DataFrame(result_files, columns=["workflow", "campaign", "openmlid", "seed_workflow", "seed_test", "seed_val", "fileid"])
@@ -421,7 +436,8 @@ class PCloudRepository(Repository):
             openmlids=None,
             workflow_seeds=None,
             test_seeds=None,
-            validation_seeds=None
+            validation_seeds=None,
+            inclusion_predicate=None
     ):
 
         if openmlids is None:
@@ -435,9 +451,10 @@ class PCloudRepository(Repository):
                 openmlid=openmlid,
                 workflow_seeds=workflow_seeds,
                 test_seeds=test_seeds,
-                validation_seeds=validation_seeds
+                validation_seeds=validation_seeds,
+                inclusion_predicate=inclusion_predicate
             )
-            result_files = result_files_new if result_files is None else pd.concat([result_files, result_files_new])
+            result_files = result_files_new if result_files is None else pd.concat([result_files, result_files_new], ignore_index=True)
         return result_files
 
     def get_result_files_of_workflow(
@@ -447,7 +464,8 @@ class PCloudRepository(Repository):
             openmlids=None,
             workflow_seeds=None,
             test_seeds=None,
-            validation_seeds=None
+            validation_seeds=None,
+            inclusion_predicate=None
     ):
         result_files = None
         if campaigns is None:
@@ -459,9 +477,10 @@ class PCloudRepository(Repository):
                 openmlids=openmlids,
                 workflow_seeds=workflow_seeds,
                 test_seeds=test_seeds,
-                validation_seeds=validation_seeds
+                validation_seeds=validation_seeds,
+                inclusion_predicate=inclusion_predicate
             )
-            result_files = result_files_new if result_files is None else pd.concat([result_files, result_files_new])
+            result_files = result_files_new if result_files is None else pd.concat([result_files, result_files_new], ignore_index=True)
         return result_files
 
     def get_result_files(
@@ -471,7 +490,8 @@ class PCloudRepository(Repository):
             openmlids=None,
             workflow_seeds=None,
             test_seeds=None,
-            validation_seeds=None
+            validation_seeds=None,
+            inclusion_predicate=None
     ):
         if workflows is None:
             workflows = self.get_workflows()
@@ -484,10 +504,37 @@ class PCloudRepository(Repository):
                 openmlids=openmlids,
                 workflow_seeds=workflow_seeds,
                 test_seeds=test_seeds,
-                validation_seeds=validation_seeds
+                validation_seeds=validation_seeds,
+                inclusion_predicate=inclusion_predicate
             )
-            result_files = result_files_new if result_files is None else pd.concat([result_files, result_files_new])
+            result_files = result_files_new if result_files is None else pd.concat([result_files, result_files_new], ignore_index=True)
         return result_files
+    
+    def get_count_table(self):
+
+        def count_lines_gzip(path, chunk_size=1024 * 1024):
+            count = 0
+            with gzip.open(path, "rb") as f:
+                for chunk in iter(lambda: f.read(chunk_size), b""):
+                    count += chunk.count(b"\n")
+            return count
+
+        result_file_df = self.get_result_files()
+        cnts = []
+        
+        pbar = tqdm(total=len(result_file_df))
+        for _, row in result_file_df.iterrows():
+            try:
+                filehandle = self.download_result_file_and_get_handle(row["fileid"])
+                cnt = count_lines_gzip(filehandle)
+            except Exception as e:
+                cnt = 0
+            
+            cnts.append(cnt)
+            pbar.update(1)
+        result_file_df["num_configs"] = cnts
+        pbar.close()
+        return result_file_df[["workflow", "campaign", "openmlid", "seed_test", "seed_val", "seed_workflow", "num_configs"]].copy()
 
     def query_results_as_stream(
             self,
@@ -498,7 +545,9 @@ class PCloudRepository(Repository):
             test_seeds=None,
             validation_seeds=None,
             raise_errors=False,
-            report_errors=True
+            report_errors=True,
+            inclusion_predicate=None,
+            callbacks=None
     ):
         """
 
@@ -511,6 +560,13 @@ class PCloudRepository(Repository):
         :return:
         """
 
+        # check that all callbacks are proper
+        if callbacks is None:
+            callbacks = []
+        for cb in callbacks:
+            if not isinstance(cb, LCDBCallback):
+                raise ValueError(f"Expected callback of type LCDBCallback but got {type(cb)}")
+
         # get all result files
         result_files = self.get_result_files(
             workflows=workflows,
@@ -518,8 +574,13 @@ class PCloudRepository(Repository):
             openmlids=openmlids,
             workflow_seeds=workflow_seeds,
             test_seeds=test_seeds,
-            validation_seeds=validation_seeds
+            validation_seeds=validation_seeds,
+            inclusion_predicate=inclusion_predicate
         )
+        result_files["generated_rows"] = 0
+        result_files["delivered_rows"] = 0
+        result_files["generated_all"] = False
+        result_files["delivered_all"] = False
 
         # read in all result files
         def gen_fun(
@@ -534,19 +595,15 @@ class PCloudRepository(Repository):
             result_row_queue = Queue(maxsize=50) # maximum number of result rows that can be stored in memory at once, to prevent memory overflow. Adjust as needed.
 
             # This worker runs in threadpool
-            def worker(file_desc):
+            def worker(idx, copy_of_record):
                 try:
-                    filehandle = self.download_result_file_and_get_handle(file_desc["fileid"])
+                    filehandle = self.download_result_file_and_get_handle(copy_of_record["fileid"])
                     with gzip.open(filehandle, 'rt', encoding='utf-8') as f:
                         reader = jsonlines.Reader(f)
-                        c = 0
-                        t_start = time.time()
                         for row in reader:
-                            result_row_queue.put(convert_deephyper_result_row_to_dict(row))
-                            c += 1
-                        t_end = time.time()
-                        #print(f"Closing file. Enqueued {c} items. {c / (t_end - t_start)} per second")
-
+                            result_row_queue.put((idx, convert_deephyper_result_row_to_dict(row)))
+                            result_files.loc[idx, "generated_rows"] += 1
+                    result_files.loc[idx, "generated_all"] = True
 
                 except Exception as e:
                     is_parsing_error = isinstance(e, JSONDecodeError)
@@ -556,34 +613,54 @@ class PCloudRepository(Repository):
                         error_msg = f"{type(e)} with message '{repr(e)}' in result file:"
 
                     error_msg += ""\
-                                f"\n\tworkflow {file_desc['workflow']}"\
-                                f"\n\tcampaign {file_desc['campaign']}"\
-                                f"\n\topenmlid {file_desc['openmlid']}"\
-                                f"\n\tseed_wf {file_desc['seed_workflow']}"\
-                                f"\n\tseed_test {file_desc['seed_test']}"\
-                                f"\n\tseed_valid {file_desc['seed_val']}"\
-                                f"\n\tpCloud file id {file_desc['fileid']}"
+                                f"\n\tworkflow {copy_of_record['workflow']}"\
+                                f"\n\tcampaign {copy_of_record['campaign']}"\
+                                f"\n\topenmlid {copy_of_record['openmlid']}"\
+                                f"\n\tseed_wf {copy_of_record['seed_workflow']}"\
+                                f"\n\tseed_test {copy_of_record['seed_test']}"\
+                                f"\n\tseed_valid {copy_of_record['seed_val']}"\
+                                f"\n\tpCloud file id {copy_of_record['fileid']}"
                     if raise_errors:
                         raise Exception(error_msg)
                     elif report_errors:
                         print(error_msg)
-                return
 
             # Producer starts the workers
             with ThreadPoolExecutor(max_workers=max_workers) as pool:
-                futures = [pool.submit(worker, fid) for _, fid in result_files.iterrows()]
+                futures = [pool.submit(worker, idx, copy_of_record) for idx, copy_of_record in result_files.iterrows()]
 
                 # Meanwhile, yield from queue until all workers finish
                 finished = 0
                 total = len(futures)
                 
-                rows = []
+                indices_and_rows = []
                 while finished < total or not result_row_queue.empty():
                     try:
-                        while len(rows) < 20:
-                            rows.append(result_row_queue.get(timeout=5))
-                        yield rows
-                        rows = []
+                        while len(indices_and_rows) < 20:
+                            indices_and_rows.append(result_row_queue.get(timeout=5))
+                        yield [row for idx, row in indices_and_rows]
+                        
+                        # update delivered rows count
+                        for idx, raw_row in indices_and_rows:
+                            result_files.loc[idx, "delivered_rows"] += 1
+                            result_frame_row = result_files.loc[idx]
+                            
+                            # check callbacks
+                            if result_frame_row["generated_all"] and (result_frame_row["delivered_rows"] == result_frame_row["generated_rows"]):
+                                result_files.loc[idx, "delivered_all"] = True
+
+                                if callbacks and all(result_files.loc[result_files["openmlid"] == raw_row["openmlid"], "delivered_all"]):
+                                    print(f"Running {len(callbacks)} finish callbacks for openmlid {raw_row['openmlid']} for which {result_frame_row['generated_rows']} rows were generated and {result_frame_row['delivered_rows']} were delivered")
+                                    for cb in callbacks:
+                                        print(f"Running {cb}")
+                                        cb.on_workflow_dataset_combination_finished(
+                                            workflow=raw_row["workflow"],
+                                            openmlid=raw_row["openmlid"],
+                                            total_num_records=result_frame_row["delivered_rows"]
+                                        )
+
+                        # reset
+                        indices_and_rows = []
 
                     except:
                         pass

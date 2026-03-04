@@ -61,6 +61,9 @@ class LocalRepository(Repository):
             return []
         else:
             return [f.name for f in os.scandir(base_folder) if f.is_dir()]
+    
+    def get_count_table(self):
+        raise NotImplementedError
 
     def get_result_files_of_workflow_and_dataset_in_campaign(
             self,
