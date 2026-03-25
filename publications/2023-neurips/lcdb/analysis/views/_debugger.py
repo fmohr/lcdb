@@ -1,16 +1,14 @@
 from lcdb.analysis.views._util import get_cli_test_command as _get_cli_test_command
 from lcdb.db.processors._traceback_extractor import TracebackExtractor
+from lcdb.db._results import ResultSet
 import pandas as pd
 import numpy as np
 
 
 class Debugger:
 
-    def __init__(self):
-        self.processors = [
-            TracebackExtractor(),
-            lambda row: {"payload": len(str(row["m:json"]) if "m:json" in row and row["m:json"] is not None else "")}
-        ]
+    def __init__(self, rs: ResultSet):
+        self._rs = rs
     
     def filter_result(self, row):
 
@@ -32,7 +30,7 @@ class Debugger:
     
     def get_error_messages(self, openmlid=None):
         msgs = set()
-        for row in self.rows:
+        for row in self._rs:
             if openmlid is not None and row.get("m:openmlid", None) != openmlid:
                 continue
             s = row["traceback_summary"]
@@ -47,7 +45,7 @@ class Debugger:
                 
 
     def get_error_dataset_matrix(self):
-        datasets = sorted([int(i) for i in pd.unique(self.df["m:openmlid"])])
+        datasets = self._rs.datasets
         messages = sorted(self.get_error_messages())
 
         matrix = np.zeros((len(datasets), len(messages)))

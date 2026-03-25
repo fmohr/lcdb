@@ -510,7 +510,7 @@ class PCloudRepository(Repository):
             result_files = result_files_new if result_files is None else pd.concat([result_files, result_files_new], ignore_index=True)
         return result_files
     
-    def get_count_table(self):
+    def get_count_table(self, **kwargs):
 
         def count_lines_gzip(path, chunk_size=1024 * 1024):
             count = 0
@@ -519,7 +519,7 @@ class PCloudRepository(Repository):
                     count += chunk.count(b"\n")
             return count
 
-        result_file_df = self.get_result_files()
+        result_file_df = self.get_result_files(**kwargs)
         cnts = []
         
         pbar = tqdm(total=len(result_file_df))
@@ -547,7 +547,10 @@ class PCloudRepository(Repository):
             raise_errors=False,
             report_errors=True,
             inclusion_predicate=None,
-            callbacks=None
+            callbacks=None,
+            batch_size=100,
+            buffer_size=50,
+            file_download_buffer=1
     ):
         """
 
@@ -581,6 +584,8 @@ class PCloudRepository(Repository):
         result_files["delivered_rows"] = 0
         result_files["generated_all"] = False
         result_files["delivered_all"] = False
+        
+        print(result_files)
 
         # read in all result files
         def gen_fun(
@@ -592,7 +597,7 @@ class PCloudRepository(Repository):
             if result_files is None:
                 return 
 
-            result_row_queue = Queue(maxsize=50) # maximum number of result rows that can be stored in memory at once, to prevent memory overflow. Adjust as needed.
+            result_row_queue = Queue(maxsize=buffer_size) # maximum number of result rows that can be stored in memory at once, to prevent memory overflow. Adjust as needed.
 
             # This worker runs in threadpool
             def worker(idx, copy_of_record):
@@ -636,9 +641,9 @@ class PCloudRepository(Repository):
                 indices_and_rows = []
                 while finished < total or not result_row_queue.empty():
                     try:
-                        while len(indices_and_rows) < 20:
+                        while len(indices_and_rows) < batch_size:
                             indices_and_rows.append(result_row_queue.get(timeout=5))
-                        yield [row for idx, row in indices_and_rows]
+                        yield [row for _, row in indices_and_rows]
                         
                         # update delivered rows count
                         for idx, raw_row in indices_and_rows:

@@ -24,7 +24,7 @@ class LearningCurve:
         self.openmlid = openmlid
 
         # 7-dimensional tensor
-        self.values = values
+        self._values = values
         if type(self.values) != np.ndarray:
             raise ValueError("Learning curve values must be a numpy ndarray.")
 
@@ -36,6 +36,22 @@ class LearningCurve:
         self.workflow_seeds = workflow_seeds
         self.anchors_size = anchors_size
         self.anchors_iteration = anchors_iteration
+    
+    @property
+    def values(self):
+        """ 7D array
+
+        Returns:
+            np.ndarray: Dimensions are
+                - metric
+                - folds (train/validation/test[/oob if applicable])
+                - test seed
+                - validation seed
+                - workflow seed
+                - sample-wise anchor
+                [- iteration-wise anchor, if applicable]
+        """
+        return self._values
 
     @property
     def is_iteration_wise_curve(self):
@@ -67,7 +83,7 @@ class LearningCurve:
         new_values[selectors] = self.values
 
         if inplace:
-            self.values = new_values
+            self._values = new_values
             cur_domain.clear()
             cur_domain.extend(dim_labels)
             assert len(cur_domain) == self.values.shape[dim_index]
@@ -108,7 +124,7 @@ class LearningCurve:
             nans_to_add = np.full(tuple(list(self.values.shape[:-1]) + [num_anchors_size - self.values.shape[-1]]), np.nan)
 
         if inplace:
-            self.values = np.concatenate((self.values, nans_to_add), axis=axis)
+            self._values = np.concatenate((self.values, nans_to_add), axis=axis)
             self.anchors_size = anchors_size
             assert len(self.anchors_size) == self.values.shape[axis]
 

@@ -10,6 +10,7 @@ from lcdb.db.processors._data_memory import DataMemoryComputer
 import json
 
 from pathlib import Path
+import os
 
 from tqdm import tqdm
 
@@ -23,6 +24,12 @@ Path(OUTPUT_DIR).mkdir(parents=True, exist_ok=True)
 
 # retrieve learning curve objects
 lcdb = LCDB()
+
+lcdb.update_count_index(campaigns=["probing-tabarena"])
+
+#
+if not lcdb.has_count_index:
+    raise ValueError("No count index found for LCDB. Run lcdb.update_count_index() first.")
 
 
 class Callback(LCDBCallback):
@@ -56,10 +63,10 @@ class Callback(LCDBCallback):
 for workflow_class in [
     "lcdb.workflow.sklearn.KNNWorkflow",
     "lcdb.workflow.sklearn.LibLinearWorkflow",
-    "lcdb.workflow.sklearn.LibSVMWorkflow",
-    "lcdb.workflow.sklearn.TreesEnsembleWorkflow",
-    "lcdb.workflow.xgboost.XGBoostWorkflow",
-    "lcdb.workflow.keras.DenseNNWorkflow"
+    #"lcdb.workflow.sklearn.LibSVMWorkflow",
+    #"lcdb.workflow.sklearn.TreesEnsembleWorkflow",
+    #"lcdb.workflow.xgboost.XGBoostWorkflow",
+    # "lcdb.workflow.keras.DenseNNWorkflow"
 ]:
     print(workflow_class)
 
@@ -67,7 +74,7 @@ for workflow_class in [
     available_datasets_for_workflow = [int(p.name[:-6]) for p in folder.glob("*.jsonl")] if folder.exists else []
     print(f"Ignoring results for dataset {available_datasets_for_workflow}")
 
-    campaign_name = "probing-test"
+    campaign_name = "probing-tabarena"
     #if "XGBoost" in workflow_class:
         #campaign_name = "pre-config-100-new"
 
@@ -86,14 +93,15 @@ for workflow_class in [
             extract_anticipated_memory
         ],
         inclusion_predicate=lambda workflow, openmlid, campaign, workflow_seed, test_seed, val_seed: openmlid not in available_datasets_for_workflow + [41167],
-        max_workers=8,
-        buffer_size=4,
-        batch_size=10,
+        max_workers=6,
+        buffer_size=2,
+        batch_size=20,
         callbacks=[Callback(results_per_dataset=result_sets_per_dataset)]
     )
 
     # get all dataframes
     for i, chunk_rs in enumerate(tqdm(gen)):
+
         assert type(chunk_rs) == ResultSet, f"Expected ResultSet but got {type(chunk_rs)}"
         chunk_rs.drop_raw_results()
 
@@ -102,3 +110,18 @@ for workflow_class in [
             if openmlid not in result_sets_per_dataset:
                 result_sets_per_dataset[openmlid] = ResultSet()
             result_sets_per_dataset[openmlid].extend(rs_dataset)
+
+    # read in all results and put them into one file
+    rs_final = None
+    for file in os.listdir(folder):
+        if file.endswith(".jsonl"):
+            rs_file = ResultSet.read_jsonl(f"{folder}/{file}")
+            if rs_final is None:
+                rs_final = rs_file
+            else:
+                rs_final.extend(rs_file)
+
+    final_file = f"{OUTPUT_DIR}/{workflow_class}.jsonl"
+    print("Writing all results into ")
+    rs_final.save(final_file)
+    print("Finished.")

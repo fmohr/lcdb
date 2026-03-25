@@ -164,18 +164,37 @@ class LCDB:
                 workflows.update(repository.get_workflows())
         return sorted(workflows)
     
-    def update_count_index(self):
+    def update_count_index(self,
+        workflows=None,
+        campaigns=None,
+        openmlids=None,
+        workflow_seeds=None,
+        test_seeds=None,
+        validation_seeds=None
+    ):
         """
             Updates a local index file that contains information about the number of entries in the database
         """
-        df = None
+        df = None if not self.has_count_index else self.count_index
         for repo_name, repository in self.repositories.items():
             if repository.exists():
-                df_repo = repository.get_count_table().copy()
+                df_repo = repository.get_count_table(
+                    workflows=workflows,
+                    campaigns=campaigns,
+                    openmlids=openmlids,
+                    workflow_seeds=workflow_seeds,
+                    test_seeds=test_seeds,
+                    validation_seeds=validation_seeds
+                ).copy()
                 df_repo["repository"] = repo_name
                 df = df_repo if df is None else pd.concat([df, df_repo], ignore_index=True)
         df = df[["repository", "workflow", "campaign", "openmlid", "seed_test", "seed_val", "seed_workflow", "num_configs"]]
+        df = df.drop_duplicates(subset=["repository", "workflow", "campaign", "openmlid", "seed_test", "seed_val", "seed_workflow"], keep="last")
         df.to_csv(self.path_to_count_table, index=False)
+
+    @property
+    def has_count_index(self):
+        return pathlib.Path(self.path_to_count_table).exists()
 
     @property
     def count_index(self):
@@ -290,10 +309,13 @@ class LCDB:
         #         )
 
         def generator():
-            if max_workers is None or max_workers <= 1:
+            if max_workers is None or max_workers < 1:
                 num_workers = os.cpu_count()
             else:
                 num_workers = max_workers
+            
+            if len(df_agenda) == 0:
+                return # returns empty generator
             
             with ProcessPoolExecutor(max_workers=num_workers) as executor:
                 futures = set()
@@ -313,7 +335,8 @@ class LCDB:
                                 openmlids=[openmlid],
                                 workflow_seeds=df_agenda_local["seed_workflow"].unique(),
                                 test_seeds=df_agenda_local["seed_test"].unique(),
-                                validation_seeds=df_agenda_local["seed_val"].unique()
+                                validation_seeds=df_agenda_local["seed_val"].unique(),
+                                batch_size=batch_size
                             )
 
                             for res in gen:
@@ -324,25 +347,34 @@ class LCDB:
                                 assert len(res) > 0, f"Expected non-empty list of result rows but got empty list."
 
                                 # if the queue is very full, wait for one to finish
-                                if len(futures) >= buffer_size:
+                                if len(futures) >= buffer_size + num_workers: # the unfinished workers are also still in the queue and should be counted
                                     wait(futures, return_when=FIRST_COMPLETED)
                                 futures.add(executor.submit(_process_results, res, unpack_results, unpack_build_issues, processors))
                                 num_futures_ready = sum(f.done() for f in futures)
 
                                 # process futures that are ready
                                 if num_futures_ready > 0:
+                                    num_futures_before = len(futures)
                                     done, futures = wait(futures, return_when=FIRST_COMPLETED)
                                     for fut in done:
                                         if cur_result_set is not None:
                                             cur_result_set.extend(fut.result())
                                         else:
                                             cur_result_set = fut.result()
+                                        del fut
                                         
                                         # if the result set has the desired batch size, send results
                                         if len(cur_result_set) >= batch_size:
-                                            to_deliver, cur_result_set = cur_result_set.split_at_index(batch_size)
+                                            len_bef = len(cur_result_set)
+                                            to_deliver, cur_result_set_new = cur_result_set.split_at_index(batch_size)
                                             yield to_deliver
-                        
+                                            del to_deliver, cur_result_set
+                                            cur_result_set = cur_result_set_new
+                                            del cur_result_set_new
+                                            len_after = len(cur_result_set)
+                                    
+                                    num_futures_after = len(futures)
+
                         # drain the remainings
                         while futures:
                             done, futures = wait(futures, return_when=FIRST_COMPLETED)
@@ -366,7 +398,7 @@ class LCDB:
                             for cb in callbacks:
                                 cb.on_workflow_dataset_combination_finished(workflow=workflow, openmlid=openmlid, total_num_records=df_agenda_workflow_and_dataset["num_configs"].sum())
 
-        return CountAwareGenerator(int(np.ceil(df_agenda["num_configs"].sum() / batch_size)), generator())
+        return CountAwareGenerator(int(np.ceil(df_agenda["num_configs"].sum() / batch_size)) if len(df_agenda) > 0 else 0, generator())
 
     def statistics(
             self,

@@ -132,6 +132,8 @@ class ResultSet(ABC):
                     del row[field]
 
     def drop_raw_results(self):
+        if self._rows is None:
+            return
         for row in self._rows:
             if RESULT_KEY in row:
                 del row[RESULT_KEY]

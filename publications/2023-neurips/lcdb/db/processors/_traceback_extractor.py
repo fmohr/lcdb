@@ -48,20 +48,3 @@ class TracebackExtractor:
         out["timeout"] = any([e["message"] == "timeout" for e in errors]) if errors else False
         out["anticipated memory overflow"] = any([e["message"] == "anticipated memory overflow" for e in errors]) if errors else False
         return out
-
-if __name__ == "__main__":
-
-    from lcdb.db import LCDB
-
-    lcdb = LCDB()
-    df = lcdb.query(
-        workflows=["lcdb.workflow.sklearn.LibLinearWorkflow"],
-        openmlids=[3, 1111],
-        test_seeds=[0],
-        return_generator=False,
-        processors={
-            "tracebacks": TracebackExtractor()
-        },
-        show_progress=True
-    )
-    print(df)

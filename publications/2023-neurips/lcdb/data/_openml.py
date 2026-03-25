@@ -27,6 +27,16 @@ def load_from_openml(dataset_id: str) -> Tuple[np.ndarray, np.ndarray, dict]:
     X, y, categorical_indicator, _ = dataset.get_data(
         target=dataset.default_target_attribute
     )
+
+    # automatically detect additional categorical attributes
+    for i, (col, is_cat_according_to_openml) in enumerate(zip(X.columns, categorical_indicator)):
+        if not is_cat_according_to_openml:
+            try:
+                X[col].astype(float)
+            except:
+                print(f"Auto-corrected the type of column {col} to categorical.")
+                categorical_indicator[i] = True
+    
     X, y = X.values, y.values
     if isinstance(y, pd.core.arrays.categorical.Categorical):
         y = np.array([v for v in y])
