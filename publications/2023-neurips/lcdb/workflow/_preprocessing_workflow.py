@@ -356,10 +356,9 @@ class PreprocessedWorkflow(BaseWorkflow, ABC):
         num_steps = []
         treated_kws = []
 
-        # step 1: imputation
-        if np.any(pd.isnull(X)):
-            cat_steps.append(("cat_imputer", SimpleImputer(strategy="most_frequent")))
-            num_steps.append(("num_imputer", SimpleImputer(strategy="median")))
+        # step 1: always set an imputer (even if no missing values are present; this is because there might be missing values in the validation/test data even if there were none in the training data)
+        cat_steps.append(("cat_imputer", SimpleImputer(strategy="most_frequent")))
+        num_steps.append(("num_imputer", SimpleImputer(strategy="median")))
 
         # step 2: encoding of categorical attributes
         if has_cat:
