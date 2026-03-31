@@ -1,5 +1,4 @@
 #!/bin/bash
-#SBATCH --time=1:00:00
 #SBATCH --threads-per-core=1
 # ^^^ Do NOT set --ntasks or --gpus here; your run_wrapper controls that.
 
@@ -11,33 +10,48 @@ conda activate lcdbgpu
 
 # ========================= CONFIGURATION =========================
 export timeout=-1
-export NTOTRANKS=${SLURM_NTASKS:-1}
-export CPUS_PER_TASK=${SLURM_CPUS_PER_TASK:-1}
 
+# Re-source parse_core_assignments.sh to rebuild associative arrays in job context
+# (associative arrays don't export through sbatch environment)
+source "$path_to_snellius/scripts/parse_core_assignments.sh"
+
+# Parse remaining OpenML IDs and get the one for this array task
+IFS=',' read -r -a REMAINING_IDS <<< "$REMAINING_OPENML_IDS"
+LCDB_OPENML_ID=${REMAINING_IDS[$SLURM_ARRAY_TASK_ID]}
+
+# Look up configuration from associative arrays
+export NTOTRANKS=${OPENML_PARALLEL_TASKS[$LCDB_OPENML_ID]}
+export CPUS_PER_TASK=${OPENML_CORES_PER_TASK[$LCDB_OPENML_ID]}
+LCDB_WORKFLOW_MEMORY_LIMIT_GB=${OPENML_MEMORY_PER_TASK[$LCDB_OPENML_ID]}
+
+# Calculate memory limit in MB
+LCDB_WORKFLOW_MEMORY_LIMIT_MB=$(echo "$LCDB_WORKFLOW_MEMORY_LIMIT_GB * 1024" | bc)
+LCDB_WORKFLOW_MEMORY_LIMIT=$(printf "%.0f" "$LCDB_WORKFLOW_MEMORY_LIMIT_MB")
+
+export LCDB_WORKFLOW_MEMORY_LIMIT
+export LCDB_WORKFLOW_MEMORY_LIMIT_GB
+
+# Calculate number of GPUs needed: NTOTRANKS - 1 (master rank doesn't compute)
+NUM_GPUS=$((NTOTRANKS - 1))
+export NUM_GPUS
+
+echo "OpenML ID: $LCDB_OPENML_ID"
 echo "Job launched with ${NTOTRANKS} rank(s) and ${CPUS_PER_TASK} CPU(s) per rank"
-echo "GPUs allocated: ${SLURM_GPUS:-0}"
+echo "GPUs needed: ${NUM_GPUS} (${NTOTRANKS} ranks - 1 master)"
+echo "Memory per task: $LCDB_WORKFLOW_MEMORY_LIMIT_GB GB"
 # ================================================================
 
-# # Disable GPUs explicitly if not on GPU partition
-# if [[ "$PARTITION_RUN" != "gpu_mig" && "$PARTITION_RUN" != "gpu_a100" ]]; then
-#     export CUDA_VISIBLE_DEVICES=""
-#     echo "Non-GPU partition detected; CUDA disabled."
-# fi
-
-# log directories created if not already present
-mkdir -p "${output_path}/logs_test/${WORKFLOW_NAME}-${LCDB_WORKFLOW_MEMORY_LIMIT_GB}/out"
-mkdir -p "${output_path}/logs_test/${WORKFLOW_NAME}-${LCDB_WORKFLOW_MEMORY_LIMIT_GB}/err"
+# Log directories (created by run_wrapper.sh)
+export LOG_OUT_DIR="${output_path}/logs/${LCDB_WORKFLOW}/out"
+export LOG_ERR_DIR="${output_path}/logs/${LCDB_WORKFLOW}/err"
 
 IFS=' ' read -r -a VAL_SEEDS <<< "$VAL_SEEDS"
 IFS=' ' read -r -a TEST_SEEDS <<< "$TEST_SEEDS"
-IFS=',' read -r -a LCDB_OPENML_ID_ARRAY <<< "$LCDB_OPENML_ARRAY_STRING"
-LCDB_OPENML_ID=${LCDB_OPENML_ID_ARRAY[$SLURM_ARRAY_TASK_ID]}
 
-echo "Running experiment for OpenML ID: $LCDB_OPENML_ID"
 echo "Validation seeds: ${VAL_SEEDS[*]}"
 echo "Test seeds: ${TEST_SEEDS[*]}"
 
-export LCDB_OUTPUT_DATASET=$LCDB_OUTPUT_WORKFLOW-$LCDB_WORKFLOW_MEMORY_LIMIT_GB/$LCDB_OPENML_ID
+export LCDB_OUTPUT_DATASET=$LCDB_OUTPUT_WORKFLOW/$LCDB_OPENML_ID
 
 for LCDB_VALID_SEED in "${VAL_SEEDS[@]}"; do
   for LCDB_TEST_SEED in "${TEST_SEEDS[@]}"; do
@@ -60,24 +74,16 @@ for LCDB_VALID_SEED in "${VAL_SEEDS[@]}"; do
     touch "$STATUS_FILE"
     
 
-    # print setup of srun 
-    echo "SETUP: srun -n ${NTOTRANKS} -N ${SLURM_JOB_NUM_NODES:-1} \
-         --cpus-per-task=${CPUS_PER_TASK} \
-         --gpus-per-task=1 \
-         --threads-per-core=1 \
-         --exclusive \
-         --output=${output_path}/logs_test/${WORKFLOW_NAME}-${LCDB_WORKFLOW_MEMORY_LIMIT_GB}/out/openml_id-${LCDB_OPENML_ID}_workflow-${LCDB_WORKFLOW_SEED}_val-${LCDB_VALID_SEED}_test-${LCDB_TEST_SEED}.log \
-         --error=${output_path}/logs_test/${WORKFLOW_NAME}-${LCDB_WORKFLOW_MEMORY_LIMIT_GB}/err/openml_id-${LCDB_OPENML_ID}_workflow-${LCDB_WORKFLOW_SEED}_val-${LCDB_VALID_SEED}_test-${LCDB_TEST_SEED}.err \
-    "   
-
     # ---------------- GPU job execution ----------------
-    srun -n ${NTOTRANKS} -N ${SLURM_JOB_NUM_NODES:-1} \
+    # Allocate GPUs globally (not per-task) since rank 0 is master and doesn't need GPU
+    srun -n ${NTOTRANKS} \
+         --ntasks=${NTOTRANKS} \
          --cpus-per-task=${CPUS_PER_TASK} \
-         --gpus-per-task=1 \
+         --gpus=${NUM_GPUS} \
          --threads-per-core=1 \
          --exclusive \
-         --output=${output_path}/logs_test/${WORKFLOW_NAME}-${LCDB_WORKFLOW_MEMORY_LIMIT_GB}/out/openml_id-${LCDB_OPENML_ID}_workflow-${LCDB_WORKFLOW_SEED}_val-${LCDB_VALID_SEED}_test-${LCDB_TEST_SEED}.log \
-         --error=${output_path}/logs_test/${WORKFLOW_NAME}-${LCDB_WORKFLOW_MEMORY_LIMIT_GB}/err/openml_id-${LCDB_OPENML_ID}_workflow-${LCDB_WORKFLOW_SEED}_val-${LCDB_VALID_SEED}_test-${LCDB_TEST_SEED}.err \
+         --output=${LOG_OUT_DIR}/o:${LCDB_OPENML_ID}-w:${LCDB_WORKFLOW_SEED}-v:${LCDB_VALID_SEED}-t:${LCDB_TEST_SEED}.log \
+         --error=${LOG_ERR_DIR}/o:${LCDB_OPENML_ID}-w:${LCDB_WORKFLOW_SEED}-v:${LCDB_VALID_SEED}-t:${LCDB_TEST_SEED}.err \
     lcdb run \
         --campaign $CAMPAIGN_NAME \
         --openml-id $LCDB_OPENML_ID \
@@ -89,16 +95,21 @@ for LCDB_VALID_SEED in "${VAL_SEEDS[@]}"; do
         --timeout-on-fit 300 \
         --workflow-seed $LCDB_WORKFLOW_SEED \
         --workflow-memory-limit $LCDB_WORKFLOW_MEMORY_LIMIT \
+        --memory-patience 10 \
+        --ncpus $CPUS_PER_TASK \
         --valid-seed $LCDB_VALID_SEED \
         --test-seed $LCDB_TEST_SEED \
         --no-exception-on-unsuitable-preprocessor \
-        --log-level debug \
-        --evaluator process \
-        --num-epochs=5 \
+        --log-level info \
+        --evaluator mpicomm \
         --epoch-schedule=power-2-0.25-0
     # ---------------------------------------------------
 
-    gzip --best results.csv 2>/dev/null || echo "No results.csv found to gzip."
+    # gzip the json results if the status file completed exists
+    if [ -f "$STATUS_FILE_BASE.completed" ]; then
+        gzip -f --best results.jsonl
+    fi
+
     popd >/dev/null
   done
 done

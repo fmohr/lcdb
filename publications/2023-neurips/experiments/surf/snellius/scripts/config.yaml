@@ -1,9 +1,0 @@
-workflow_name: knn
-campaign_name: probing
-desired_memory_GB: 67
-config_num: 100
-workflow_seed: 42
-val_seeds:
-  - 0
-test_seeds:
-  - 0

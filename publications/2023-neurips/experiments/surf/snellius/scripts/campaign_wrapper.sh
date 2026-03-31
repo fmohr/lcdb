@@ -1,5 +1,5 @@
 #!/bin/bash
-# Wrapper for uploading results to pCloud for a given workflow
+# Wrapper for uploading existing results to pCloud for a given workflow
 
 source ~/.bashrc
 conda activate lcdb
@@ -7,97 +7,71 @@ conda activate lcdb
 export path_to_snellius=$(pwd)
 export output_path="/gpfs/nvme1/0/prjs1064/LCDB2"
 
-# -------------------------------------------------------------------------
-# Workflow → class mapping
-# -------------------------------------------------------------------------
-declare -A mapping=(
-    ["libsvm"]="lcdb.workflow.sklearn.LibSVMWorkflow"
-    ["randomforest"]="lcdb.workflow.sklearn.RandomForestWorkflow"
-    ["knn"]="lcdb.workflow.sklearn.KNNWorkflow"
-    ["xgboost"]="lcdb.workflow.xgboost.XGBoostWorkflow"
-    ["liblinear"]="lcdb.workflow.sklearn.LibLinearWorkflow"
-    ["densenn"]="lcdb.workflow.keras.DenseNNWorkflow"
-    ["treesensemble"]="lcdb.workflow.sklearn.TreesEnsembleWorkflow"
-)
+# Workflow name from CLI arg
+# REQ_WORKFLOW_NAME="${1:-knn}"
+# export WORKFLOW_NAME="$REQ_WORKFLOW_NAME"
 
+# echo "WORKFLOW_NAME: $WORKFLOW_NAME"
+echo ""
+
+# Source config to resolve LCDB_WORKFLOW, LCDB_OUTPUT_WORKFLOW, CAMPAIGN_NAME, seeds, etc.
 source "$path_to_snellius/scripts/config.sh"
 
-log_dir="$output_path/logs/$WORKFLOW_NAME"
+echo "'$LCDB_WORKFLOW' and '$LCDB_OUTPUT_WORKFLOW'"
+
+# Create log directories using full workflow class name
+log_dir="$output_path/logs/$LCDB_WORKFLOW"
 mkdir -p "$log_dir"
 exec > >(tee -a "$log_dir/wrapper_campaign.log") 2>&1
 
-echo "==== Starting campaign wrapper for '$WORKFLOW_NAME' ===="
+# echo "==== Starting campaign wrapper for '$WORKFLOW_NAME' ===="
+echo "Resolved LCDB_WORKFLOW: $LCDB_WORKFLOW"
 echo "Campaign name: $CAMPAIGN_NAME"
+echo ""
 
-# -------------------------------------------------------------------------
-# Determine list of datasets and bins
-# -------------------------------------------------------------------------
-bins_csv="$path_to_snellius/bins_config/${WORKFLOW_NAME}_bins.csv"
-if [[ ! -f "$bins_csv" ]]; then
-    echo "Error: expected $bins_csv not found"
+# Reuse the same dataset parsing logic as run_wrapper.sh
+source "$path_to_snellius/scripts/parse_core_assignments.sh"
+
+if [ ${#ALL_OPENML_IDS[@]} -eq 0 ]; then
+    echo "No datasets found in ALL_OPENML_IDS."
     exit 1
 fi
 
-declare -A BIN_TO_IDS
-declare -a UNIQUE_BINS
+echo "Found ${#ALL_OPENML_IDS[@]} datasets"
 
-while IFS=, read -r raw_id raw_mem _ || [[ -n "$raw_id" ]]; do
-    id="$(echo "$raw_id" | tr -d '\r' | xargs)"
-    mem="$(echo "$raw_mem" | tr -d '\r' | xargs)"
-    [[ -z "$id" || -z "$mem" ]] && continue
-    if [[ -z "${BIN_TO_IDS[$mem]:-}" ]]; then
-        UNIQUE_BINS+=("$mem")
-        BIN_TO_IDS["$mem"]="$id"
-    else
-        BIN_TO_IDS["$mem"]="${BIN_TO_IDS[$mem]},$id"
-    fi
-done < "$bins_csv"
+# Collect result files exactly like run_wrapper.sh
+declare -a ALL_RESULT_FILES=()
 
-echo "Found ${#UNIQUE_BINS[@]} memory bins in $bins_csv"
+IFS=' ' read -r -a VAL_SEEDS_ARRAY <<< "$VAL_SEEDS"
+IFS=' ' read -r -a TEST_SEEDS_ARRAY <<< "$TEST_SEEDS"
 
-# -------------------------------------------------------------------------
-# Collect result files (jsonl.gz only, using rounded bin dirs)
-# -------------------------------------------------------------------------
-result_files=()
-workflow_seed=$LCDB_WORKFLOW_SEED
-
-round() {
-    # round to nearest integer (like Python round)
-    local num="$1"
-    local rounded
-    rounded=$(awk -v n="$num" 'BEGIN { printf "%d", (n>=0)?int(n+0.5):int(n-0.5) }')
-    echo "$rounded"
-}
-
-for BIN in "${UNIQUE_BINS[@]}"; do
-    rounded_bin=$(round "$BIN")
-    IFS=',' read -r -a ids <<< "${BIN_TO_IDS[$BIN]}"
-
-    for id in "${ids[@]}"; do
-        for val_seed in "${VAL_SEEDS[@]}"; do
-            for test_seed in "${TEST_SEEDS[@]}"; do
-                result_path="${LCDB_OUTPUT_WORKFLOW}-${rounded_bin}/$id/${val_seed}-${test_seed}-${workflow_seed}/results.jsonl.gz"
-                result_files+=("$result_path")
-            done
+for id in "${ALL_OPENML_IDS[@]}"; do
+    for val_seed in "${VAL_SEEDS_ARRAY[@]}"; do
+        for test_seed in "${TEST_SEEDS_ARRAY[@]}"; do
+            result_path="${LCDB_OUTPUT_WORKFLOW}/$id/${val_seed}-${test_seed}-${LCDB_WORKFLOW_SEED}/results.jsonl.gz"
+            ALL_RESULT_FILES+=("$result_path")
         done
     done
 done
 
-echo "Collected ${#result_files[@]} result files to upload."
+echo "Collected ${#ALL_RESULT_FILES[@]} result files to upload."
 
-# -------------------------------------------------------------------------
-# Prepare environment and submit upload job
-# -------------------------------------------------------------------------
-current_dir=$(pwd)
-export ENV_PATH="$current_dir/../../../.env"
+# Set up environment path for pCloud authentication
+export ENV_PATH="$path_to_snellius/../../.env"
 echo "Using .env path: $ENV_PATH"
 
-out_dir="${output_path}/logs-campaign/${WORKFLOW_NAME}/out"
-err_dir="${output_path}/logs-campaign/${WORKFLOW_NAME}/err"
-mkdir -p "$out_dir" "$err_dir"
+# Create campaign log directories using full workflow class name
+campaign_out_dir="${output_path}/logs-campaign/${LCDB_WORKFLOW}/out"
+campaign_err_dir="${output_path}/logs-campaign/${LCDB_WORKFLOW}/err"
+mkdir -p "$campaign_out_dir" "$campaign_err_dir"
 
-sbatch --export=ALL --job-name="campaigns_${WORKFLOW_NAME}" \
-    --output="${out_dir}/campaign.log" \
-    --error="${err_dir}/campaign.err" \
+campaign_job_id=$(sbatch \
+    --export=ALL,LCDB_WORKFLOW="$LCDB_WORKFLOW",CAMPAIGN_NAME="$CAMPAIGN_NAME",ENV_PATH="$ENV_PATH" \
+    --job-name="campaign_${LCDB_WORKFLOW}" \
+    --output="${campaign_out_dir}/campaign.log" \
+    --error="${campaign_err_dir}/campaign.err" \
     --chdir="${output_path}" \
-    scripts/campaign.sh "${result_files[@]}"
+    --parsable \
+    scripts/campaign.sh "${ALL_RESULT_FILES[@]}")
+
+echo "Submitted campaign upload job with ID: $campaign_job_id"

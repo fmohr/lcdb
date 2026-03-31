@@ -35,8 +35,9 @@ fi
 # -------------------------------------------------------------------------
 # Upload results
 # -------------------------------------------------------------------------
-uploaded=0
-missing=0
+echo "Using workflow: $LCDB_WORKFLOW"
+echo "Using campaign: $CAMPAIGN_NAME"
+echo ""
 
 for file in "${result_files[@]}"; do
     if [ -f "$file" ]; then
@@ -44,6 +45,6 @@ for file in "${result_files[@]}"; do
     else
         echo "Warning: missing result file $file (will still upload logs)"
     fi
+    # Note: LCDB_WORKFLOW should be available as environment variable for lcdb add
     srun lcdb add -c "$CAMPAIGN_NAME" -t "$PCLOUD_TOKEN" -l True "$file" || true
-
 done
