@@ -165,12 +165,89 @@ class PCloudRepository(Repository):
         # If all parts are found, return the final parent_folder_id
         return parent_folder_id
 
+    @staticmethod
+    def _extract_result_metadata(result_file):
+        """Infer workflow, dataset and seeds from the LCDB result path."""
+        normalized_path = os.path.normpath(result_file)
+        path_for_matching = normalized_path.replace("\\", "/")
+        parts = [part for part in re.split(r"[\\/]+", normalized_path) if part]
+
+        workflow = "unknown_workflow"
+        openmlid = "unknown_dataset"
+        workflow_seed = 0
+        test_seed = 0
+        valid_seed = 0
+
+        if "/results/" in path_for_matching:
+            lcdb_root = os.path.normpath(path_for_matching.split("/results/", 1)[0] or os.sep)
+        else:
+            lcdb_root = os.getcwd()
+
+        for idx, part in enumerate(parts):
+            if part == "results" and idx + 1 < len(parts):
+                workflow = parts[idx + 1]
+
+                if idx + 2 < len(parts) and re.fullmatch(r"\d+", parts[idx + 2]):
+                    openmlid = parts[idx + 2]
+
+                if idx + 3 < len(parts):
+                    seed_match = re.fullmatch(r"(?P<valid>\d+)-(?P<test>\d+)-(?P<workflow>\d+)", parts[idx + 3])
+                    if seed_match:
+                        valid_seed = int(seed_match.group("valid"))
+                        test_seed = int(seed_match.group("test"))
+                        workflow_seed = int(seed_match.group("workflow"))
+                break
+
+            if part.startswith("lcdb.workflow"):
+                workflow = part.split("-")[0]
+            elif re.fullmatch(r"\d+", part):
+                openmlid = part
+
+        return {
+            "lcdb_root": lcdb_root,
+            "workflow": workflow,
+            "openmlid": openmlid,
+            "workflow_seed": workflow_seed,
+            "test_seed": test_seed,
+            "valid_seed": valid_seed,
+        }
+
+    @staticmethod
+    def _read_seeds_from_result_file(result_file):
+        opener = gzip.open if result_file.endswith((".gz", ".gzip")) else open
+        with opener(result_file, "rt", encoding="utf-8") as f:
+            first_line = f.readline().strip()
+            if not first_line:
+                return None
+            record = json.loads(first_line)
+        return {
+            "workflow_seed": int(record.get("workflow_seed", 0)),
+            "valid_seed": int(record.get("valid_seed", 0)),
+            "test_seed": int(record.get("test_seed", 0)),
+        }
+
+    @staticmethod
+    def _get_relevant_log_files(lcdb_root, workflow, openmlid):
+        workflow_log_root = os.path.join(lcdb_root, "logs", workflow)
+        prefix = f"o:{openmlid}-"
+        matches = []
+        for subdir, suffix in (("out", ".log"), ("err", ".err")):
+            directory = os.path.join(workflow_log_root, subdir)
+            if not os.path.isdir(directory):
+                continue
+            for filename in os.listdir(directory):
+                if filename.startswith(prefix) and filename.endswith(suffix):
+                    matches.append(os.path.join(directory, filename))
+
+        return sorted(matches)
+
     def add_results(self, campaign, *result_files, logs_included=False):
         """
         Uploads result files (JSONL or CSV) to pCloud, preserving lcdb/data/<workflow>/<campaign>/<openmlid>/<file> structure.
-        Always uploads logs_<openmlid>.zip if logs_included=True, even if the result file is missing or failed to upload.
+        If requested, uploads a per-run log archive with only the log files that match the
+        dataset and seed combination inferred from the result path.
         """
-        import os, re, io, gzip, json, tempfile, zipfile, pandas as pd, requests
+        import io, tempfile
 
         self.update_content()
 
@@ -178,33 +255,20 @@ class PCloudRepository(Repository):
             result_exists = os.path.exists(result_file)
             is_jsonl = result_file.endswith((".jsonl", ".jsonl.gz", ".jsonl.gzip"))
 
-            # ------------------------------------------------------------
-            # Extract workflow and openmlid from path (works even if file missing)
-            # ------------------------------------------------------------
-            workflow = "unknown_workflow"
-            openmlid = "unknown_dataset"
-            parts = result_file.split("/")
+            metadata = self._extract_result_metadata(result_file)
+            workflow = metadata["workflow"]
+            openmlid = metadata["openmlid"]
+            workflow_seed = metadata["workflow_seed"]
+            test_seed = metadata["test_seed"]
+            valid_seed = metadata["valid_seed"]
 
-            for part in parts:
-                if part.startswith("lcdb.workflow"):
-                    workflow = part.split("-")[0]
-                if re.fullmatch(r"\d+", part):
-                    openmlid = part
-
-            # ------------------------------------------------------------
-            # Derive seeds (only if result file exists)
-            # ------------------------------------------------------------
-            workflow_seed = valid_seed = test_seed = 0
             if result_exists and is_jsonl:
                 try:
-                    opener = gzip.open if result_file.endswith((".gz", ".gzip")) else open
-                    with opener(result_file, "rt", encoding="utf-8") as f:
-                        first_line = f.readline().strip()
-                        if first_line:
-                            record = json.loads(first_line)
-                            workflow_seed = int(record.get("workflow_seed", 0))
-                            valid_seed = int(record.get("valid_seed", 0))
-                            test_seed = int(record.get("test_seed", 0))
+                    result_seeds = self._read_seeds_from_result_file(result_file)
+                    if result_seeds is not None:
+                        workflow_seed = result_seeds["workflow_seed"]
+                        valid_seed = result_seeds["valid_seed"]
+                        test_seed = result_seeds["test_seed"]
                 except Exception as e:
                     print(f"Warning: Could not extract seeds from {result_file}: {e}")
 
@@ -271,47 +335,28 @@ class PCloudRepository(Repository):
                 continue
 
             try:
-                abs_path = os.path.abspath(result_file)
-                parts = abs_path.split(os.sep)
+                log_files = self._get_relevant_log_files(
+                    metadata["lcdb_root"],
+                    workflow,
+                    openmlid,
+                )
+                if not log_files:
+                    print(
+                        f"No matching log files found for workflow={workflow}, "
+                        f"openmlid={openmlid}"
+                    )
+                    continue
 
-                # Find LCDB2 root (case-insensitive)
-                lcdb_root = None
-                for i, part in enumerate(parts):
-                    if part.lower() == "lcdb2":
-                        lcdb_root = os.sep.join(parts[: i + 1])
-                        break
-                if not lcdb_root:
-                    print(f"Could not locate LCDB2 root in {abs_path}, using current directory as fallback.")
-                    lcdb_root = os.getcwd()
-
-                # Determine workflow dir safely
-                try:
-                    workflow_idx = parts.index("results") + 1
-                    workflow_name = parts[workflow_idx]
-                except (ValueError, IndexError):
-                    workflow_name = workflow
-
-                # Locate logs and results directories
-                results_dir = os.path.join(lcdb_root, "results", workflow_name)
-                logs_dir = os.path.join(lcdb_root, "logs", workflow_name)
-
-                zip_name = f"logs.zip"
-                print(f"Creating {zip_name} for workflow={workflow_name}, openmlid={openmlid}")
+                zip_name = "logs.zip"
+                print(f"Creating {zip_name} for workflow={workflow}, openmlid={openmlid}")
 
                 with tempfile.TemporaryDirectory() as tmpdir:
                     zip_path = os.path.join(tmpdir, zip_name)
                     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zipf:
-                        for base_dir in (results_dir, logs_dir):
-                            if not os.path.isdir(base_dir):
-                                print(f"Skipping missing directory: {base_dir}")
-                                continue
-                            for root, _, files in os.walk(base_dir):
-                                for f in files:
-                                    full_path = os.path.join(root, f)
-                                    rel_path = os.path.relpath(full_path, lcdb_root)
-                                    zipf.write(full_path, rel_path)
+                        for log_file in log_files:
+                            rel_path = os.path.relpath(log_file, metadata["lcdb_root"])
+                            zipf.write(log_file, rel_path)
 
-                    # Upload logs_<openmlid>.zip to same folder
                     with open(zip_path, "rb") as f:
                         url = (
                             f"https://eapi.pcloud.com/uploadfile"
@@ -323,7 +368,7 @@ class PCloudRepository(Repository):
                         ).json()
 
                     if status.get("result") == 0:
-                        print(f"Uploaded {zip_name} for {workflow_name}/{openmlid} to {path}")
+                        print(f"Uploaded {zip_name} for {workflow}/{openmlid} to {path}")
                     else:
                         print(f"Failed to upload {zip_name}: {status}")
             except Exception as e:
