@@ -183,21 +183,39 @@ class PCloudRepository(Repository):
         else:
             lcdb_root = os.getcwd()
 
-        for idx, part in enumerate(parts):
-            if part == "results" and idx + 1 < len(parts):
-                workflow = parts[idx + 1]
+        if "/results/" in path_for_matching:
+            path_inside_results = path_for_matching.split("/results/", 1)[1]
+            results_parts = [part for part in path_inside_results.split("/") if part]
 
-                if idx + 2 < len(parts) and re.fullmatch(r"\d+", parts[idx + 2]):
-                    openmlid = parts[idx + 2]
+            workflow_index = None
+            if len(results_parts) >= 1 and results_parts[0].startswith("lcdb.workflow"):
+                workflow_index = 0
+            elif len(results_parts) >= 2 and results_parts[1].startswith("lcdb.workflow"):
+                workflow_index = 1
 
-                if idx + 3 < len(parts):
-                    seed_match = re.fullmatch(r"(?P<valid>\d+)-(?P<test>\d+)-(?P<workflow>\d+)", parts[idx + 3])
+            if workflow_index is not None:
+                workflow = results_parts[workflow_index]
+
+                if len(results_parts) > workflow_index + 1 and re.fullmatch(r"\d+", results_parts[workflow_index + 1]):
+                    openmlid = results_parts[workflow_index + 1]
+
+                if len(results_parts) > workflow_index + 2:
+                    seed_match = re.fullmatch(r"(?P<valid>\d+)-(?P<test>\d+)-(?P<workflow>\d+)", results_parts[workflow_index + 2])
                     if seed_match:
                         valid_seed = int(seed_match.group("valid"))
                         test_seed = int(seed_match.group("test"))
                         workflow_seed = int(seed_match.group("workflow"))
-                break
 
+                return {
+                    "lcdb_root": lcdb_root,
+                    "workflow": workflow,
+                    "openmlid": openmlid,
+                    "workflow_seed": workflow_seed,
+                    "test_seed": test_seed,
+                    "valid_seed": valid_seed,
+                }
+
+        for part in parts:
             if part.startswith("lcdb.workflow"):
                 workflow = part.split("-")[0]
             elif re.fullmatch(r"\d+", part):
