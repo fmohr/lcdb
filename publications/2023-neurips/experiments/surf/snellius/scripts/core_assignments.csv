@@ -1,4 +1,5 @@
 workflow,openmlid,parallel tasks assigned,num cores per task,memory limit per task
+lcdb.workflow.keras.DenseNNWorkflow,46905,5,14,90
 lcdb.workflow.sklearn.KNNWorkflow,46905,64,3,128
 lcdb.workflow.sklearn.KNNWorkflow,46906,64,3,128
 lcdb.workflow.sklearn.KNNWorkflow,46908,64,3,128

@@ -3,22 +3,22 @@
 source ~/.bashrc
 conda activate lcdb
 
-export SIMPLE_GPU_MODE=true  # Set to false to use normal gpu_mig mode
-
 export PARTITION_CREATE="rome"
-export PARTITION_RUN="genoa"  # or "genoa" for CPU jobs, "gpu_a100" for GPU jobs
-
-# if first argument is densenn then partition run is gpu_a100
-if [ "$1" == "densenn" ]; then
-    export PARTITION_RUN="gpu_mig"
-fi
-
 export path_to_snellius=$(pwd)
 export output_path="/gpfs/nvme1/0/prjs1064/LCDB2"
 
-# Workflow name from CLI arg
-REQ_WORKFLOW_NAME="${1:-knn}"
-export WORKFLOW_NAME="$REQ_WORKFLOW_NAME"
+# Workflow name from CLI arg — default comes from config.sh if not provided
+export WORKFLOW_NAME="${1}"
+
+# Source config to get workflow mapping and defaults (sets WORKFLOW_NAME default if empty)
+source "$path_to_snellius/scripts/config.sh"
+
+# Set partition based on resolved workflow name and campaign taparena-cpu (CPU-only partition) vs tabarena (GPU partition)
+if [ "$WORKFLOW_NAME" == "densenn" ] && [ "$CAMPAIGN_NAME" == "tabarena-cpu" ]; then
+    export PARTITION_RUN="genoa"
+else
+    export PARTITION_RUN="gpu_a100"
+fi
 
 echo "PARTITION_RUN: $PARTITION_RUN"
 echo "WORKFLOW_NAME: $WORKFLOW_NAME"
@@ -83,61 +83,46 @@ IFS=',' eval 'export REMAINING_OPENML_IDS="${remaining_ids[*]}"'
 script="$path_to_snellius/scripts/run.sh"
 jobname="${CAMPAIGN_NAME}-run-${WORKFLOW_NAME}"
 
-if [ "$PARTITION_RUN" == "gpu_mig" ] || [ "$PARTITION_RUN" == "gpu_a100" ]; then
-    if [ "$SIMPLE_GPU_MODE" == "true" ]; then
-        script="$path_to_snellius/scripts/run_gpu.sh"
+if [ "$PARTITION_RUN" == "gpu_a100" ]; then
+    script="$path_to_snellius/scripts/run_gpu.sh"
 
-        # Calculate max resources needed across all remaining datasets
-        # (job arrays require uniform resources across all array tasks)
-        max_parallel_tasks=0
-        max_cpus_per_task=0
-        for id in "${remaining_ids[@]}"; do
-            parallel=${OPENML_PARALLEL_TASKS[$id]}
-            cpus=${OPENML_CORES_PER_TASK[$id]}
-            if (( parallel > max_parallel_tasks )); then
-                max_parallel_tasks=$parallel
-            fi
-            if (( cpus > max_cpus_per_task )); then
-                max_cpus_per_task=$cpus
-            fi
-        done
+    # Calculate max resources needed across all remaining datasets
+    # (job arrays require uniform resources across all array tasks)
+    max_parallel_tasks=0
+    max_cpus_per_task=0
+    for id in "${remaining_ids[@]}"; do
+        parallel=${OPENML_PARALLEL_TASKS[$id]}
+        cpus=${OPENML_CORES_PER_TASK[$id]}
+        if (( parallel > max_parallel_tasks )); then
+            max_parallel_tasks=$parallel
+        fi
+        if (( cpus > max_cpus_per_task )); then
+            max_cpus_per_task=$cpus
+        fi
+    done
 
-        # Calculate GPUs needed: max_parallel_tasks - 1 (master rank doesn't compute)
-        # max_gpus=$((max_parallel_tasks - 1))
-        # NUM_GPU_WORKERS=$max_gpus
-        NUM_GPU_WORKERS=$((max_parallel_tasks - 1))
+    # Calculate GPU workers: total ranks - 1 (master rank doesn't compute)
+    NUM_GPU_WORKERS=$((max_parallel_tasks - 1))
 
+    echo "Max resources for GPU job array: ${max_parallel_tasks} ranks, ${max_cpus_per_task} CPUs/rank, ${NUM_GPU_WORKERS} GPUs"
 
-        echo "Max resources for GPU job array: ${max_parallel_tasks} ranks, ${max_cpus_per_task} CPUs/rank, ${max_gpus} GPUs"
-
-            # --mem-per-cpu=4G \
-            # --gpus=$max_gpus \
-
-
-            # --gpus-per-task=1 \
-            # --ntasks=$max_parallel_tasks \
-            # --cpus-per-task=$max_cpus_per_task \
-        run_job_id=$(sbatch \
-            --partition="$PARTITION_RUN" \
-            --dependency=afterok:$workflow_create_job_id \
-            --time=6:00:00 \
-            --nodes=1 \
-            --ntasks=$NUM_GPU_WORKERS \
-            --gpus=$NUM_GPU_WORKERS \
-            --cpus-per-task=$max_cpus_per_task \
-            --job-name="${jobname}" \
-            --array=0-$((${#remaining_ids[@]} - 1)) \
-            --export=ALL \
-            --chdir="$output_path" \
-            --output="${log_out_dir}/job_%A_%a.log" \
-            --error="${log_err_dir}/job_%A_%a.err" \
-            --parsable \
-            "$script")
-        echo "Submitted GPU job array with ID: $run_job_id"
-    else
-        echo "Advanced MIG mode not enabled in this template."
-        exit 1
-    fi
+    run_job_id=$(sbatch \
+        --partition="$PARTITION_RUN" \
+        --dependency=afterok:$workflow_create_job_id \
+        --time=6:00:00 \
+        --nodes=1 \
+        --ntasks=$NUM_GPU_WORKERS \
+        --gpus=$NUM_GPU_WORKERS \
+        --cpus-per-task=$max_cpus_per_task \
+        --job-name="${jobname}" \
+        --array=0-$((${#remaining_ids[@]} - 1)) \
+        --export=ALL \
+        --chdir="$output_path" \
+        --output="${log_out_dir}/job_%A_%a.log" \
+        --error="${log_err_dir}/job_%A_%a.err" \
+        --parsable \
+        "$script")
+    echo "Submitted GPU job array with ID: $run_job_id"
 else
     export CUDA_VISIBLE_DEVICES=""
 

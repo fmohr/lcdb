@@ -17,7 +17,13 @@ fi
 
 # Find core_assignments.csv
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CORE_ASSIGNMENTS_CSV="$SCRIPT_DIR/core_assignments.csv"
+# if densenn and campain is tabarena-cpu, look for core_assignments_cpu.csv
+if [[ "$LCDB_WORKFLOW" == "lcdb.workflow.keras.DenseNNWorkflow" && "$CAMPAIGN_NAME" == "tabarena-cpu" ]]; then
+    CORE_ASSIGNMENTS_CSV="$SCRIPT_DIR/core_assignments_cpu.csv"
+else
+    CORE_ASSIGNMENTS_CSV="$SCRIPT_DIR/core_assignments_gpu.csv"
+fi
+# CORE_ASSIGNMENTS_CSV="$SCRIPT_DIR/core_assignments.csv"
 
 if [[ ! -f "$CORE_ASSIGNMENTS_CSV" ]]; then
     echo "Error: core_assignments.csv not found at $CORE_ASSIGNMENTS_CSV" >&2
