@@ -412,8 +412,6 @@ class DenseNNWorkflow(PreprocessedWorkflow):
 
         self.logger.info(
             "Building model with the following config: "
-            f"\n\tDevices: {tf.config.list_physical_devices()}"
-            f"\n\tNumber of GPUs available: {len(tf.config.list_physical_devices('GPU'))}"
             f"\n\tInput layer size: {input_shape}"
             f"\n\tMax number of Epochs: {self.num_epochs} with schedule for iteration curve: {self.epoch_schedule}"
         )
@@ -528,187 +526,218 @@ class DenseNNWorkflow(PreprocessedWorkflow):
         # create internal labels for keras ordered from 0 to k-1 where, k is the number of labels *known* to the NN
         mask_valid = np.isin(y_valid, self.infos["classes_train"])
 
-        # build skeleton of neural network
-        self.learner = self.build_model(X.shape[1:], len(self.infos["classes_train"]))
+        # move to the device (GPU if available, otherwise CPU)
+        gpus = tf.config.list_logical_devices('GPU')
 
-        # Count Parameters in Model and Record
-        if self.timer.root.metadata.get("num_parameters_train") is None:
-            params = count_params(self.learner)
-            self.timer.root["num_parameters_not_train"] = params[
-                "num_parameters_not_train"
-            ]
-            self.timer.root["num_parameters_train"] = params["num_parameters_train"]
-
-        # configure learning rate schedule
-        if self.learning_rate_scheduler == "none":
-            learning_rate_scheduler = self.learning_rate
+        if gpus:
+            device_name = gpus[0].name
         else:
-            lrskwargs = {}
-            if self.learning_rate_scheduler == "ReduceLROnPlateau":
-                lrskwargs["factor"] = self.learning_rate_scheduler_decay_rate
-                lrskwargs["patience"] = int(self.learning_rate_scheduler_decay_steps)
-            elif self.learning_rate_scheduler == "ExponentialDecay":
-                lrskwargs["initial_learning_rate"] = self.learning_rate
-                lrskwargs["decay_rate"] = self.learning_rate_scheduler_decay_rate
-                lrskwargs["decay_steps"] = int(self.learning_rate_scheduler_decay_steps)
-            elif self.learning_rate_scheduler == "PolynomialDecay":
-                lrskwargs["initial_learning_rate"] = self.learning_rate
-                lrskwargs["end_learning_rate"] = self.learning_rate_scheduler_polynomial_end_learning_rate
-                lrskwargs["power"] = self.learning_rate_scheduler_polynomial_power
-                lrskwargs["decay_steps"] = int(self.learning_rate_scheduler_decay_steps)
-            elif self.learning_rate_scheduler == "InverseTimeDecay":
-                lrskwargs["initial_learning_rate"] = self.learning_rate
-                lrskwargs["decay_rate"] = self.learning_rate_scheduler_decay_rate
-                lrskwargs["decay_steps"] = int(self.learning_rate_scheduler_decay_steps)
-            elif self.learning_rate_scheduler == "CosineDecay":
-                lrskwargs["initial_learning_rate"] = self.learning_rate
-                lrskwargs["decay_steps"] = int(self.learning_rate_scheduler_decay_steps)
-                lrskwargs["alpha"] = self.learning_rate_scheduler_cosine_alpha
-            elif self.learning_rate_scheduler == "CosineDecayRestarts":
-                lrskwargs["initial_learning_rate"] = self.learning_rate
-                lrskwargs["first_decay_steps"] = int(self.learning_rate_scheduler_decay_steps)
-                lrskwargs["alpha"] = self.learning_rate_scheduler_cosine_alpha
-                lrskwargs["t_mul"] = self.learning_rate_scheduler_cosine_restarts_tmul
-                lrskwargs["m_mul"] = self.learning_rate_scheduler_cosine_restarts_mmul
-            else:
-                raise ValueError(f"Untreated learning rate scheduler: {self.learning_rate_scheduler}")
+            cpus = tf.config.list_logical_devices('CPU')
 
-            learning_rate_scheduler = LRSCHEDULERS[self.learning_rate_scheduler](**lrskwargs)
-            self.logger.info(f"Learning Rate Scheduler {learning_rate_scheduler.__class__.__name__} was initialized with {lrskwargs}")
+            if not cpus:
+                raise RuntimeError("No CPU device found")
 
-        # configure optimizer
-        optim_kwargs = {
-            "learning_rate": learning_rate_scheduler if self.learning_rate_scheduler != "ReduceLROnPlateau" else self.learning_rate
-        }
-        if self.optimizer.lower() in ["adam", "adamw", "adamax", "nadam"]:
-            optim_kwargs["beta_1"] = 1 - self.anti_momentum_rate
-            optim_kwargs["beta_2"] = 1 - self.anti_grad_var_rate
-        elif self.optimizer.lower() == "adadelta":
-            optim_kwargs["rho"] = 1 - self.anti_grad_var_rate
-        elif self.optimizer.lower() == "sgd":
-            optim_kwargs["momentum"] = 1 - self.anti_momentum_rate
-        elif self.optimizer.lower() == "rmsprop":
-            optim_kwargs["momentum"] = 1 - self.anti_momentum_rate
-            optim_kwargs["rho"] = 1 - self.anti_grad_var_rate
-        optimizer = OPTIMIZERS[self.optimizer](**optim_kwargs)
-        self.logger.info(f"Optimizer is {optimizer.__class__.__name__} initialized with {optim_kwargs}")
+            device_name = cpus[0].name
+        with tf.device(device_name):
 
-        iteration_curve_callback = IterationCurveCallback(
-            workflow=self,
-            timer=self.timer,
-            data=dict(
-                # train=dict(X=X, y=np.argmax(y, axis=1)),  # assign the class with the highest true probability (1 except for if data augmentation is used)
-                train=dict(X=X, y=y),
-                val=dict(X=X_valid, y=y_valid),
-                test=dict(X=X_test, y=y_test),
-            ),
-            logger=self.logger,
-            epoch_schedule=self.epoch_schedule,
-        )
-        if self.num_epochs not in iteration_curve_callback.schedule:
-            self.logger.warning(
-                f"Last epoch {self.num_epochs} should be in the schedule covered by the IterationCurveCallback but is not. "
-                f"Schedule is {iteration_curve_callback.schedule}"
-            )
-
-        # define callbacks
-        callbacks = [
-            keras.callbacks.TerminateOnNaN(),
-            keras.callbacks.EarlyStopping(patience=self.num_epochs_patience),
-        ]
-        if self.learning_rate_scheduler == "ReduceLROnPlateau":
-            self.logger.info(f"Adding {learning_rate_scheduler} as callback")
-            callbacks.append(learning_rate_scheduler)
-
-        base_optimizer = optimizer
-        if self.lookahead:
-            optimizer = Lookahead(
-                optimizer,
-                learning_rate=self.lookahead_learning_rate,
-                la_steps=self.lookahead_num_steps
-            )
-
-        # set up weight average callback
-        if self.weight_averaging:
-            callbacks.append(WA(
-                start_epoch=2,
-                cycle_length=self.weight_averaging_cycle_length,
-                logger=self.logger)
-            )
-
-        if self.snapshot_ensemble:
-            self.snapshot_callback = Snapshot(
-                workflow=self,
-                optimizer=base_optimizer,
-                reset_weights=self.snapshot_ensemble_reset_weights,
-                period_init=self.snapshot_ensemble_period_init,
-                period_increase=self.snapshot_ensemble_period_increase,
-                logger=self.logger
-            )
-            callbacks.append(self.snapshot_callback)
-
-        # the callback for the iteration curve should be the last one
-        callbacks.append(iteration_curve_callback)
-
-        self.learner.compile(
-            optimizer=optimizer,
-            loss="categorical_crossentropy",
-            metrics=["accuracy"],
-        )
-
-        # Prepare data augmenters
-        data_augmenters = []
-        if self.data_augmentation == "cutout":
-            from lcdb.workflow.keras._augmentation import CutOutAugmentation
-            data_augmenters.append(CutOutAugmentation(
-                probability_of_cut=self.data_augmentation_cutout_patch_ratio,
-                random_state=self.random_state
-            ))
-        elif self.data_augmentation == "mixup":
-            from lcdb.workflow.keras._augmentation import MixUpAugmentation
-            data_augmenters.append(MixUpAugmentation(random_state=self.random_state))
-        elif self.data_augmentation == "cutmix":
-            from lcdb.workflow.keras._augmentation import CutMixAugmentation
-            data_augmenters.append(CutMixAugmentation(random_state=self.random_state))
-
-        # create log message for the usage of data augmentation 
-        if self.data_augmentation is not None:
             self.logger.info(
-                f"Using data augmentation: {self.data_augmentation} with augmenters: {data_augmenters}"
+                f"Preparing model construction. Hardware environment is as follows."
+                f"\n\tDevices: {tf.config.list_physical_devices()}"
+                f"\n\tNumber of GPUs available: {len(tf.config.list_physical_devices('GPU'))}"
+                f"\n\tCHOSEN DEVICE (model is built and fit is invoked here in this context): {device_name}"
             )
-        else:
-            self.logger.info("No data augmentation is used.")
 
-        # data generator for augmentation
-        train_generator = AugmentDataGenerator(
-                            X, y, batch_size=self.batch_size, 
-                            augmenters=data_augmenters,
-                            encode_label_vector=self._encode_label_vector,
-                            shuffle=self.shuffle_each_epoch,
-                            random_state=self.random_state
-                        )
+            # build skeleton of neural network
+            self.learner = self.build_model(X.shape[1:], len(self.infos["classes_train"]))
 
-        # now fit model
-        self.logger.info(f"Compiled model is\n{self.learner.summary()}")
-        self.learner.fit(
-            train_generator,
-            epochs=self.num_epochs,
-            shuffle=False, # shuffling is done by the generator to control the random seed
-            validation_data=(X_valid[mask_valid], self._encode_label_vector(y_valid[mask_valid])),
-            callbacks=callbacks,
-            verbose=0,
-        )
+            # Count Parameters in Model and Record
+            if self.timer.root.metadata.get("num_parameters_train") is None:
+                params = count_params(self.learner)
+                self.timer.root["num_parameters_not_train"] = params[
+                    "num_parameters_not_train"
+                ]
+                self.timer.root["num_parameters_train"] = params["num_parameters_train"]
 
-        # if both weight averaging and batch normalization are active, do a full forward pass over all instances to adjust the batch normalization layers
-        if self.weight_averaging and self.batch_norm:
-            self.logger.info(f"Doing additional forward pass over all batches to adjust batch norm layers for weight reset performed by WA.")
-            num_batches = 0
-            for batch_idx in range(len(train_generator)):
-                x_batch, _ = train_generator[batch_idx]
-                self.learner(x_batch, training=True)
-                num_batches += 1
-                self.logger.debug(f"Finished {num_batches}-th forward pass with batch of shape {x_batch.shape} for batch norm layer adjustment performed by WA.")
-            self.logger.info(f"Finished {num_batches} forward passes for batch norm layer adjustment performed by WA.")
+            # configure learning rate schedule
+            if self.learning_rate_scheduler == "none":
+                learning_rate_scheduler = self.learning_rate
+            else:
+                lrskwargs = {}
+                if self.learning_rate_scheduler == "ReduceLROnPlateau":
+                    lrskwargs["factor"] = self.learning_rate_scheduler_decay_rate
+                    lrskwargs["patience"] = int(self.learning_rate_scheduler_decay_steps)
+                elif self.learning_rate_scheduler == "ExponentialDecay":
+                    lrskwargs["initial_learning_rate"] = self.learning_rate
+                    lrskwargs["decay_rate"] = self.learning_rate_scheduler_decay_rate
+                    lrskwargs["decay_steps"] = int(self.learning_rate_scheduler_decay_steps)
+                elif self.learning_rate_scheduler == "PolynomialDecay":
+                    lrskwargs["initial_learning_rate"] = self.learning_rate
+                    lrskwargs["end_learning_rate"] = self.learning_rate_scheduler_polynomial_end_learning_rate
+                    lrskwargs["power"] = self.learning_rate_scheduler_polynomial_power
+                    lrskwargs["decay_steps"] = int(self.learning_rate_scheduler_decay_steps)
+                elif self.learning_rate_scheduler == "InverseTimeDecay":
+                    lrskwargs["initial_learning_rate"] = self.learning_rate
+                    lrskwargs["decay_rate"] = self.learning_rate_scheduler_decay_rate
+                    lrskwargs["decay_steps"] = int(self.learning_rate_scheduler_decay_steps)
+                elif self.learning_rate_scheduler == "CosineDecay":
+                    lrskwargs["initial_learning_rate"] = self.learning_rate
+                    lrskwargs["decay_steps"] = int(self.learning_rate_scheduler_decay_steps)
+                    lrskwargs["alpha"] = self.learning_rate_scheduler_cosine_alpha
+                elif self.learning_rate_scheduler == "CosineDecayRestarts":
+                    lrskwargs["initial_learning_rate"] = self.learning_rate
+                    lrskwargs["first_decay_steps"] = int(self.learning_rate_scheduler_decay_steps)
+                    lrskwargs["alpha"] = self.learning_rate_scheduler_cosine_alpha
+                    lrskwargs["t_mul"] = self.learning_rate_scheduler_cosine_restarts_tmul
+                    lrskwargs["m_mul"] = self.learning_rate_scheduler_cosine_restarts_mmul
+                else:
+                    raise ValueError(f"Untreated learning rate scheduler: {self.learning_rate_scheduler}")
+
+                learning_rate_scheduler = LRSCHEDULERS[self.learning_rate_scheduler](**lrskwargs)
+                self.logger.info(f"Learning Rate Scheduler {learning_rate_scheduler.__class__.__name__} was initialized with {lrskwargs}")
+
+            # configure optimizer
+            optim_kwargs = {
+                "learning_rate": learning_rate_scheduler if self.learning_rate_scheduler != "ReduceLROnPlateau" else self.learning_rate
+            }
+            if self.optimizer.lower() in ["adam", "adamw", "adamax", "nadam"]:
+                optim_kwargs["beta_1"] = 1 - self.anti_momentum_rate
+                optim_kwargs["beta_2"] = 1 - self.anti_grad_var_rate
+            elif self.optimizer.lower() == "adadelta":
+                optim_kwargs["rho"] = 1 - self.anti_grad_var_rate
+            elif self.optimizer.lower() == "sgd":
+                optim_kwargs["momentum"] = 1 - self.anti_momentum_rate
+            elif self.optimizer.lower() == "rmsprop":
+                optim_kwargs["momentum"] = 1 - self.anti_momentum_rate
+                optim_kwargs["rho"] = 1 - self.anti_grad_var_rate
+            optimizer = OPTIMIZERS[self.optimizer](**optim_kwargs)
+            self.logger.info(f"Optimizer is {optimizer.__class__.__name__} initialized with {optim_kwargs}")
+
+            iteration_curve_callback = IterationCurveCallback(
+                workflow=self,
+                timer=self.timer,
+                data=dict(
+                    # train=dict(X=X, y=np.argmax(y, axis=1)),  # assign the class with the highest true probability (1 except for if data augmentation is used)
+                    train=dict(X=X, y=y),
+                    val=dict(X=X_valid, y=y_valid),
+                    test=dict(X=X_test, y=y_test),
+                ),
+                logger=self.logger,
+                epoch_schedule=self.epoch_schedule,
+            )
+            if self.num_epochs not in iteration_curve_callback.schedule:
+                self.logger.warning(
+                    f"Last epoch {self.num_epochs} should be in the schedule covered by the IterationCurveCallback but is not. "
+                    f"Schedule is {iteration_curve_callback.schedule}"
+                )
+
+            # define callbacks
+            callbacks = [
+                keras.callbacks.TerminateOnNaN(),
+                keras.callbacks.EarlyStopping(patience=self.num_epochs_patience),
+            ]
+            if self.learning_rate_scheduler == "ReduceLROnPlateau":
+                self.logger.info(f"Adding {learning_rate_scheduler} as callback")
+                callbacks.append(learning_rate_scheduler)
+
+            base_optimizer = optimizer
+            if self.lookahead:
+                optimizer = Lookahead(
+                    optimizer,
+                    learning_rate=self.lookahead_learning_rate,
+                    la_steps=self.lookahead_num_steps
+                )
+
+            # set up weight average callback
+            if self.weight_averaging:
+                callbacks.append(WA(
+                    start_epoch=2,
+                    cycle_length=self.weight_averaging_cycle_length,
+                    logger=self.logger)
+                )
+
+            if self.snapshot_ensemble:
+                self.snapshot_callback = Snapshot(
+                    workflow=self,
+                    optimizer=base_optimizer,
+                    reset_weights=self.snapshot_ensemble_reset_weights,
+                    period_init=self.snapshot_ensemble_period_init,
+                    period_increase=self.snapshot_ensemble_period_increase,
+                    logger=self.logger
+                )
+                callbacks.append(self.snapshot_callback)
+
+            # the callback for the iteration curve should be the last one
+            callbacks.append(iteration_curve_callback)
+
+            self.learner.compile(
+                optimizer=optimizer,
+                loss="categorical_crossentropy",
+                metrics=["accuracy"],
+            )
+
+            # Prepare data augmenters
+            data_augmenters = []
+            if self.data_augmentation == "cutout":
+                from lcdb.workflow.keras._augmentation import CutOutAugmentation
+                data_augmenters.append(CutOutAugmentation(
+                    probability_of_cut=self.data_augmentation_cutout_patch_ratio,
+                    random_state=self.random_state
+                ))
+            elif self.data_augmentation == "mixup":
+                from lcdb.workflow.keras._augmentation import MixUpAugmentation
+                data_augmenters.append(MixUpAugmentation(random_state=self.random_state))
+            elif self.data_augmentation == "cutmix":
+                from lcdb.workflow.keras._augmentation import CutMixAugmentation
+                data_augmenters.append(CutMixAugmentation(random_state=self.random_state))
+
+            # create log message for the usage of data augmentation 
+            if self.data_augmentation is not None:
+                self.logger.info(
+                    f"Using data augmentation: {self.data_augmentation} with augmenters: {data_augmenters}"
+                )
+            else:
+                self.logger.info("No data augmentation is used.")
+
+            # data generator for augmentation
+            train_generator = AugmentDataGenerator(
+                                X, y, batch_size=self.batch_size, 
+                                augmenters=data_augmenters,
+                                encode_label_vector=self._encode_label_vector,
+                                shuffle=self.shuffle_each_epoch,
+                                random_state=self.random_state
+                            )
+
+            # now fit model
+            lines = []
+            self.learner.summary(print_fn=lambda x: lines.append(x))
+            summary_text = "\n".join(lines)
+            self.logger.info(f"Compiled model is\n{summary_text}.")
+            
+            # Check where model variables are placed
+            self.logger.info(
+                f"Total number of parameters is {self.learner.count_params()}. Those are placed as follows: {''.join(['\n\t' + str(v.name) + " is placed on device " + str(v.handle.device) for v in self.learner.trainable_variables])}"
+            )
+            tf.debugging.set_log_device_placement(True)
+
+            self.learner.fit(
+                train_generator,
+                epochs=self.num_epochs,
+                shuffle=False, # shuffling is done by the generator to control the random seed
+                validation_data=(X_valid[mask_valid], self._encode_label_vector(y_valid[mask_valid])),
+                callbacks=callbacks,
+                verbose=0,
+            )
+
+            # if both weight averaging and batch normalization are active, do a full forward pass over all instances to adjust the batch normalization layers
+            if self.weight_averaging and self.batch_norm:
+                self.logger.info(f"Doing additional forward pass over all batches to adjust batch norm layers for weight reset performed by WA.")
+                num_batches = 0
+                for batch_idx in range(len(train_generator)):
+                    x_batch, _ = train_generator[batch_idx]
+                    self.learner(x_batch, training=True)
+                    num_batches += 1
+                    self.logger.debug(f"Finished {num_batches}-th forward pass with batch of shape {x_batch.shape} for batch norm layer adjustment performed by WA.")
+                self.logger.info(f"Finished {num_batches} forward passes for batch norm layer adjustment performed by WA.")
 
     def _predict_after_transform(self, X):
         return self._predict_with_proba_after_transform(X)[0]
