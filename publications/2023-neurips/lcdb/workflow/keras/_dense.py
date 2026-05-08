@@ -714,8 +714,12 @@ class DenseNNWorkflow(PreprocessedWorkflow):
             self.logger.info(f"Compiled model is\n{summary_text}.")
             
             # Check where model variables are placed
+            summary_text = ""
+            for v in self.learner.trainable_variables:
+                summary_text += f"\n\t{v.name} is placed on device {v.handle.device}"
+
             self.logger.info(
-                f"Total number of parameters is {self.learner.count_params()}. Those are placed as follows: {''.join(['\n\t' + str(v.name) + " is placed on device " + str(v.handle.device) for v in self.learner.trainable_variables])}"
+                f"Total number of parameters is {self.learner.count_params()}. Those are placed as follows: {summary_text}"
             )
             tf.debugging.set_log_device_placement(True)
 
