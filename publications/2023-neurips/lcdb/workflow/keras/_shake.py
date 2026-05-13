@@ -4,11 +4,14 @@ from tensorflow.random import uniform
 from tensorflow import custom_gradient, GradientTape, shape
 import tensorflow as tf
 
+from keras.saving import register_keras_serializable
 
+@register_keras_serializable()
 class ShakeShake(Layer):
 
-    def __init__(self, seed):
-        super().__init__()
+    def __init__(self, seed, **kwargs):
+        super().__init__(**kwargs)
+        self.seed = seed
         self.random_gen = tf.random.Generator.from_seed(seed)
 
     def call(self, x, training=False):
@@ -42,10 +45,18 @@ class ShakeShake(Layer):
 
         return shake_shake_combine(x[0], x[1])
 
+    def get_config(self):
+        config = super().get_config()
+        config.update({
+            "seed": self.seed
+        })
+        return config
 
+@register_keras_serializable()
 class ShakeDrop(Layer):
-    def __init__(self, seed, p_drop):
-        super().__init__()
+    def __init__(self, seed, p_drop, **kwargs):
+        super().__init__(**kwargs)
+        self.seed = seed
         self.random_gen = tf.random.Generator.from_seed(seed)
         self.p_drop = p_drop  # Drop probability
 
@@ -81,3 +92,11 @@ class ShakeDrop(Layer):
                 return (1 - self.p_drop) * x
 
         return shake_drop(inputs)
+
+    def get_config(self):
+        config = super().get_config()
+        config.update({
+            "seed": self.seed,
+            "p_drop": self.p_drop
+        })
+        return config

@@ -169,6 +169,13 @@ def add_subparser(subparsers):
         help="Number of CPUs available to fit the workflow.",
     )
     subparser.add_argument(
+        "--suppress-errors",
+        action="store_true",
+        default=False,
+        required=False,
+        help="If set, then errors will not be risen but instead logged as errors."
+    )
+    subparser.add_argument(
         "--suppress-json-output",
         action="store_true",
         default=False,
@@ -205,6 +212,7 @@ def main(
     anchor_schedule,
     epoch_schedule,
     no_exception_on_unsuitable_preprocessor,
+    suppress_errors,
     suppress_json_output,
     ncpus,
 ):
@@ -273,6 +281,7 @@ def main(
         epoch_schedule=epoch_schedule,
         memory_limit_in_bytes=workflow_memory_limit * 1024**2,
         logger=logger,
+        raise_errors=not suppress_errors,
         raise_exception_on_unsuitable_preprocessor=not no_exception_on_unsuitable_preprocessor,
         n_jobs=ncpus
     )

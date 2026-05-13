@@ -7,6 +7,7 @@ from keras.utils import Sequence
 from tensorflow.keras.initializers import get
 from keras.layers import Activation
 from ConfigSpace import Categorical, ConfigurationSpace, Float, Integer, EqualsCondition, InCondition
+from lcdb.builder._exceptions import IrreparableException
 from lcdb.builder.scorer import ClassificationScorer
 from lcdb.builder.timer import Timer
 from lcdb.builder.utils import get_schedule, filter_keys_with_prefix
@@ -145,6 +146,17 @@ CONFIG_SPACE.add([
     EqualsCondition(CONFIG_SPACE["data_augmentation_cutout_patch_ratio"], CONFIG_SPACE["data_augmentation"], "cutout")
 ])
 
+class GradientExplosionException(IrreparableException):
+    def __init__(
+            self,
+            msg="The network suffered a gradient explosion, stopping training." # IMPORTANT TO DEFINE THIS HERE FOR SERIALIZATION
+        ):
+        super().__init__(
+            cause="gradient_explosion",
+            build_isssue_text="gradient explosion",
+            objective_value="F_gradient_explosion",
+            msg=msg
+        )
 
 class IterationCurveCallback(keras.callbacks.Callback):
     def __init__(
@@ -632,7 +644,7 @@ class DenseNNWorkflow(PreprocessedWorkflow):
 
             # define callbacks
             callbacks = [
-                keras.callbacks.TerminateOnNaN(),
+                keras.callbacks.TerminateOnNaN(logger=self.logger),
                 keras.callbacks.EarlyStopping(patience=self.num_epochs_patience),
             ]
             if self.learning_rate_scheduler == "ReduceLROnPlateau":
@@ -723,6 +735,7 @@ class DenseNNWorkflow(PreprocessedWorkflow):
             )
             tf.debugging.set_log_device_placement(True)
 
+            # fit the network
             self.learner.fit(
                 train_generator,
                 epochs=self.num_epochs,
@@ -755,17 +768,61 @@ class DenseNNWorkflow(PreprocessedWorkflow):
             models.extend(self.snapshot_callback.checkpoint_models)
 
         # compute probabilities per model
+        self.logger.debug("Computing probabilities.")
         y_pred_proba = []
         for model in models:
             y_pred_proba_model = model.predict(
                 X, batch_size=min(len(X), self.batch_size), verbose=0
             )
+
+            # if there are nan values, check in which layer this happened
+            if np.any(np.isnan(y_pred_proba_model)):
+
+                debug_model = tf.keras.Model(
+                    inputs=model.inputs,
+                    outputs=[layer.output for layer in model.layers]
+                )
+
+                outputs = debug_model(X, training=False)
+
+                for layer, out in zip(self.learner.layers, outputs):
+                    has_nan = tf.reduce_any(tf.math.is_nan(out))
+                    if has_nan:
+                        break
+
+                assert has_nan, "There should be NaNs in the debugging output, because the original model had nans"
+                input_report = "-" * 50 + "\nInput Overview\n" + "-" * 50
+                input_report += f"\n\t has NaN: {tf.reduce_any(tf.math.is_nan(X)).numpy()}"
+                input_report += f"\n\t has inf: {tf.reduce_any(tf.math.is_inf(X)).numpy()}"
+                input_report += f"\n\t max: {tf.reduce_max(X).numpy()}"
+                input_report += f"\n\t min: {tf.reduce_min(X).numpy()}"
+
+                detailed_weight_report = "-" * 50 + "\nWeight Overview\n" + "-" * 50
+                is_gradient_explosion = False
+                for w in layer.weights:
+                    has_nan_weight = tf.reduce_any(tf.math.is_nan(w)).numpy()
+                    has_inf_weight = tf.reduce_any(tf.math.is_inf(w)).numpy()
+                    if has_nan_weight or has_inf_weight:
+                        is_gradient_explosion = True
+
+                    detailed_weight_report += f"\n{w.name}"
+                    detailed_weight_report += f"\n\t has NaN: {has_nan_weight}"
+                    detailed_weight_report += f"\n\t has inf: {has_inf_weight}"
+                    detailed_weight_report += f"\n\t max: {tf.reduce_max(w).numpy()}"
+                    detailed_weight_report += f"\n\t min: {tf.reduce_min(w).numpy()}"
+                if is_gradient_explosion:
+                    raise GradientExplosionException()
+                raise RuntimeError(
+                    "There are NAN values in the NN prediction!"
+                    f"\nFirst layer with NaN output: {layer.name} (type {layer.__class__.__name__} without shape {out.shape})"
+                    f"\nOutput:\n{y_pred_proba_model}."
+                    f"\nInput was:\n{input_report}"
+                    f"\n{detailed_weight_report}"
+                )
             y_pred_proba.append(y_pred_proba_model)
 
         # average probabilities
         y_pred_proba = np.array(y_pred_proba)
-        if np.any(np.isnan(y_pred_proba)):
-            raise RuntimeError(f"There are NAN values in the NN prediction!\n{y_pred_proba}. Input was:\n{X}")
         self.logger.debug(f"Creating prediction based on {len(y_pred_proba)} models with shape {y_pred_proba[0].shape}.")
         if self.snapshot_ensemble and len(self.snapshot_callback.checkpoint_models) > 1 and np.sum(np.var(y_pred_proba, axis=0)) == 0:
             self.logger.warning(f"snapshot ensemble is configured but there is no variance in the outputs. There should be some variance unless all predictions are identical!")

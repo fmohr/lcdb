@@ -3,8 +3,9 @@ from keras.optimizers import Optimizer
 from keras.src.backend import convert_to_numpy
 from .utils import serialize_object, deserialize_object
 import tensorflow as tf
+from keras.saving import register_keras_serializable
 
-
+@register_keras_serializable()
 class Lookahead(Optimizer):
     '''Tensorflow implementation of the lookahead wrapper.
 

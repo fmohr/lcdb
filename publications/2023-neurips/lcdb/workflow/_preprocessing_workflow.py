@@ -34,7 +34,7 @@ from sklearn.preprocessing import (
 
 from ._base_workflow import BaseWorkflow
 from lcdb.builder.utils import estimate_memory_consumption_for_dataset
-from lcdb.builder._base import AnticipatedMemoryError
+from lcdb.builder._exceptions import AnticipatedMemoryError
 
 KEY_CAT_ENCODER = "cat_encoder"
 KEY_SCALER = "scaler"
