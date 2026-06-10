@@ -712,12 +712,12 @@ class DenseNNWorkflow(PreprocessedWorkflow):
 
             # data generator for augmentation
             train_generator = AugmentDataGenerator(
-                                X, y, batch_size=self.batch_size, 
-                                augmenters=data_augmenters,
-                                encode_label_vector=self._encode_label_vector,
-                                shuffle=self.shuffle_each_epoch,
-                                random_state=self.random_state
-                            )
+                X, y, batch_size=self.batch_size, 
+                augmenters=data_augmenters,
+                encode_label_vector=self._encode_label_vector,
+                shuffle=self.shuffle_each_epoch,
+                random_state=self.random_state
+            )
 
             # now fit model
             lines = []
