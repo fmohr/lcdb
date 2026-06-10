@@ -1,4 +1,5 @@
 class IrreparableException(Exception):
+
     """
     Exceptions of this type cannot be recovered at higher anchors
     """

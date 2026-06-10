@@ -153,7 +153,7 @@ class GradientExplosionException(IrreparableException):
         ):
         super().__init__(
             cause="gradient_explosion",
-            build_isssue_text="gradient explosion",
+            build_issue_text="gradient explosion",
             objective_value="F_gradient_explosion",
             msg=msg
         )
@@ -644,7 +644,7 @@ class DenseNNWorkflow(PreprocessedWorkflow):
 
             # define callbacks
             callbacks = [
-                keras.callbacks.TerminateOnNaN(logger=self.logger),
+                keras.callbacks.TerminateOnNaN(),
                 keras.callbacks.EarlyStopping(patience=self.num_epochs_patience),
             ]
             if self.learning_rate_scheduler == "ReduceLROnPlateau":
