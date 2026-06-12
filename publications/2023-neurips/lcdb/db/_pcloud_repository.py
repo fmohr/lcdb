@@ -1,6 +1,3 @@
-from turtle import update
-from ._util import CountAwareGenerator
-
 import gzip
 import logging
 import io
@@ -11,69 +8,279 @@ import json
 import jsonlines
 import zipfile
 import tempfile
+import urllib.parse
 
 import pandas as pd
-import numpy as np
 from tqdm import tqdm
-
-from lcdb.db._repository import Repository
-from lcdb.builder.utils import convert_deephyper_result_row_to_dict
-
-
 import requests
 import jmespath
 from json import JSONDecodeError
 
 from concurrent.futures import ThreadPoolExecutor
 from queue import Queue
-import threading
 
+from lcdb.db._repository import Repository
+from lcdb.builder.utils import convert_deephyper_result_row_to_dict
 from lcdb.db.callbacks._base import LCDBCallback
 
 
-
-class PCloudRepository(Repository):
-
-    def __init__(self, repo_code, token=None):
-        super().__init__()
+class BasePCloudRepository:
+    def __init__(self, repo_code=None, token=None, api_host="eapi.pcloud.com"):
         self.repo_code = repo_code
         self.content = None
         self.token = token
-        # update content
-        self.update_content()
-        self.root_folder_id = self.content['metadata'].get('folderid')
-        self.logger = logging.getLogger(__name__)
+        self.api_host = api_host
+        if self.repo_code:
+            self.update_content()
+            self.root_folder_id = self.content['metadata'].get('folderid')
+        else:
+            self.root_folder_id = 0
+
+    def _load_env(self):
+        """Loads environmental variables from the .env file in the workspace."""
+        env = {}
+        for path in [".env", "../.env", "../../.env", "../../../.env", "../../../../.env"]:
+            if os.path.exists(path):
+                with open(path, "r") as f:
+                    for line in f:
+                        line = line.strip()
+                        if line and not line.startswith("#") and "=" in line:
+                            key, val = line.split("=", 1)
+                            env[key.strip()] = val.strip()
+                break
+        return env
+
+    def _save_token_to_env(self, token):
+        """Saves the access token to the .env file in the workspace."""
+        env_path = None
+        for path in [".env", "../.env", "../../.env", "../../../.env", "../../../../.env"]:
+            if os.path.exists(path):
+                env_path = path
+                break
+        if not env_path:
+            env_path = ".env"
+        
+        lines = []
+        token_written = False
+        if os.path.exists(env_path):
+            with open(env_path, "r") as f:
+                for line in f:
+                    if line.strip().startswith("ACCESS_TOKEN="):
+                        lines.append(f"ACCESS_TOKEN={token}\n")
+                        token_written = True
+                    else:
+                        lines.append(line)
+        
+        if not token_written:
+            if lines and not lines[-1].endswith("\n"):
+                lines[-1] += "\n"
+            lines.append(f"ACCESS_TOKEN={token}\n")
+            
+        with open(env_path, "w") as f:
+            f.writelines(lines)
+        print(f"Saved ACCESS_TOKEN to {env_path} file for future use.")
 
     def update_content(self):
-        self.content = requests.get(f"https://eapi.pcloud.com/showpublink?code={self.repo_code}").json()
+        """Fetches repository content metadata from pCloud."""
+        if self.repo_code:
+            self.content = requests.get(f"https://{self.api_host}/showpublink?code={self.repo_code}").json()
 
+    def authenticate(self, client_id=None, client_secret=None, redirect_uri=None):
+        """Authenticates using OAuth 2.0 flow."""
+        env = self._load_env()
+        
+        # Check if ACCESS_TOKEN is already provided in .env or environment
+        access_token = env.get("ACCESS_TOKEN") or os.environ.get("ACCESS_TOKEN")
+        host_name = env.get("HOST_NAME") or os.environ.get("HOST_NAME")
+        
+        if access_token:
+            self.token = access_token
+            if host_name:
+                self.api_host = host_name
+            print("Found ACCESS_TOKEN in configuration. Using cached token.")
+            return
+
+        client_id = client_id or env.get("CLIENT_ID") or os.environ.get("CLIENT_ID")
+        client_secret = client_secret or env.get("CLIENT_SECRET") or os.environ.get("CLIENT_SECRET")
+        
+        if not client_id or not client_secret:
+            raise ValueError(
+                "OAuth 2.0 authentication requires 'CLIENT_ID' and 'CLIENT_SECRET'. "
+                "Please ensure they are defined in your .env file or passed directly."
+            )
+        
+        # Check if ACCESS_CODE is already provided in .env or environment
+        access_code = env.get("ACCESS_CODE") or os.environ.get("ACCESS_CODE")
+        
+        if access_code:
+            print("Found ACCESS_CODE in configuration. Skipping interactive prompt...")
+            code = access_code
+            if host_name:
+                self.api_host = host_name
+                print(f"Using configured API host: {self.api_host}")
+            hostname = self.api_host
+        else:
+            # Step 1: Generate Authorization URL
+            auth_url = f"https://my.pcloud.com/oauth2/authorize?client_id={client_id}&response_type=code"
+            if redirect_uri:
+                auth_url += f"&redirect_uri={urllib.parse.quote(redirect_uri)}"
+            
+            print("\n" + "="*80)
+            print("1. Please open the following URL in your web browser to authorize the app:")
+            print(auth_url)
+            print("="*80 + "\n")
+            
+            # Step 2: Prompt user for code or redirect URL
+            user_input = input("2. Enter the authorization code (or the full redirect URL if redirected): ").strip()
+            
+            code = user_input
+            hostname = self.api_host
+            
+            # Parse code and hostname if user pasted the entire redirect URL
+            if "code=" in user_input:
+                parsed = urllib.parse.urlparse(user_input)
+                query_params = urllib.parse.parse_qs(parsed.query)
+                if "code" in query_params:
+                    code = query_params["code"][0]
+                if "hostname" in query_params:
+                    hostname = query_params["hostname"][0]
+                    self.api_host = hostname
+                    print(f"Detected regional API host: {hostname}")
+        
+        # Step 3: Exchange code for access token
+        token_url = f"https://{hostname}/oauth2_token"
+        params = {
+            "client_id": client_id,
+            "client_secret": client_secret,
+            "code": code
+        }
+        
+        response = requests.post(token_url, data=params).json()
+        if "access_token" in response:
+            self.token = response["access_token"]
+            print("Authentication successful! Token retrieved and stored.")
+            # Persist the token to .env
+            self._save_token_to_env(self.token)
+        else:
+            raise ValueError(f"Failed to obtain access token: {response}")
+
+    def _get_api_params(self, **kwargs):
+        """Constructs query parameters for pCloud API requests."""
+        params = {}
+        if self.token:
+            params["access_token"] = self.token
+        if self.repo_code:
+            params["code"] = self.repo_code
+        for k, v in kwargs.items():
+            if v is not None:
+                params[k] = v
+        return params
+
+    def _create_folder(self, parent_folder_id, name):
+        """Creates a new folder in pCloud."""
+        url = f"https://{self.api_host}/createfolder"
+        params = self._get_api_params(folderid=parent_folder_id, name=name)
+        response = requests.get(url, params=params).json()
+        if response.get("result") != 0:
+            raise ValueError(f"Failed to create folder '{name}': {response}")
+        self.update_content()
+        return response["metadata"]["folderid"]
+
+    def _get_or_create_folder_id(self, full_path):
+        """Gets or creates the folder ID for the specified full path."""
+        if not full_path or full_path == "/" or full_path == "":
+            return self.root_folder_id
+
+        parts = full_path.strip("/").split('/')
+        parent_folder_id = self.root_folder_id
+
+        for part in parts:
+            url = f"https://{self.api_host}/listfolder"
+            params = self._get_api_params(folderid=parent_folder_id)
+            response = requests.get(url, params=params).json()
+            
+            contents = response.get("metadata", {}).get("contents", [])
+            folder = next((item for item in contents if item["name"] == part and item["isfolder"]), None)
+            if folder:
+                parent_folder_id = folder["folderid"]
+            else:
+                parent_folder_id = self._create_folder(parent_folder_id, part)
+
+        return parent_folder_id
+
+    def get_download_link(self, file_id):
+        """Gets a direct download link for a file by its file ID.
+        Uses getpublinkdownload if repo_code is set, otherwise getfilelink."""
+        if self.repo_code:
+            url = f"https://{self.api_host}/getpublinkdownload"
+            params = self._get_api_params(fileid=file_id)
+        else:
+            if not self.token:
+                raise ValueError("Authentication token is required to get a file link.")
+            url = f"https://{self.api_host}/getfilelink"
+            params = self._get_api_params(fileid=file_id)
+            
+        response = requests.get(url, params=params).json()
+        if response.get("result") != 0:
+            raise RuntimeError(f"Failed to get download link for file ID {file_id}: {response.get('error', 'Unknown error')}")
+            
+        host = response["hosts"][0]
+        path = response["path"]
+        return f"https://{host}{path}"
+
+    def download_file_by_id(self, file_id, local_dest_path, filename=None):
+        """Downloads a file by its pCloud file ID to a local path."""
+        download_url = self.get_download_link(file_id)
+        
+        if os.path.isdir(local_dest_path) or local_dest_path.endswith("/") or local_dest_path.endswith("\\"):
+            target_name = filename or os.path.basename(urllib.parse.urlparse(download_url).path)
+            local_file_dest = os.path.join(local_dest_path, target_name)
+        else:
+            local_file_dest = local_dest_path
+            
+        os.makedirs(os.path.dirname(os.path.abspath(local_file_dest)), exist_ok=True)
+        
+        r = requests.get(download_url, stream=True)
+        r.raise_for_status()
+        with open(local_file_dest, 'wb') as f:
+            for chunk in r.iter_content(chunk_size=8192):
+                f.write(chunk)
+                
+        return local_file_dest
+
+
+
+class PCloudRepository(BasePCloudRepository, Repository):
+
+    def __init__(self, repo_code, token=None):
+        BasePCloudRepository.__init__(self, repo_code=repo_code, token=token)
+        Repository.__init__(self)
+        self.logger = logging.getLogger(__name__)
 
     def exists(self):
         return self.content is not None and len(self.content) > 0
 
-    def authenticate(self, username, password, device="lcdbclient", authexpire=300):
+    def authenticate(self, username=None, password=None, device="lcdbclient", authexpire=300, client_id=None, client_secret=None, redirect_uri=None):
         """
+        Supports both legacy password-based authentication and OAuth 2.0.
+        """
+        if username is not None and password is not None:
+            url = f"https://{self.api_host}/userinfo?getauth=1&logout=1&device={device}&authexpire={authexpire}"
+            response = requests.post(url, {
+                "username": username,
+                "password": password
+            }).json()
+            self.token = response["auth"] if "auth" in response else None
+            if self.token is None:
+                raise ValueError(f"Authentication failed. Response from server was {response}.")
+        else:
+            # Fall back to OAuth 2.0 authentication
+            BasePCloudRepository.authenticate(self, client_id=client_id, client_secret=client_secret, redirect_uri=redirect_uri)
 
-        :param username: the username at pCloud with access to this repository
-        :param password: the password of the user
-        :param device: name associated with the authentication request (usually no change reasonable)
-        :param authexpire: time in seconds after which the received token will expire
-        :return:
-        """
-        url = f"https://eapi.pcloud.com/userinfo?getauth=1&logout=1&device={device}&authexpire={authexpire}"
-        response = requests.post(url, {
-            "username": username,
-            "password": password
-        }).json()
-        self.token = response["auth"] if "auth" in response else None
-        if self.token is None:
-            raise ValueError(f"Authentication failed. Response from server was {response}.")
 
     def download_result_file_and_get_handle(self, file):
-
-        # get download link
-        response = requests.get(f"https://eapi.pcloud.com/getpublinkdownload?code={self.repo_code}&fileid={file}").json()
-        download_link = "https://" + response["hosts"][0] + response["path"]
+        # get download link using generalized base class method
+        download_link = self.get_download_link(file)
 
         # download file
         t_start = time.time()
@@ -111,63 +318,17 @@ class PCloudRepository(Repository):
             folder_id = jmespath.compile(query).search(self.content)
             if folder_id is None:
                 return None  # Folder not found
-            self.content = requests.get(
-                f"https://eapi.pcloud.com/listfolder?code={self.repo_code}&auth={self.token}&folderid={folder_id}"
-            ).json()  # Update content to current folder
+            
+            # Using safe base helper to get listfolder parameters
+            url = f"https://{self.api_host}/listfolder"
+            params = self._get_api_params(folderid=folder_id)
+            self.content = requests.get(url, params=params).json()  # Update content to current folder
 
         return folder_id
 
-    def _create_folder(self, parent_folder_id, name):
-        self.update_content()
-        response = requests.get(
-            f"https://eapi.pcloud.com/createfolder?code={self.repo_code}&auth={self.token}&folderid={parent_folder_id}&name={name}"
-        ).json()
-        if response is None:
-            raise ValueError(f"Could not create folder '{name}', received no response")
-        if "result" not in response or response["result"] != 0:
-            raise ValueError(f"Could not create folder '{name}', received invalid response: {response}")
-        self.update_content()
-        return response["metadata"]["folderid"]
-    
-
-    def _get_or_create_folder_id(self, full_path):
-        """Gets or creates the folder ID for the specified path."""
-        self.update_content()
-        # print(f"Updated content: {self.content}")  # Debugging
-
-        parts = full_path.split("/")
-        parent_folder_id = self.root_folder_id
-        # print(f"Root folder ID: {parent_folder_id}")  # Debugging
-
-        for part in parts:
-            # print(f"Checking folder: '{part}' in parent {parent_folder_id}")  # Debugging
-
-            # Fetch folder contents for the current parent folder ID
-            response = requests.get(
-                f"https://eapi.pcloud.com/listfolder?code={self.repo_code}&auth={self.token}&folderid={parent_folder_id}"
-            ).json()
-            print(f"API Response: {response}")  # Debugging
-
-            # Check for error in the response
-            if response.get("result") != 0:
-                print(f"Error fetching folder contents: {response.get('error')}")
-                return None
-
-            folder = next((item for item in response.get("metadata", {}).get("contents", [])
-                           if item["name"] == part and item["isfolder"]), None)
-
-            if folder:
-                parent_folder_id = folder["folderid"]
-            else:
-                parent_folder_id = self._create_folder(parent_folder_id, part)
-                
-
-        # If all parts are found, return the final parent_folder_id
-        return parent_folder_id
-
     @staticmethod
     def _extract_result_metadata(result_file):
-        """Infer workflow, dataset and seeds from the LCDB result path."""
+        """Infer workflow, dataset, and seeds from the LCDB result path."""
         normalized_path = os.path.normpath(result_file)
         path_for_matching = normalized_path.replace("\\", "/")
         parts = [part for part in re.split(r"[\\/]+", normalized_path) if part]
@@ -183,39 +344,29 @@ class PCloudRepository(Repository):
         else:
             lcdb_root = os.getcwd()
 
-        if "/results/" in path_for_matching:
-            path_inside_results = path_for_matching.split("/results/", 1)[1]
-            results_parts = [part for part in path_inside_results.split("/") if part]
+        for idx, part in enumerate(parts):
+            if part == "results" and idx + 1 < len(parts):
+                for workflow_idx in range(idx + 1, len(parts)):
+                    if not parts[workflow_idx].startswith("lcdb.workflow"):
+                        continue
 
-            workflow_index = None
-            if len(results_parts) >= 1 and results_parts[0].startswith("lcdb.workflow"):
-                workflow_index = 0
-            elif len(results_parts) >= 2 and results_parts[1].startswith("lcdb.workflow"):
-                workflow_index = 1
+                    workflow = parts[workflow_idx]
 
-            if workflow_index is not None:
-                workflow = results_parts[workflow_index]
+                    if workflow_idx + 1 < len(parts) and re.fullmatch(r"\d+", parts[workflow_idx + 1]):
+                        openmlid = parts[workflow_idx + 1]
 
-                if len(results_parts) > workflow_index + 1 and re.fullmatch(r"\d+", results_parts[workflow_index + 1]):
-                    openmlid = results_parts[workflow_index + 1]
+                    if workflow_idx + 2 < len(parts):
+                        seed_match = re.fullmatch(
+                            r"(?P<valid>\d+)-(?P<test>\d+)-(?P<workflow>\d+)",
+                            parts[workflow_idx + 2],
+                        )
+                        if seed_match:
+                            valid_seed = int(seed_match.group("valid"))
+                            test_seed = int(seed_match.group("test"))
+                            workflow_seed = int(seed_match.group("workflow"))
+                    break
+                break
 
-                if len(results_parts) > workflow_index + 2:
-                    seed_match = re.fullmatch(r"(?P<valid>\d+)-(?P<test>\d+)-(?P<workflow>\d+)", results_parts[workflow_index + 2])
-                    if seed_match:
-                        valid_seed = int(seed_match.group("valid"))
-                        test_seed = int(seed_match.group("test"))
-                        workflow_seed = int(seed_match.group("workflow"))
-
-                return {
-                    "lcdb_root": lcdb_root,
-                    "workflow": workflow,
-                    "openmlid": openmlid,
-                    "workflow_seed": workflow_seed,
-                    "test_seed": test_seed,
-                    "valid_seed": valid_seed,
-                }
-
-        for part in parts:
             if part.startswith("lcdb.workflow"):
                 workflow = part.split("-")[0]
             elif re.fullmatch(r"\d+", part):
@@ -328,13 +479,11 @@ class PCloudRepository(Repository):
                         csv_buf.seek(0)
                         upload_buf = csv_buf
 
-                    url = (
-                        f"https://eapi.pcloud.com/uploadfile"
-                        f"?code={self.repo_code}&auth={self.token}"
-                        f"&folderid={folder_id}&filename={base_name}"
-                    )
+                    # Using safe base parameter builder
+                    url = f"https://{self.api_host}/uploadfile"
+                    params = self._get_api_params(folderid=folder_id, filename=base_name)
                     resp = requests.post(
-                        url, files={"file": (base_name, upload_buf, "application/gzip")}
+                        url, params=params, files={"file": (base_name, upload_buf, "application/gzip")}
                     ).json()
 
                     if resp.get("result") == 0:
@@ -376,13 +525,11 @@ class PCloudRepository(Repository):
                             zipf.write(log_file, rel_path)
 
                     with open(zip_path, "rb") as f:
-                        url = (
-                            f"https://eapi.pcloud.com/uploadfile"
-                            f"?code={self.repo_code}&auth={self.token}"
-                            f"&folderid={folder_id}&filename={zip_name}"
-                        )
+                        # Using safe base parameter builder
+                        url = f"https://{self.api_host}/uploadfile"
+                        params = self._get_api_params(folderid=folder_id, filename=zip_name)
                         status = requests.post(
-                            url, files={"file": (zip_name, f, "application/zip")}
+                            url, params=params, files={"file": (zip_name, f, "application/zip")}
                         ).json()
 
                     if status.get("result") == 0:
@@ -391,15 +538,6 @@ class PCloudRepository(Repository):
                         print(f"Failed to upload {zip_name}: {status}")
             except Exception as e:
                 print(f"Error uploading logs for {openmlid}: {e}")
-
-
-    def _upload_file(self, folder_id, file_path, file_name):
-        """Uploads a file to a specific pCloud folder."""
-        url = f"https://eapi.pcloud.com/uploadfile?code={self.repo_code}&auth={self.token}&folderid={folder_id}&filename={file_name}"
-        with open(file_path, "rb") as f:
-            response = requests.post(url, files={"file": (file_name, f)}).json()
-            if response.get("result") != 0:
-                raise ValueError(f"Failed to upload file '{file_name}': {response}")
 
     def get_workflows(self):
         return jmespath.compile("metadata.contents[? name == 'data'] | [0] .contents | [*].name").search(self.content)

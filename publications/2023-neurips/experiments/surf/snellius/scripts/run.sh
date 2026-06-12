@@ -92,7 +92,7 @@ for LCDB_VALID_SEED in "${VAL_SEEDS[@]}"; do
                     --max-evals $LCDB_NUM_CONFIGS \
                     --timeout $timeout \
                     --initial-configs $LCDB_INITIAL_CONFIGS \
-                    --timeout-on-fit 300 \
+                    --timeout-on-fit 900 \
                     --timeout-on-predict 60 \
                     --timeout-on-metrics 60 \
                     --workflow-seed $LCDB_WORKFLOW_SEED \

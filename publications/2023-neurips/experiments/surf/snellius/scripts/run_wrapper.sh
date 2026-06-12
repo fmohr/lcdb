@@ -30,8 +30,8 @@ source "$path_to_snellius/scripts/config.sh"
 # Parse core assignments and bin datasets by resource requirements
 source "$path_to_snellius/scripts/parse_core_assignments.sh"
 
-# Export for create.sh
-export LCDB_OPENML_ID_ARRAY=("${ALL_OPENML_IDS[@]}")
+# Export as a plain string; bash arrays do not survive the sbatch environment boundary.
+export LCDB_OPENML_IDS="${ALL_OPENML_IDS[*]}"
 
 # Create log directories using full workflow class name
 log_out_dir="${output_path}/logs/${LCDB_WORKFLOW}/out"
@@ -104,12 +104,17 @@ if [ "$PARTITION_RUN" == "gpu_a100" ]; then
     # Calculate GPU workers: total ranks - 1 (master rank doesn't compute)
     NUM_GPU_WORKERS=$((max_parallel_tasks - 1))
 
-    echo "Max resources for GPU job array: ${max_parallel_tasks} ranks, ${max_cpus_per_task} CPUs/rank, ${NUM_GPU_WORKERS} GPUs"
+    if (( NUM_GPU_WORKERS < 1 )); then
+        echo "GPU runs need at least 2 ranks: one CPU master and at least one GPU worker. Got max_parallel_tasks=$max_parallel_tasks" >&2
+        exit 1
+    fi
 
-    run_job_id=$(sbatch \
+    echo "Max resources for GPU job array: ${max_parallel_tasks} MPI ranks (1 master + ${NUM_GPU_WORKERS} GPU workers), ${max_cpus_per_task} CPUs/worker, ${NUM_GPU_WORKERS} GPUs"
+
+    if ! run_job_id=$(sbatch \
         --partition="$PARTITION_RUN" \
         --dependency=afterok:$workflow_create_job_id \
-        --time=6:00:00 \
+        --time=15:00:00 \
         --nodes=1 \
         --ntasks=$NUM_GPU_WORKERS \
         --gpus=$NUM_GPU_WORKERS \
@@ -121,7 +126,10 @@ if [ "$PARTITION_RUN" == "gpu_a100" ]; then
         --output="${log_out_dir}/job_%A_%a.log" \
         --error="${log_err_dir}/job_%A_%a.err" \
         --parsable \
-        "$script")
+        "$script"); then
+        echo "Failed to submit GPU job array; not submitting campaign upload job." >&2
+        exit 1
+    fi
     echo "Submitted GPU job array with ID: $run_job_id"
 else
     export CUDA_VISIBLE_DEVICES=""

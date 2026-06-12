@@ -125,7 +125,7 @@ def main(**kwargs):
     """Entry point for the command line interface."""
 
     from lcdb.db import PCloudRepository
-    repo = PCloudRepository(repo_code="kZeWywZRr6lScWSloHlzwk6Uxq3GyRtuBaX", token=kwargs['token'])
+    repo = PCloudRepository(repo_code=None, token=kwargs['token'])
 
 
     # from ..db import LCDB

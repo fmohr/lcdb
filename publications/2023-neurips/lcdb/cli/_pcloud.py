@@ -36,13 +36,14 @@ def main(**kwargs):
   load_dotenv(dotenv_path)
   # Load the environment variables
   repo_code = os.getenv("PCLOUD_CODE")
-  pcloud_username = os.getenv("PCLOUD_USERNAME")
-  pcloud_password = os.getenv("PCLOUD_PASSWORD")
   
   # Authenticate with the PCloudRepository
   try:
     repo = PCloudRepository(repo_code=repo_code)
-    output = repo.authenticate(username=pcloud_username, password=pcloud_password, authexpire=86400*2)
+    repo.authenticate(
+        client_id=os.getenv("CLIENT_ID"),
+        client_secret=os.getenv("CLIENT_SECRET"),
+    )
     set_key(dotenv_path, "PCLOUD_TOKEN", repo.token)
   except ValueError as e:
       if "Authentication failed" in str(e):
