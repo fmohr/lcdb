@@ -35,6 +35,11 @@ export LCDB_WORKFLOW_MEMORY_LIMIT_GB
 NUM_GPUS=$((NTOTRANKS - 1))
 export NUM_GPUS
 
+if (( NUM_GPUS < 1 )); then
+  echo "GPU runs need at least 2 ranks: one CPU master and at least one GPU worker. Got NTOTRANKS=$NTOTRANKS" >&2
+  exit 1
+fi
+
 echo "OpenML ID: $LCDB_OPENML_ID"
 echo "Job launched with ${NTOTRANKS} rank(s) and ${CPUS_PER_TASK} CPU(s) per rank"
 echo "GPUs needed: ${NUM_GPUS} (${NTOTRANKS} ranks - 1 master)"
@@ -72,37 +77,59 @@ for LCDB_VALID_SEED in "${VAL_SEEDS[@]}"; do
 
     echo "Creating status file: $STATUS_FILE"
     touch "$STATUS_FILE"
-    
+
+    lcdb_run_command=(
+      lcdb run
+      --campaign "$CAMPAIGN_NAME"
+      --openml-id "$LCDB_OPENML_ID"
+      --workflow-class "$LCDB_WORKFLOW"
+      --monotonic
+      --max-evals "$LCDB_NUM_CONFIGS"
+      --timeout "$timeout"
+      --initial-configs "$LCDB_INITIAL_CONFIGS"
+      --timeout-on-fit 900
+      --workflow-seed "$LCDB_WORKFLOW_SEED"
+      --workflow-memory-limit "$LCDB_WORKFLOW_MEMORY_LIMIT"
+      --memory-patience 10
+      --ncpus "$CPUS_PER_TASK"
+      --valid-seed "$LCDB_VALID_SEED"
+      --test-seed "$LCDB_TEST_SEED"
+      --no-exception-on-unsuitable-preprocessor
+      --log-level info
+      --evaluator mpicomm
+      --epoch-schedule=power-2-0.25-0
+    )
 
     # ---------------- GPU job execution ----------------
-    # Allocate GPUs globally (not per-task) since rank 0 is master and doesn't need GPU
+    # Rank 0 is the CPU-only Deephyper master; each worker rank sees one GPU.
+    # The batch allocation reserves CPUs for GPU workers; the lightweight master shares that allocation.
     srun -n ${NTOTRANKS} \
          --ntasks=${NTOTRANKS} \
          --cpus-per-task=${CPUS_PER_TASK} \
          --gpus=${NUM_GPUS} \
          --threads-per-core=1 \
-         --exclusive \
+       --overcommit \
          --output=${LOG_OUT_DIR}/o:${LCDB_OPENML_ID}-w:${LCDB_WORKFLOW_SEED}-v:${LCDB_VALID_SEED}-t:${LCDB_TEST_SEED}.log \
          --error=${LOG_ERR_DIR}/o:${LCDB_OPENML_ID}-w:${LCDB_WORKFLOW_SEED}-v:${LCDB_VALID_SEED}-t:${LCDB_TEST_SEED}.err \
-    lcdb run \
-        --campaign $CAMPAIGN_NAME \
-        --openml-id $LCDB_OPENML_ID \
-        --workflow-class $LCDB_WORKFLOW \
-        --monotonic \
-        --max-evals $LCDB_NUM_CONFIGS \
-        --timeout $timeout \
-        --initial-configs $LCDB_INITIAL_CONFIGS \
-        --timeout-on-fit 300 \
-        --workflow-seed $LCDB_WORKFLOW_SEED \
-        --workflow-memory-limit $LCDB_WORKFLOW_MEMORY_LIMIT \
-        --memory-patience 10 \
-        --ncpus $CPUS_PER_TASK \
-        --valid-seed $LCDB_VALID_SEED \
-        --test-seed $LCDB_TEST_SEED \
-        --no-exception-on-unsuitable-preprocessor \
-        --log-level info \
-        --evaluator mpicomm \
-        --epoch-schedule=power-2-0.25-0
+         bash -c '
+          local_rank="${SLURM_LOCALID:-${SLURM_PROCID:-0}}"
+          inherited_cuda="${CUDA_VISIBLE_DEVICES:-}"
+
+          if (( local_rank == 0 )); then
+            export CUDA_VISIBLE_DEVICES=""
+          else
+            worker_index=$((local_rank - 1))
+            IFS=, read -r -a allocated_gpus <<< "$inherited_cuda"
+            export CUDA_VISIBLE_DEVICES="${allocated_gpus[$worker_index]:-$worker_index}"
+          fi
+
+          exec "$@"
+         ' bash "${lcdb_run_command[@]}"
+    srun_status=$?
+    if (( srun_status != 0 )); then
+      echo "lcdb run failed for OpenML ID ${LCDB_OPENML_ID} with exit code ${srun_status}" >&2
+      exit "$srun_status"
+    fi
     # ---------------------------------------------------
 
     # gzip the json results if the status file completed exists

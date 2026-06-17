@@ -25,7 +25,8 @@ fi
 
 
 # Fetch Datasets
-for LCDB_OPENML_ID in ${LCDB_OPENML_ID_ARRAY[@]}; do
+IFS=' ' read -r -a LCDB_OPENML_ID_ARRAY <<< "$LCDB_OPENML_IDS"
+for LCDB_OPENML_ID in "${LCDB_OPENML_ID_ARRAY[@]}"; do
     echo "Fetching dataset $LCDB_OPENML_ID..."
     lcdb fetch --task-id openml.$LCDB_OPENML_ID
     echo ""
