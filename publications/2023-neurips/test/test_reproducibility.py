@@ -179,6 +179,8 @@ class TestBuildReproducibility(unittest.TestCase):
             params["num_units_first"] = 5
             params["num_units_last"] = 5
             params["num_epochs"] = 5
+            params["shake_drop"] = True
+            params["data_augmentation"] = "cutmix"
 
         for n_jobs in [1, 2]:
             predictions = []
@@ -209,6 +211,9 @@ class TestBuildReproducibility(unittest.TestCase):
 
     @parameterized.expand(list(it.product([61], WORKFLOWS, VAL_SEEDS, TEST_SEEDS, WORKFLOW_SEEDS, [True])))
     def test_reproducibility_of_outcome_of_full_workflows(self, openmlid, workflow, val_seed, test_seed, workflow_seed, monotonic):
+        """
+        This tests whether the *metrics* (not only the predictions) at the end are identical for different runs under the same seeds.
+        """
 
         workflow_class = get_workflow_class(workflow)
 

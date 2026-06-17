@@ -431,7 +431,16 @@ class PCloudRepository(Repository):
         qry_result = jmespath.compile(qry).search(self.content)
         if qry_result is None:
             return []
-        return sorted([int(i) for i in qry_result])
+        
+        # get datasets
+        datasets = []
+        for i in qry_result:
+            try:
+                openmlid = int(i)
+                datasets.append(openmlid)
+            except ValueError:
+                pass
+        return sorted(datasets)
 
     def get_result_files_of_workflow_and_dataset_in_campaign(
             self,
@@ -647,8 +656,6 @@ class PCloudRepository(Repository):
         result_files["delivered_rows"] = 0
         result_files["generated_all"] = False
         result_files["delivered_all"] = False
-        
-        print(result_files)
 
         # read in all result files
         def gen_fun(
@@ -669,8 +676,10 @@ class PCloudRepository(Repository):
                     with gzip.open(filehandle, 'rt', encoding='utf-8') as f:
                         reader = jsonlines.Reader(f)
                         for row in reader:
+                            self.logger.debug("Adding result row")
                             result_row_queue.put((idx, convert_deephyper_result_row_to_dict(row)))
                             result_files.loc[idx, "generated_rows"] += 1
+                            self.logger.debug(f'Number of generated rows is now {result_files.loc[idx, "generated_rows"]}')
                     result_files.loc[idx, "generated_all"] = True
 
                 except Exception as e:
@@ -703,35 +712,36 @@ class PCloudRepository(Repository):
                 
                 indices_and_rows = []
                 while finished < total or not result_row_queue.empty():
+                    self.logger.info("Waiting for results")
                     try:
                         while len(indices_and_rows) < batch_size:
                             indices_and_rows.append(result_row_queue.get(timeout=5))
-                        yield [row for _, row in indices_and_rows]
-                        
-                        # update delivered rows count
-                        for idx, raw_row in indices_and_rows:
-                            result_files.loc[idx, "delivered_rows"] += 1
-                            result_frame_row = result_files.loc[idx]
-                            
-                            # check callbacks
-                            if result_frame_row["generated_all"] and (result_frame_row["delivered_rows"] == result_frame_row["generated_rows"]):
-                                result_files.loc[idx, "delivered_all"] = True
-
-                                if callbacks and all(result_files.loc[result_files["openmlid"] == raw_row["openmlid"], "delivered_all"]):
-                                    print(f"Running {len(callbacks)} finish callbacks for openmlid {raw_row['openmlid']} for which {result_frame_row['generated_rows']} rows were generated and {result_frame_row['delivered_rows']} were delivered")
-                                    for cb in callbacks:
-                                        print(f"Running {cb}")
-                                        cb.on_workflow_dataset_combination_finished(
-                                            workflow=raw_row["workflow"],
-                                            openmlid=raw_row["openmlid"],
-                                            total_num_records=result_frame_row["delivered_rows"]
-                                        )
-
-                        # reset
-                        indices_and_rows = []
-
                     except:
                         pass
+                    self.logger.info(f"Filled up a batch of size {len(indices_and_rows)}, returning it.")
+                    yield [row for _, row in indices_and_rows]
+                    
+                    # update delivered rows count
+                    for idx, raw_row in indices_and_rows:
+                        result_files.loc[idx, "delivered_rows"] += 1
+                        result_frame_row = result_files.loc[idx]
+                        
+                        # check callbacks
+                        if result_frame_row["generated_all"] and (result_frame_row["delivered_rows"] == result_frame_row["generated_rows"]):
+                            result_files.loc[idx, "delivered_all"] = True
+
+                            if callbacks and all(result_files.loc[result_files["openmlid"] == raw_row["openmlid"], "delivered_all"]):
+                                print(f"Running {len(callbacks)} finish callbacks for openmlid {raw_row['openmlid']} for which {result_frame_row['generated_rows']} rows were generated and {result_frame_row['delivered_rows']} were delivered")
+                                for cb in callbacks:
+                                    print(f"Running {cb}")
+                                    cb.on_workflow_dataset_combination_finished(
+                                        workflow=raw_row["workflow"],
+                                        openmlid=raw_row["openmlid"],
+                                        total_num_records=result_frame_row["delivered_rows"]
+                                    )
+
+                    # reset
+                    indices_and_rows = []
 
                     # Check if any workers have finished
                     finished_now = sum(f.done() for f in futures)
@@ -739,4 +749,5 @@ class PCloudRepository(Repository):
                         self.logger.info(f"{finished_now}/{total} files processed.")
                         finished = finished_now
 
+                self.logger.info("Leaving")
         return gen_fun()

@@ -80,7 +80,7 @@ class LCDB:
 
         # create default config file
         default_config = {"repositories": {
-            "official": "pcloud://kZeWywZRr6lScWSloHlzwk6Uxq3GyRtuBaX",
+            "official": "pcloud://kZLGFcZy7W4dNv3X44JD1s5Q9csBpQfu48y",
             "local": ".lcdb/data"}
         }
         if config is not None:
@@ -291,23 +291,7 @@ class LCDB:
                 val_seed=row["seed_val"]
             ), axis=1)]
         df_agenda = df_agenda.reset_index(drop=True).copy()
-
-        # collect generators
-        # result_generators = []
-        # for repo_idx, repository in enumerate(repositories):
-        #     if repository.exists():
-        #         result_generators.append( 
-        #             repository.query_results_as_stream(
-        #                 campaigns=campaigns,
-        #                 workflows=workflows,
-        #                 openmlids=openmlids,
-        #                 workflow_seeds=workflow_seeds,
-        #                 test_seeds=test_seeds,
-        #                 validation_seeds=validation_seeds,
-        #                 inclusion_predicate=inclusion_predicate
-        #             )
-        #         )
-
+        
         def generator():
             if max_workers is None or max_workers < 1:
                 num_workers = os.cpu_count()

@@ -22,12 +22,13 @@ OUTPUT_DIR = "./data"
 
 Path(OUTPUT_DIR).mkdir(parents=True, exist_ok=True)
 
+campaign_name = "tabarena-cpu"
+
 # retrieve learning curve objects
 lcdb = LCDB()
 
-lcdb.update_count_index(campaigns=["probing-tabarena"])
+lcdb.update_count_index(campaigns=[campaign_name])
 
-#
 if not lcdb.has_count_index:
     raise ValueError("No count index found for LCDB. Run lcdb.update_count_index() first.")
 
@@ -44,7 +45,7 @@ class Callback(LCDBCallback):
     def on_workflow_dataset_combination_finished(self, workflow, openmlid, total_num_records):
         print("\n\nFINISHED\n\n")
 
-        folder = Path(f"{OUTPUT_DIR}/{workflow}")
+        folder = Path(f"{OUTPUT_DIR}/{workflow}/{campaign_name}")
         
         # now store the results in a jsonl file per dataset
         if not folder.exists():
@@ -52,7 +53,7 @@ class Callback(LCDBCallback):
         
         file = Path(f"{folder}/{openmlid}.jsonl")
         if openmlid not in result_sets_per_dataset:
-            print("No data, ignoring results")
+            print(f"No data stored for {openmlid=}, ignoring results")
             return
         print(f"Writing {len(result_sets_per_dataset[openmlid])} results for dataset {openmlid} to {file}. {total_num_records} have been generated.")
         result_sets_per_dataset[openmlid].save(file)
@@ -61,67 +62,66 @@ class Callback(LCDBCallback):
         pass
 
 for workflow_class in [
-    "lcdb.workflow.sklearn.KNNWorkflow",
-    "lcdb.workflow.sklearn.LibLinearWorkflow",
+    #"lcdb.workflow.sklearn.KNNWorkflow",
+#    "lcdb.workflow.sklearn.LibLinearWorkflow",
     #"lcdb.workflow.sklearn.LibSVMWorkflow",
     #"lcdb.workflow.sklearn.TreesEnsembleWorkflow",
     #"lcdb.workflow.xgboost.XGBoostWorkflow",
-    # "lcdb.workflow.keras.DenseNNWorkflow"
+    "lcdb.workflow.keras.DenseNNWorkflow"
 ]:
     print(workflow_class)
 
-    folder = Path(f"{OUTPUT_DIR}/{workflow_class}")
+    folder = Path(f"{OUTPUT_DIR}/{workflow_class}/{campaign_name}")
     available_datasets_for_workflow = [int(p.name[:-6]) for p in folder.glob("*.jsonl")] if folder.exists else []
-    print(f"Ignoring results for dataset {available_datasets_for_workflow}")
+    print(f"Ignoring results for the following datasets: {available_datasets_for_workflow}")
 
-    campaign_name = "probing-tabarena"
-    #if "XGBoost" in workflow_class:
-        #campaign_name = "pre-config-100-new"
+    if True:
 
-    result_sets_per_dataset = {}
-    gen = lcdb.query(
-        campaigns=[campaign_name],
-        #openmlids=[3, 12, 23, 31, 54],
-        #openmlids=[41167],
-        workflows=[workflow_class],
-        processors=[
-            LearningCurveExtractor(metrics=["error_rate"], encode_as_json_str=True),
-            compute_payload,
-            TracebackExtractor(),
-            DataMemoryComputer(),
-            RuntimeExtractor(),
-            extract_anticipated_memory
-        ],
-        inclusion_predicate=lambda workflow, openmlid, campaign, workflow_seed, test_seed, val_seed: openmlid not in available_datasets_for_workflow + [41167],
-        max_workers=6,
-        buffer_size=2,
-        batch_size=20,
-        callbacks=[Callback(results_per_dataset=result_sets_per_dataset)]
-    )
+        result_sets_per_dataset = {}
+        gen = lcdb.query(
+            campaigns=[campaign_name],
+            #openmlids=[3, 12, 23, 31, 54],
+            #openmlids=[41167],
+            workflows=[workflow_class],
+            processors=[
+                LearningCurveExtractor(metrics=["error_rate"], encode_as_json_str=True),
+                compute_payload,
+                TracebackExtractor(),
+                DataMemoryComputer(),
+                RuntimeExtractor(),
+                extract_anticipated_memory
+            ],
+            inclusion_predicate=lambda workflow, openmlid, campaign, workflow_seed, test_seed, val_seed: openmlid not in available_datasets_for_workflow,
+            max_workers=2,
+            buffer_size=1,
+            batch_size=20,
+            callbacks=[Callback(results_per_dataset=result_sets_per_dataset)]
+        )
 
-    # get all dataframes
-    for i, chunk_rs in enumerate(tqdm(gen)):
+        # get all dataframes
+        for i, chunk_rs in enumerate(tqdm(gen)):
 
-        assert type(chunk_rs) == ResultSet, f"Expected ResultSet but got {type(chunk_rs)}"
-        chunk_rs.drop_raw_results()
+            assert type(chunk_rs) == ResultSet, f"Expected ResultSet but got {type(chunk_rs)}"
+            chunk_rs.drop_raw_results()
 
-        # store the results dataset wise
-        for openmlid, rs_dataset in chunk_rs.group_by_dataset():
-            if openmlid not in result_sets_per_dataset:
-                result_sets_per_dataset[openmlid] = ResultSet()
-            result_sets_per_dataset[openmlid].extend(rs_dataset)
+            # store the results dataset wise
+            for openmlid, rs_dataset in chunk_rs.group_by_dataset():
+                if openmlid not in result_sets_per_dataset:
+                    result_sets_per_dataset[openmlid] = ResultSet()
+                result_sets_per_dataset[openmlid].extend(rs_dataset)
 
     # read in all results and put them into one file
     rs_final = None
     for file in os.listdir(folder):
         if file.endswith(".jsonl"):
+            print(file)
             rs_file = ResultSet.read_jsonl(f"{folder}/{file}")
             if rs_final is None:
                 rs_final = rs_file
             else:
                 rs_final.extend(rs_file)
 
-    final_file = f"{OUTPUT_DIR}/{workflow_class}.jsonl"
-    print("Writing all results into ")
+    final_file = f"{OUTPUT_DIR}/{workflow_class}_{campaign_name}.jsonl"
+    print(f"Writing all results into {final_file}")
     rs_final.save(final_file)
     print("Finished.")

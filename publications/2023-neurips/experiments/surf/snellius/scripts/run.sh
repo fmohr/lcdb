@@ -106,9 +106,6 @@ for LCDB_VALID_SEED in "${VAL_SEEDS[@]}"; do
                     --evaluator mpicomm \
                     --epoch-schedule=power-2-0.25-0 
 
-            # convert the csv format of deephyper into a jsonl file
-            python $path_to_snellius/scripts/deephyper_csv_to_jsonl.py results.csv results.jsonl
-
             # gzip the json results
             gzip -f --best results.jsonl
         fi

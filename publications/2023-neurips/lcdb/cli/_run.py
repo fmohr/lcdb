@@ -703,7 +703,7 @@ def run_experiment(
             if num_previous_results > 0:
                 df_previous_results = pd.DataFrame(list_of_previous_results)
                 if df_results_new is not None:
-                    df_results = pd.concat([df_previous_results, df_results_new])
+                    df_results = pd.concat([df_previous_results, df_results_new], ignore_index=True)
                 else:
                     df_results = df_previous_results
             else:
@@ -720,7 +720,7 @@ def run_experiment(
                 # writing results to jsonl
                 from lcdb.builder.utils import convert_deephyper_result_row_to_dict
                 out_file = f"{log_dir}/results.jsonl"
-                logger.info(f"Writing {len(df_results)} results to {out_file}")
+                logger.info(f"Writing {len(df_results)} results to {pathlib.Path(out_file).absolute}")
                 with jsonlines.open(out_file, mode='w') as writer:
                     for i, row in df_results.iterrows():
                         converted_row = convert_deephyper_result_row_to_dict(row)

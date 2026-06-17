@@ -3,6 +3,7 @@ import pandas as pd
 
 from lcdb.analysis.json import (
     QueryAnchorValues,
+    QueryAnchorTimes,
     QueryFitTimes,
     QueryTransformTimes,
     QueryPredictTimes,
@@ -80,15 +81,21 @@ class RuntimeExtractor:
                 if "metrics" in runtimes_at_anchor:
                     assert np.round(sum(all_metrics_runtimes.values()), 6) <= runtimes_at_anchor["metrics"], f"Metric runtime {runtimes_at_anchor['metrics']} at anchor {anchor} is shorter than sum of all metric runtimes, which is {sum(all_metrics_runtimes.values())} based on {all_metrics_runtimes}"
             
+            # anchor-wise summary
+            runtimes["summary_by_anchor"] = {}
+            anchor_timestamps = QueryAnchorTimes()(lc_dict)
+            for anchor, (t_start, t_end) in zip(anchors, anchor_timestamps):
+                runtimes["summary_by_anchor"][anchor] = np.round(t_end - t_start, 6)
+            
             # tag-wise summary
-            tags = runtimes[np.min(list(runtimes.keys()))]
-            runtimes["summary"] = {
+            tags = list(runtimes[anchors[0]].keys())
+            runtimes["summary_by_tag"] = {
                 tag: np.round(sum([runtimes[anchor][tag] if tag in runtimes[anchor] else 0 for anchor in anchors]), 6)
                 for tag in tags
             }
 
             # compute actual learn time (fit - transformation)
-            runtimes["summary"]["learn"] = np.round(runtimes["summary"].get("fit", 0) - (runtimes["summary"].get("transform_train", 0) + runtimes["summary"].get("transform_valid", 0) + runtimes["summary"].get("transform_test", 0)), 6)
+            runtimes["summary_by_tag"]["learn"] = np.round(runtimes["summary_by_tag"].get("fit", 0) - (runtimes["summary_by_tag"].get("transform_train", 0) + runtimes["summary_by_tag"].get("transform_valid", 0) + runtimes["summary_by_tag"].get("transform_test", 0)), 6)
 
             # return dictionary with runtimes
             return {

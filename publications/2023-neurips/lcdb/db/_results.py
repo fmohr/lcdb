@@ -212,6 +212,16 @@ class ResultSet(ABC):
             return self
         else:
             return self._create_copy_with_rows(new_rows)
+        
+    def filter_campaign(self, campaigns, inplace=False):
+        if type(campaigns) == str:
+            campaigns = [campaigns]
+        new_rows = [r for r in self._rows if r["campaign"] in campaigns]
+        if inplace:
+            self._rows = new_rows
+            return self
+        else:
+            return self._create_copy_with_rows(new_rows)
 
     def group_by_campaign(self):
         return self._group("campaign")

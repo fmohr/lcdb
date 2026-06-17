@@ -142,6 +142,13 @@ class QueryPreprocessorResults(JMESExpressionQuery):
             f".children | [*][*]"
         )
 
+class QueryAnchorTimes(JMESExpressionQuery):
+    def __init__(self):
+        super().__init__(
+            f"children[? tag == 'build_curves'] | [0]"  
+            f".children[? tag == 'anchor'] | [*]"
+            f".[timestamp_start, timestamp_stop]"
+        )
 
 class QueryFitTimes(JMESExpressionQuery):
     def __init__(self):

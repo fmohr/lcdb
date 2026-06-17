@@ -42,9 +42,14 @@ class TracebackExtractor:
                 "traceback": row["traceback"],
                 "cli_test_command": base_test_command
             })
+
+        # check on timeout
+        has_timeout = any([e["message"] == "timeout" for e in errors]) if errors else False
+        anchor_with_timeout = int([e["location"][len("anchor_"):] for e in errors if e["message"] == "timeout"][0]) if has_timeout else None
         
         # summarize findings
         out = {"traceback_summary": errors if errors else None}
-        out["timeout"] = any([e["message"] == "timeout" for e in errors]) if errors else False
+        out["timeout"] = has_timeout
+        out["timeout_anchor"] = anchor_with_timeout
         out["anticipated memory overflow"] = any([e["message"] == "anticipated memory overflow" for e in errors]) if errors else False
         return out
